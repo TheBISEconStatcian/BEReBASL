@@ -1,8 +1,5 @@
 from typing import Optional, Tuple
 import torch
-
-from typing import Optional, Tuple
-import torch
 def random_vcov_matrix(
         k: int,
         generator: Optional[torch.Generator] = None,
@@ -257,3 +254,19 @@ def mvn_random_sample(
 
 
     return mean + deviations
+
+if __name__ == "__main__":
+    print("Small test to check functionality")
+    count_covariates = 5
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    torch.set_default_dtype(torch.float32)
+    rng = torch.Generator(device)
+    mu = torch.zeros(count_covariates)
+    sigma_bad, _ = generate_sigma_bad_and_good(k = count_covariates, proportion_var_dif=1.0, generator = rng, device=device, dtype= torch.get_default_dtype())
+    print("generate_sigma_bad_and_good succesful, therefore random_vcov_matrix and eigen_decomp_proj_to_pd as well")
+    n=100
+    sample = mvn_random_sample(mu, sigma_bad, n, rng)
+    print("mvn_random_sample succesful as well")
+    print(f"\tExpected sample shape: [{n}, {count_covariates}]")
+    print("\tSample shape:", sample.shape)
+    
