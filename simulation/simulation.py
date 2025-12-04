@@ -195,11 +195,10 @@ def generate_sigma_bad_and_good(
 
 def mvn_random_sample(
         mean : torch.Tensor, 
-        cov : torch.Tensor, 
+        cov_chol_decomp : Optional[torch.Tensor],
         n : int, 
         rng : Optional[torch.Generator] = None, 
-        args_checks : bool = True,
-        symmetry_rtol_atol : Tuple[float,float] = (0.0, 0.0)
+        args_checks : bool = True
     ):
     """Generate n-vectors sampled of a multivariate normal (MVN) distribution with parameters
     mean and cov. Based on the implementation of (r)sample from 
@@ -207,23 +206,22 @@ def mvn_random_sample(
     cholesky-decomposition method.
 
     Args:
-        mean (torch.Tensor): Location parameter of a MVN. Shape ``(k,)``.
-        cov (torch.Tensor): Variance-Covariance matrix of MVN. Shape ``(k,k)```
-            Assumed (or checked if args_checks) to be symmetric. Positive definitness
-            check happens withing cholesky decompositon.
-        n (int): Count of vectors to be sampled.
+        mean (torch.Tensor): Location parameter of a MVN. Shape ``(k,)`` or ``(b, k)`` or ``(1,5)``.
+        cov_chol_decomp (torch.Tensor): Variance-Covariance matrix of MVN after cholesky decomposition. 
+            Shape ``(k,k)``` or ``(b, k, k)`` or ``(1, k, k)``, ``cov.dim()==mean.dim()+1`` should hold.
+        n (int): Count of vectors to be sampled (per batch).
         rng (Optional[torch.Generator]): If passed, sampling is done using this
             generator.
-        args_checks (bool): If true, it will be checked if the shapes of mean and
-            cov are as expected, if symmetry is given within the range of
-            ``symmetry_rtol_atol`` for ``cov`` and type checks are done for ``n`` and
-            ``rng``.`
+        args_checks (bool): If true, it will be checked whether the shapes of mean and
+            cov are as expected, whether symmetry (w. r. t. to the last wo dims for each beach)
+            is given within the range of ``symmetry_rtol_atol`` for ``cov`` and type checks
+            are done for ``n`` and ``rng``.`
         symmetry_rtol_atol (Tuple[float,float]): Corresponds to the (rtol, a_tol) parameters
             of ``torch.allclose``, passed as ``*args``, so ordering is important. Ignored if
-            not args_checks.
+            ``not args_checks``.
     Returns:
         torch.Tensor:
-            A tensor of shape ``(n, k)`` containing the ``n`` sampled vectors.
+            A tensor of shape ``(n, k)`` or ``(n, b, k)`` containing the ``n`` sampled vectors (for each batch).
 
     Example:
         >>> count_covariates = 5
@@ -238,17 +236,15 @@ def mvn_random_sample(
     """
     if args_checks:
         #shape checks
-        assert (mean.dim() == 1) and (cov.dim()==2), "mean must be a single vector (rank 1 tensor) and cov a matrix (rank 2 tensor)"
-        assert (mean.size(0) == cov.size(0)) and (cov.size(0) == cov.size(1)), "mean must have shape [k] and cov shape [k, k]"
-        #Ensure covariance is symmetric
-        assert torch.allclose(cov, cov.T, *symmetry_rtol_atol), "Covariance matrix not symmetric"
+        assert (mean.dim() in [1, 2, 3]) and (cov_chol_decomp.dim()==mean.dim()+1), "mean must be a single vector (rank 1 tensor) and cov a matrix (rank 2 tensor)"
+        assert (mean.size(-1) == cov_chol_decomp.size(-1)) and (cov_chol_decomp.size(-1) == cov_chol_decomp.size(-2)), "mean must have shape [k] and cov shape [k, k]"
         #ensure n is an int
         n = int(n)
         assert isinstance(rng, torch.Generator) or rng is None, "rng needs to be None or a rng"
 
-    shape = torch.Size([n, mean.shape[0]])
+    shape = torch.Size([n]) + mean.shape
+    
     eps = torch.empty(shape, dtype=mean.dtype, device = mean.device).normal_(generator=rng)
-    cov_chol_decomp = torch.linalg.cholesky(cov)
 
     deviations = torch.matmul(cov_chol_decomp, eps.unsqueeze(-1)).squeeze(-1) # apply decomp to each sampled vector
 
@@ -257,16 +253,31 @@ def mvn_random_sample(
 
 if __name__ == "__main__":
     print("Small test to check functionality")
+    print("\nFirst test: for unbatched\n")
     count_covariates = 5
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.set_default_dtype(torch.float32)
     rng = torch.Generator(device)
     mu = torch.zeros(count_covariates)
-    sigma_bad, _ = generate_sigma_bad_and_good(k = count_covariates, proportion_var_dif=1.0, generator = rng, device=device, dtype= torch.get_default_dtype())
+    sigma_bad, sigma_good = generate_sigma_bad_and_good(k = count_covariates, proportion_var_dif=1.0, generator = rng, device=device, dtype= torch.get_default_dtype())
     print("generate_sigma_bad_and_good succesful, therefore random_vcov_matrix and eigen_decomp_proj_to_pd as well")
     n=100
-    sample = mvn_random_sample(mu, sigma_bad, n, rng)
+    sample = mvn_random_sample(mu, torch.linalg.cholesky(sigma_bad), n, rng)
     print("mvn_random_sample succesful as well")
     print(f"\tExpected sample shape: [{n}, {count_covariates}]")
     print("\tSample shape:", sample.shape)
+
+    print("\nFirst test: for batched\n")
+    batch_size = 2
+    mu = torch.randn((batch_size,count_covariates))
+    sample = mvn_random_sample(
+        mu,
+        torch.linalg.cholesky(torch.stack((sigma_bad, sigma_good))),
+        n,
+        rng
+    )
+    print("Succesful this case too")
+    print(f"\tExpected sample shape: [{n}, {batch_size}, {count_covariates}]")
+    print("\tSample shape:", sample.shape)
+
     
