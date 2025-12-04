@@ -251,33 +251,170 @@ def mvn_random_sample(
 
     return mean + deviations
 
+class GaussianMixture:
+    """Class representing a gaussian mixture distribution
+    with static mean, cov and weights. If weights are not given
+    it is assumed that the sampling is going to be further worked
+    with
+    """
+    def __init__(
+            self,
+            mean : torch.Tensor,
+            cov : torch.Tensor,
+            weights : Optional[torch.Tensor] = None,
+            seed : Optional[int] = None,
+            cov_symmetry_rtol_atol : Tuple[float] = [0.0, 0.0],
+            check_params : bool = True
+        ):
+        if check_params:
+            GaussianMixture.dist_params_check(mean, cov, weights, cov_symmetry_rtol_atol)
+        self.mean = mean
+        self.cov_chol_decomp = torch.linalg.cholesky(cov)
+        self.weights = weights
+        self.m = 1
+        self.is_mixture = weights is not None
+        if self.is_mixture:
+            self.weights_are_batched = self.weights.dim() == 2
+            if self.weights_are_batched:
+                self.b = self.weights.size(0)
+            self.m =  weights.size(-1)
+
+        self.rng = torch.Generator()
+        if seed is not None:
+            self.rgn.manual_seed(seed)
+
+    def _change_mask_for_diff_correction(self, diff : torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            diff (torch.Tensor): should be a singleton (diff.shape = torch.Size([]))
+                of an int dtype
+        """
+        idx = torch.randperm(m, generator=self.rng, device=amounts.device)[:diff.abs()]
+        change_mask = torch.zeros(m, dtype=diff.dtype).scatter_(0, idx, torch.ones(m, dtype=diff.dtype))
+        return change_mask * diff.sign()
+
+    def deterministic_comp_ids(self, n : int):
+        rounded_amounts = (n * self.weights).round().to(int)
+        diffs_to_total = n - rounded_amounts.sum(dim=-1)
+        if (diffs_to_total != 0).any():
+            if self.weights_are_batched:
+                change_mask = torch.stack([self._change_mask_for_diff_correction(d) for d in diffs_to_total])
+            else:
+                change_mask = self._change_mask_for_diff_correction(diffs_to_total)
+            rounded_amounts += change_mask
+        comp_ids = torch.repeat_interleave(torch.arange(self.b * self.m), rounded_amounts.flatten())
+        if self.weights_are_batched:
+            # Reshape per batch and make indices valid
+            comp_ids = comp_ids.reshape(self.b, -1) - torch.arange(0, (self.b-1)*self.m + 1, self.m).unsqueeze(1)
+
+        return comp_ids
+    
+    def sample_mixture(self, n : int, deterministic_weights : bool = False):
+        if deterministic_weights:
+            comp_ids = self.deterministic_comp_ids(n)
+        else:
+            comp_ids = torch.multinomial(self.weights, num_samples=n, replacement=True, generator=self.rng)
+
+        gaussian_mixture_sample = mvn_random_sample(
+            mean = self.mean[comp_ids],
+            cov_chol_decomp = self.cov_chol_decomp[comp_ids],
+            n = 1,
+            rng = self.rng,
+            args_checks=False
+        )
+
+        return gaussian_mixture_sample.squeeze(0)
+
+
+    def sample(self, n : int, deterministic_weights : bool = False):
+        """Returns the sampling implied by the initialization arguments
+        if no weights were passed it is assumed that independent gaussian
+        
+        """
+        if self.weights is not None:
+            return self.sample_mixture(n, deterministic_weights)
+        return mvn_random_sample(
+            mean = self.mean,
+            cov_chol_decomp = self.cov_chol_decomp,
+            n = n,
+            rng = self.rng,
+            args_checks=False
+        )
+    
+    def manual_seed(self, seed : int):
+        self.rng.manual_seed(seed)
+        
+    @staticmethod
+    def dist_params_check(
+        mean : torch.Tensor, 
+        cov : torch.Tensor, 
+        weights : Optional[torch.Tensor] = None,
+        symmetry_rtol_atol : Tuple[float] = [0.0, 0.0]
+    ) -> None:
+        assert mean.dim() in (1,2,3), "Means  needs to be of shape (k,), (m, k) or (b, k) or (b, m, k)"
+        assert cov.dim() == mean.dim()+1, "Covs has to have one more dimension than means"
+        
+        if weights is not None:
+            assert weights.dim() == mean.dim() - 1, "weights must have one dimension less than means"
+            size_checks = [
+                (mean.size(-2) == 1) and (cov.size(-3) == weights.size(-2)),
+                (mean.size(-2) == weights.size(-2)) and (cov.size(-3) == 1),
+                mean.size(0) == cov.size(0) == weights.size(0)
+            ]
+            assert any(size_checks), "Non constant m-axis"
+            assert (weights.sum(axis=-1).round(decimals=10) == 1).all(), "All weights per batch need to add up to 1"
+        
+        assert mean.size(-1) == cov.size(-1) == cov.size(-2), "Covariate count k is not constant"
+        assert torch.allclose(cov, cov.transpose(-1, -2), *symmetry_rtol_atol), "Covariance matrix not symmetric"
+
+
 if __name__ == "__main__":
-    print("Small test to check functionality")
-    print("\nFirst test: for unbatched\n")
-    count_covariates = 5
+    print("Functionality checks for all functions and classes within this module")
+
+    batch_size, count_mixtures, count_covariates = 4, 4, 5
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.set_default_dtype(torch.float32)
     rng = torch.Generator(device)
-    mu = torch.zeros(count_covariates)
-    sigma_bad, sigma_good = generate_sigma_bad_and_good(k = count_covariates, proportion_var_dif=1.0, generator = rng, device=device, dtype= torch.get_default_dtype())
-    print("generate_sigma_bad_and_good succesful, therefore random_vcov_matrix and eigen_decomp_proj_to_pd as well")
-    n=100
-    sample = mvn_random_sample(mu, torch.linalg.cholesky(sigma_bad), n, rng)
-    print("mvn_random_sample succesful as well")
-    print(f"\tExpected sample shape: [{n}, {count_covariates}]")
-    print("\tSample shape:", sample.shape)
 
-    print("\nFirst test: for batched\n")
-    batch_size = 2
-    mu = torch.randn((batch_size,count_covariates))
-    sample = mvn_random_sample(
-        mu,
-        torch.linalg.cholesky(torch.stack((sigma_bad, sigma_good))),
-        n,
-        rng
+    all_covs = []
+    for _ in range(batch_size):
+        covs_mixture = []
+        for i in range(round(count_mixtures/2)):
+            sigma_bad, sigma_good = generate_sigma_bad_and_good(k = count_covariates, proportion_var_dif=1.0, generator = rng, device=device, dtype= torch.get_default_dtype())
+            if i < count_mixtures // 2:
+                covs_mixture.append(
+                    torch.stack([sigma_bad, sigma_good])
+                )
+            else:
+                covs_mixture.append(
+                    sigma_bad.unsqueeze(0)
+                )
+        all_covs.append(torch.cat(covs_mixture, dim=0))
+
+    print("generate_sigma_bad_and_good succesful, therefore random_vcov_matrix and eigen_decomp_proj_to_pd as well")
+
+    all_covs = torch.stack(all_covs)
+
+    mu = torch.randn((batch_size, count_mixtures, count_covariates), generator=rng)
+
+    weights = torch.rand((batch_size, count_mixtures), generator = rng)
+    weights /= weights.sum(axis=-1, keepdim=True)
+
+    n = 100
+
+    print("First attempt: no weights, batched params")
+
+    dist = GaussianMixture(
+        mean = mu[:, 0],
+        cov = all_covs[:, 0],
+        weights = None
     )
-    print("Succesful this case too")
-    print(f"\tExpected sample shape: [{n}, {batch_size}, {count_covariates}]")
-    print("\tSample shape:", sample.shape)
+
+    sample = dist.sample(n)
+
+    expected_size = torch.Size([n, batch_size, count_covariates])
+    print("\tExpected size:", expected_size)
+    print("\tRealized size:", sample.shape)
+    print("\tExpectation realized:", sample.shape == expected_size)
 
     
