@@ -230,7 +230,7 @@ def mvn_random_sample(
         >>> rng = torch.Generator(device)
         >>> mu = torch.zeros(count_covariates)
         >>> sigma_bad, _ = generate_sigma_bad_and_good(k = count_covariates, proportion_var_dif=1.0, generator = rng, device=device, dtype= torch.get_default_dtype())
-        >>> sample = mvn_random_sample(mean=mu, cov=sigma_bad, n=100, rng=rng)
+        >>> sample = mvn_random_sample(mean=mu, cov=toch.linalg.cholesky(sigma_bad), n=100, rng=rng)
         >>> sample.shape
         torch.Size([100, 5])
     """
