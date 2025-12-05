@@ -304,10 +304,10 @@ class GaussianMixture:
             else:
                 change_mask = self._change_mask_for_diff_correction(diffs_to_total)
             rounded_amounts += change_mask
-        comp_ids = torch.repeat_interleave(torch.arange(self.b * self.m), rounded_amounts.flatten())
+        comp_ids = torch.repeat_interleave(torch.arange(self.b * self.m, device = self.mean.device), rounded_amounts.flatten())
         if self.weights_are_batched:
             # Reshape per batch and make indices valid
-            comp_ids = comp_ids.reshape(self.b, -1) - torch.arange(0, (self.b-1)*self.m + 1, self.m).unsqueeze(1)
+            comp_ids = comp_ids.reshape(self.b, -1) - torch.arange(0, (self.b-1)*self.m + 1, self.m, device = self.mean.device).unsqueeze(1)
 
         return comp_ids
     
@@ -317,9 +317,17 @@ class GaussianMixture:
         else:
             comp_ids = torch.multinomial(self.weights, num_samples=n, replacement=True, generator=self.rng)
 
+        if self.weights_are_batched:
+            k = self.mean.size(-1)
+            gathered_means = self.mean.gather(1, comp_ids.unsqueeze(-1).expand(-1, -1, k))
+            gathered_decomp_covs = self.cov_chol_decomp.gather(1, comp_ids.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, k, k))
+        else:
+            gathered_means = self.mean[comp_ids]
+            gathered_decomp_covs = self.cov_chol_decomp[comp_ids]
+
         gaussian_mixture_sample = mvn_random_sample(
-            mean = self.mean[comp_ids],
-            cov_chol_decomp = self.cov_chol_decomp[comp_ids],
+            mean = gathered_means,
+            cov_chol_decomp = gathered_decomp_covs,
             n = 1,
             rng = self.rng,
             args_checks=False
@@ -347,10 +355,12 @@ class GaussianMixture:
         self.rng.manual_seed(seed)
 
     def params_str_rep(self, spacing_before : str = ''):
-        params_str = spacing_before + f"mean.size = {self.mean.size}"
-        params_str += '\n' + spacing_before + f"cov.size = {self.cov_chol_decomp.size}"
+        params_str = spacing_before + f"mean.size = {self.mean.shape}"
+        params_str += '\n' + spacing_before + f"cov.size = {self.cov_chol_decomp.shape}"
         if self.is_mixture:
-            params_str += '\n' + spacing_before + f"weights.size = {self.weights.size}"
+            params_str += '\n' + spacing_before + f"weights.size = {self.weights.shape}"
+
+        return params_str
         
     @staticmethod
     def dist_params_check(
