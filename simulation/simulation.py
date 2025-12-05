@@ -277,6 +277,8 @@ class GaussianMixture:
             self.weights_are_batched = self.weights.dim() == 2
             if self.weights_are_batched:
                 self.b = self.weights.size(0)
+            else:
+                self.b = 1
             self.m =  weights.size(-1)
 
         self.rng = torch.Generator()
@@ -289,8 +291,8 @@ class GaussianMixture:
             diff (torch.Tensor): should be a singleton (diff.shape = torch.Size([]))
                 of an int dtype
         """
-        idx = torch.randperm(m, generator=self.rng, device=amounts.device)[:diff.abs()]
-        change_mask = torch.zeros(m, dtype=diff.dtype).scatter_(0, idx, torch.ones(m, dtype=diff.dtype))
+        idx = torch.randperm(self.m, generator=self.rng, device=diff.device)[:diff.abs()]
+        change_mask = torch.zeros(self.m, dtype=diff.dtype).scatter_(0, idx, torch.ones(self.m, dtype=diff.dtype))
         return change_mask * diff.sign()
 
     def deterministic_comp_ids(self, n : int):
@@ -343,6 +345,12 @@ class GaussianMixture:
     
     def manual_seed(self, seed : int):
         self.rng.manual_seed(seed)
+
+    def params_str_rep(self, spacing_before : str = ''):
+        params_str = spacing_before + f"mean.size = {self.mean.size}"
+        params_str += '\n' + spacing_before + f"cov.size = {self.cov_chol_decomp.size}"
+        if self.is_mixture:
+            params_str += '\n' + spacing_before + f"weights.size = {self.weights.size}"
         
     @staticmethod
     def dist_params_check(
@@ -356,13 +364,19 @@ class GaussianMixture:
         
         if weights is not None:
             assert weights.dim() == mean.dim() - 1, "weights must have one dimension less than means"
+
             size_checks = [
-                (mean.size(-2) == 1) and (cov.size(-3) == weights.size(-2)),
-                (mean.size(-2) == weights.size(-2)) and (cov.size(-3) == 1),
-                mean.size(0) == cov.size(0) == weights.size(0)
+                (mean.size(-2) == 1) and (cov.size(-3) == weights.size(-1)),
+                (mean.size(-2) == weights.size(-1)) and (cov.size(-3) == 1),
+                mean.size(-2) == cov.size(-3) == weights.size(-1)
             ]
             assert any(size_checks), "Non constant m-axis"
-            assert (weights.sum(axis=-1).round(decimals=10) == 1).all(), "All weights per batch need to add up to 1"
+
+            error_from_floating_point_operation = torch.finfo(weights.dtype).eps / 2
+            tol = (weights.size(-1) - 1) * error_from_floating_point_operation
+            weights_sum = weights.sum(axis=-1)
+            assert torch.allclose(weights_sum, torch.ones(weights_sum.shape, dtype=weights.dtype), 
+                                  atol = tol, rtol = 0), "All weights per batch need to add up to 1"
         
         assert mean.size(-1) == cov.size(-1) == cov.size(-2), "Covariate count k is not constant"
         assert torch.allclose(cov, cov.transpose(-1, -2), *symmetry_rtol_atol), "Covariance matrix not symmetric"
@@ -402,13 +416,16 @@ if __name__ == "__main__":
 
     n = 100
 
-    print("First attempt: no weights, batched params")
+    print("\nFirst attempt: no weights, batched params")
 
     dist = GaussianMixture(
         mean = mu[:, 0],
         cov = all_covs[:, 0],
         weights = None
     )
+
+    print("Param shapes:\n")
+    print(dist.params_str_rep(' '))
 
     sample = dist.sample(n)
 
@@ -417,4 +434,92 @@ if __name__ == "__main__":
     print("\tRealized size:", sample.shape)
     print("\tExpectation realized:", sample.shape == expected_size)
 
-    
+    print("\nSecond attempt: no weigths, unbatched params")
+
+    dist = GaussianMixture(
+        mean = mu[0, 0],
+        cov = all_covs[0, 0],
+        weights = None
+    )
+
+    print("Param shapes:\n")
+    print(dist.params_str_rep(' '))
+
+    sample = dist.sample(n)
+
+    expected_size = torch.Size([n, count_covariates])
+    print("\tExpected size:", expected_size)
+    print("\tRealized size:", sample.shape)
+    print("\tExpectation realized:", sample.shape == expected_size)
+
+    print("\nThird attempt:  weigths, unbatched params, weight based random mvn sampling")
+
+    dist = GaussianMixture(
+        mean = mu[0],
+        cov = all_covs[0],
+        weights = weights[0]
+    )
+
+    print("Param shapes:\n")
+    print(dist.params_str_rep(' '))
+
+    sample = dist.sample(n)
+
+    expected_size = torch.Size([n, count_covariates])
+    print("\tExpected size:", expected_size)
+    print("\tRealized size:", sample.shape)
+    print("\tExpectation realized:", sample.shape == expected_size)
+
+    print("\nFourth attempt:  Dummy weigths, unbatched params, weight based deterministic mvn sampling")
+
+    dist = GaussianMixture(
+        mean = mu[0],
+        cov = all_covs[0],
+        weights = weights[0]
+    )
+
+    print("Param shapes:\n")
+    print(dist.params_str_rep(' '))
+
+    sample = dist.sample(n, deterministic_weights=True)
+
+    expected_size = torch.Size([n, count_covariates])
+    print("\tExpected size:", expected_size)
+    print("\tRealized size:", sample.shape)
+    print("\tExpectation realized:", sample.shape == expected_size)
+
+    print("\nFifth attempt:  weigths, unbatched params, weight based random mvn sampling")
+
+    dist = GaussianMixture(
+        mean = mu,
+        cov = all_covs,
+        weights = weights
+    )
+
+    print("Param shapes:\n")
+    print(dist.params_str_rep(' '))
+
+    sample = dist.sample(n)
+
+    expected_size = torch.Size([batch_size, n, count_covariates])
+    print("\tExpected size:", expected_size)
+    print("\tRealized size:", sample.shape)
+    print("\tExpectation realized:", sample.shape == expected_size)
+
+    print("\nSixth attempt:  Dummy weigths, unbatched params, weight based deterministic mvn sampling")
+
+    dist = GaussianMixture(
+        mean = mu,
+        cov = all_covs,
+        weights = weights
+    )
+
+    print("Param shapes:\n")
+    print(dist.params_str_rep(' '))
+
+    sample = dist.sample(n, deterministic_weights=True)
+
+    expected_size = torch.Size([batch_size, n, count_covariates])
+    print("\tExpected size:", expected_size)
+    print("\tRealized size:", sample.shape)
+    print("\tExpectation realized:", sample.shape == expected_size)
