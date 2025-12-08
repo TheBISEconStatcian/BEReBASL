@@ -252,10 +252,44 @@ def mvn_random_sample(
     return mean + deviations
 
 class GaussianMixture:
-    """Class representing a gaussian mixture distribution
-    with static mean, cov and weights. If weights are not given
-    it is assumed that the sampling is going to be further worked
-    with
+    r"""
+    Gaussian mixture distribution with fixed means, covariances and optional mixture weights.
+
+    This class supports:
+      - unbatched mixtures
+      - batched mixtures (different weights per batch)
+      - deterministic or stochastic sampling of mixture assignments
+      - sampling from independent multivariate Gaussians if no weights are provided
+
+    When ``weights`` is provided, sampling follows a Categorical distribution over
+    components unless ``deterministic_weights=True`` is used. In that case the number
+    of samples drawn from each component is a rounded version of ``n * weights``.
+
+    Args:
+        mean (Tensor): Mean tensor of shape ``(k,)``, ``(m, k)``, ``(b, k)`` or ``(b, m, k)``.
+            Supports both batched and unbatched mixtures.
+        cov (Tensor): Covariance tensor of shape ``(k, k)``, ``(m, k, k)``, ``(b, k, k)`` or ``(b, m, k, k)``.
+            Must be symmetric. Its last two dims must match the dimensionality of the means.
+        weights (Tensor, optional): Mixture weights of shape ``(m,)`` or ``(b, m)``.
+            Must sum to 1 along the last dimension. If not provided, the class represents
+            independent Gaussian sampling instead of a true mixture.
+        seed (int, optional): Seed for internal RNG used for sampling and deterministic
+            assignment correction.
+        cov_symmetry_rtol_atol (Tuple[float], optional): Relative/absolute tolerance for
+            covariance symmetry assertions.
+        check_params (bool): If ``True``, validate shapes, symmetry and weight normalization.
+
+    Shape:
+        - ``b``: batch size of independent mixtures (if weights are batched).
+        - ``m``: number of components in the mixture.
+        - ``k``: dimensionality of the multivariate normal.
+
+    Example::
+
+        gm = GaussianMixture(mean, cov, weights)
+        samples = gm.sample(100)                      # stochastic mixture
+        det_samples = gm.sample(100, deterministic_weights=True)
+
     """
     def __init__(
             self,
@@ -270,40 +304,77 @@ class GaussianMixture:
             GaussianMixture.dist_params_check(mean, cov, weights, cov_symmetry_rtol_atol)
         self.mean = mean
         self.cov_chol_decomp = torch.linalg.cholesky(cov)
-        self.weights = weights
         self.m = 1
         self.is_mixture = weights is not None
         if self.is_mixture:
-            self.weights_are_batched = self.weights.dim() == 2
+            self.weights_are_batched = weights.dim() == 2
             if self.weights_are_batched:
-                self.b = self.weights.size(0)
+                self.b = weights.size(0)
             else:
                 self.b = 1
             self.m =  weights.size(-1)
+            self.weights_dist = torch.distributions.Categorical(weights)
+        else:
+            self.b = 1 if self.mean.dim() == 1 else self.mean.size(1)
 
-        self.rng = torch.Generator()
+
+        self.rng = torch.Generator(device=mean.device)
         if seed is not None:
-            self.rgn.manual_seed(seed)
+            self.rng.manual_seed(seed)
 
-    def _change_mask_for_diff_correction(self, diff : torch.Tensor) -> torch.Tensor:
-        """
+    def _correction_for_diff(self, diff : torch.Tensor) -> torch.Tensor:
+        r"""
+        Compute a random correction mask used to adjust rounded component counts so
+        that they sum exactly to ``n``.
+
+        This function is used when ``n * weights`` does not sum to exactly ``n`` after
+        rounding. Indices are chosen uniformly at random.
+
         Args:
-            diff (torch.Tensor): should be a singleton (diff.shape = torch.Size([]))
-                of an int dtype
+            diff (Tensor): Scalar integer tensor (shape ``[]``) indicating the required
+                adjustment. Positive values add samples to random components, negative
+                values subtract.
+
+        Returns:
+            Tensor: A correction vector of shape ``(m,)`` with entries in ``{-1, 0, 1}``
+            scaled so that the sum equals ``diff``.
+
+        Note:
+            This is used only for deterministic mixture sampling.
         """
         idx = torch.randperm(self.m, generator=self.rng, device=diff.device)[:diff.abs()]
         change_mask = torch.zeros(self.m, dtype=diff.dtype).scatter_(0, idx, torch.ones(self.m, dtype=diff.dtype))
         return change_mask * diff.sign()
 
     def deterministic_comp_ids(self, n : int):
-        rounded_amounts = (n * self.weights).round().to(int)
+        r"""
+        Compute component indices for deterministic mixture sampling.
+
+        The number of samples per component is given by ``round(n * weights)`` with
+        a correction ensuring the sum equals ``n``. Components are then expanded into
+        an index tensor used for gathering means and covariances.
+
+        Args:
+            n (int): Number of samples to draw.
+
+        Returns:
+            Tensor:
+                - If weights are not batched: shape ``(n,)`` containing component indices.
+                - If weights are batched: shape ``(b, n)`` with per-batch component indices.
+
+        Raises:
+            AssertionError: If internal consistency checks fail.
+
+        """
+        rounded_amounts = (n * self.weights_dist.probs).round().to(int)
         diffs_to_total = n - rounded_amounts.sum(dim=-1)
         if (diffs_to_total != 0).any():
             if self.weights_are_batched:
-                change_mask = torch.stack([self._change_mask_for_diff_correction(d) for d in diffs_to_total])
+                correction = torch.stack([self._correction_for_diff(d) for d in diffs_to_total])
             else:
-                change_mask = self._change_mask_for_diff_correction(diffs_to_total)
-            rounded_amounts += change_mask
+                correction = self._correction_for_diff(diffs_to_total)
+            rounded_amounts += correction
+
         comp_ids = torch.repeat_interleave(torch.arange(self.b * self.m, device = self.mean.device), rounded_amounts.flatten())
         if self.weights_are_batched:
             # Reshape per batch and make indices valid
@@ -312,15 +383,29 @@ class GaussianMixture:
         return comp_ids
     
     def sample_mixture(self, n : int, deterministic_weights : bool = False):
+        r"""
+        Sample from the Gaussian mixture model.
+
+        Args:
+            n (int): Number of samples to draw.
+            deterministic_weights (bool): If ``True``, use deterministic component
+                assignments based on rounded mixture weights. Otherwise use multinomial
+                sampling via ``Categorical`` distribution.
+
+        Returns:
+            Tensor:
+                - For batched mixtures: shape ``(b, n, k)``
+                - For unbatched mixtures: shape ``(n, k)``
+        """
         if deterministic_weights:
             comp_ids = self.deterministic_comp_ids(n)
         else:
-            comp_ids = torch.multinomial(self.weights, num_samples=n, replacement=True, generator=self.rng)
+            comp_ids = self.weights_dist.sample((n,)).transpose(-1,0) # Always valid transpose
 
         if self.weights_are_batched:
             k = self.mean.size(-1)
-            gathered_means = self.mean.gather(1, comp_ids.unsqueeze(-1).expand(-1, -1, k)).transpose(0,1)
-            gathered_decomp_covs = self.cov_chol_decomp.gather(1, comp_ids.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, k, k)).transpose(0,1)
+            gathered_means = self.mean.gather(1, comp_ids.unsqueeze(-1).expand(-1, -1, k))
+            gathered_decomp_covs = self.cov_chol_decomp.gather(1, comp_ids.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, k, k))
         else:
             gathered_means = self.mean[comp_ids]
             gathered_decomp_covs = self.cov_chol_decomp[comp_ids]
@@ -338,34 +423,65 @@ class GaussianMixture:
 
 
     def sample(self, n : int, deterministic_weights : bool = False):
-        """Returns the sampling implied by the initialization arguments
-        When no weights were passed in initialization n independent samples 
-        of each batch of mvn-arguments are returned.
-        Otherwise a gaussian mixture as defined by the weights (whereby 
-        the proportion can be deterministic or multinomial random)
-        if no weights were passed it is assumed that independent gaussian
+        r"""
+        Draw samples from the distribution represented by this instance.
+
+        If no ``weights`` were provided at initialization, ``n`` independent samples
+        are drawn from each Gaussian in the batch. Otherwise a Gaussian mixture is used.
+
+        Args:
+            n (int): Number of samples.
+            deterministic_weights (bool): Whether to use deterministic mixture weights.
+
+        Returns:
+            Tensor:
+                - If mixture: same as :meth:`sample_mixture`
+                - If independent Gaussians without mixture weights:
+                    • ``(n, k)`` for unbatched
+                    • ``(b, n, k)`` for batched
+
         """
-        if self.weights is not None:
+        if self.is_mixture:
             return self.sample_mixture(n, deterministic_weights)
         
-        print("\n\n", self.mean.shape, "\n\n")
-
-        return mvn_random_sample(
+        sample = mvn_random_sample(
             mean = self.mean,
             cov_chol_decomp = self.cov_chol_decomp,
             n = n,
             rng = self.rng,
             args_checks=False
         )
+
+        if self.b > 1:
+            sample = sample.transpose(0,1)
+
+        return sample
     
     def manual_seed(self, seed : int):
+        r"""
+        Manually set the internal RNG seed.
+
+        Args:
+            seed (int): Seed to set for the internal torch.Generator.
+        """
         self.rng.manual_seed(seed)
 
     def params_str_rep(self, spacing_before : str = ''):
+        r"""
+        Create a formatted string describing parameter shapes.
+
+        Useful for debugging.
+
+        Args:
+            spacing_before (str): Optional indentation prefix.
+
+        Returns:
+            str: Formatted description of parameter shapes.
+        """
         params_str = spacing_before + f"mean.size = {self.mean.shape}"
         params_str += '\n' + spacing_before + f"cov.size = {self.cov_chol_decomp.shape}"
         if self.is_mixture:
-            params_str += '\n' + spacing_before + f"weights.size = {self.weights.shape}"
+            params_str += '\n' + spacing_before + f"weights.size = {self.weights_dist.probs.shape}"
 
         return params_str
         
@@ -376,6 +492,25 @@ class GaussianMixture:
         weights : Optional[torch.Tensor] = None,
         symmetry_rtol_atol : Tuple[float] = [0.0, 0.0]
     ) -> None:
+        r"""
+        Validate all distribution parameters for shape and consistency.
+
+        Checks:
+            - mean and covariance dimensionality
+            - covariance symmetry
+            - consistency of m-axis across parameters
+            - weight normalization
+            - matching Gaussian dimensionality ``k``
+
+        Args:
+            mean (Tensor): Mean tensor of shape ``(k,)``, ``(m, k)``, ``(b, k)`` or ``(b, m, k)``.
+            cov (Tensor): Covariance tensor of shape ``(..., k, k)``.
+            weights (Tensor, optional): Mixture weights of shape ``(m,)`` or ``(b, m)``.
+            symmetry_rtol_atol (Tuple[float]): Tolerances for symmetry check.
+
+        Raises:
+            AssertionError: If any parameter check fails.
+        """
         assert mean.dim() in (1,2,3), "Means  needs to be of shape (k,), (m, k) or (b, k) or (b, m, k)"
         assert cov.dim() == mean.dim()+1, "Covs has to have one more dimension than means"
         
@@ -397,6 +532,7 @@ class GaussianMixture:
         
         assert mean.size(-1) == cov.size(-1) == cov.size(-2), "Covariate count k is not constant"
         assert torch.allclose(cov, cov.transpose(-1, -2), *symmetry_rtol_atol), "Covariance matrix not symmetric"
+
 
 
 if __name__ == "__main__":
@@ -433,6 +569,9 @@ if __name__ == "__main__":
 
     n = 100
 
+    batched_size = torch.Size([batch_size, n, count_covariates])
+    unbatched_size = torch.Size([n, count_covariates])
+
     trial_elements = [
         (
             "no weights, " + ("un" if unbat else "") + "batched params",
@@ -442,7 +581,7 @@ if __name__ == "__main__":
                 "cov" : all_covs[0, 0] if unbat else all_covs[:, 0],
                 "weights" : None
             },
-            torch.Size([n, count_covariates]) if unbat else torch.Size([n, batch_size, count_covariates])
+            unbatched_size if unbat else batched_size
         ) for unbat in [True, False]] + sum([[
         (
             "weigths, " + ("" if bat else "un") + "batched params, weight based " + ("deterministic" if det else "random") +" mvn sampling",
@@ -452,7 +591,7 @@ if __name__ == "__main__":
                 "cov" : all_covs if bat else all_covs[0],
                 "weights" : weights if bat else weights[0]
             },
-            torch.Size([n, batch_size, count_covariates]) if bat else torch.Size([n, count_covariates])
+            batched_size if bat else unbatched_size
         )
     for det in [True, False]] for bat in [True, False]], [])
 
