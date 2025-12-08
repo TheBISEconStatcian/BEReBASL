@@ -319,11 +319,12 @@ class GaussianMixture:
 
         if self.weights_are_batched:
             k = self.mean.size(-1)
-            gathered_means = self.mean.gather(1, comp_ids.unsqueeze(-1).expand(-1, -1, k))
-            gathered_decomp_covs = self.cov_chol_decomp.gather(1, comp_ids.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, k, k))
+            gathered_means = self.mean.gather(1, comp_ids.unsqueeze(-1).expand(-1, -1, k)).transpose(0,1)
+            gathered_decomp_covs = self.cov_chol_decomp.gather(1, comp_ids.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, k, k)).transpose(0,1)
         else:
             gathered_means = self.mean[comp_ids]
             gathered_decomp_covs = self.cov_chol_decomp[comp_ids]
+
 
         gaussian_mixture_sample = mvn_random_sample(
             mean = gathered_means,
@@ -338,11 +339,17 @@ class GaussianMixture:
 
     def sample(self, n : int, deterministic_weights : bool = False):
         """Returns the sampling implied by the initialization arguments
+        When no weights were passed in initialization n independent samples 
+        of each batch of mvn-arguments are returned.
+        Otherwise a gaussian mixture as defined by the weights (whereby 
+        the proportion can be deterministic or multinomial random)
         if no weights were passed it is assumed that independent gaussian
-        
         """
         if self.weights is not None:
             return self.sample_mixture(n, deterministic_weights)
+        
+        print("\n\n", self.mean.shape, "\n\n")
+
         return mvn_random_sample(
             mean = self.mean,
             cov_chol_decomp = self.cov_chol_decomp,
@@ -426,110 +433,36 @@ if __name__ == "__main__":
 
     n = 100
 
-    print("\nFirst attempt: no weights, batched params")
+    trial_elements = [
+        (
+            "no weights, " + ("un" if unbat else "") + "batched params",
+            True,
+            {
+                "mean" : mu[0, 0] if unbat else mu[:, 0],
+                "cov" : all_covs[0, 0] if unbat else all_covs[:, 0],
+                "weights" : None
+            },
+            torch.Size([n, count_covariates]) if unbat else torch.Size([n, batch_size, count_covariates])
+        ) for unbat in [True, False]] + sum([[
+        (
+            "weigths, " + ("" if bat else "un") + "batched params, weight based " + ("deterministic" if det else "random") +" mvn sampling",
+            det,
+            {
+                "mean" : mu if bat else mu[0],
+                "cov" : all_covs if bat else all_covs[0],
+                "weights" : weights if bat else weights[0]
+            },
+            torch.Size([n, batch_size, count_covariates]) if bat else torch.Size([n, count_covariates])
+        )
+    for det in [True, False]] for bat in [True, False]], [])
 
-    dist = GaussianMixture(
-        mean = mu[:, 0],
-        cov = all_covs[:, 0],
-        weights = None
-    )
+    for num_trial, (msg, deterministic_weights, mixture_kwargs, expected_size) in enumerate(trial_elements):
+        print(f"\nAttempt {num_trial + 1}: {msg}")
+        dist = GaussianMixture(**mixture_kwargs)
+        print("Params shapes:")
+        print(dist.params_str_rep('  '), "\n")
 
-    print("Param shapes:\n")
-    print(dist.params_str_rep(' '))
-
-    sample = dist.sample(n)
-
-    expected_size = torch.Size([n, batch_size, count_covariates])
-    print("\tExpected size:", expected_size)
-    print("\tRealized size:", sample.shape)
-    print("\tExpectation realized:", sample.shape == expected_size)
-
-    print("\nSecond attempt: no weigths, unbatched params")
-
-    dist = GaussianMixture(
-        mean = mu[0, 0],
-        cov = all_covs[0, 0],
-        weights = None
-    )
-
-    print("Param shapes:\n")
-    print(dist.params_str_rep(' '))
-
-    sample = dist.sample(n)
-
-    expected_size = torch.Size([n, count_covariates])
-    print("\tExpected size:", expected_size)
-    print("\tRealized size:", sample.shape)
-    print("\tExpectation realized:", sample.shape == expected_size)
-
-    print("\nThird attempt:  weigths, unbatched params, weight based random mvn sampling")
-
-    dist = GaussianMixture(
-        mean = mu[0],
-        cov = all_covs[0],
-        weights = weights[0]
-    )
-
-    print("Param shapes:\n")
-    print(dist.params_str_rep(' '))
-
-    sample = dist.sample(n)
-
-    expected_size = torch.Size([n, count_covariates])
-    print("\tExpected size:", expected_size)
-    print("\tRealized size:", sample.shape)
-    print("\tExpectation realized:", sample.shape == expected_size)
-
-    print("\nFourth attempt:  Dummy weigths, unbatched params, weight based deterministic mvn sampling")
-
-    dist = GaussianMixture(
-        mean = mu[0],
-        cov = all_covs[0],
-        weights = weights[0]
-    )
-
-    print("Param shapes:\n")
-    print(dist.params_str_rep(' '))
-
-    sample = dist.sample(n, deterministic_weights=True)
-
-    expected_size = torch.Size([n, count_covariates])
-    print("\tExpected size:", expected_size)
-    print("\tRealized size:", sample.shape)
-    print("\tExpectation realized:", sample.shape == expected_size)
-
-    print("\nFifth attempt:  weigths, unbatched params, weight based random mvn sampling")
-
-    dist = GaussianMixture(
-        mean = mu,
-        cov = all_covs,
-        weights = weights
-    )
-
-    print("Param shapes:\n")
-    print(dist.params_str_rep(' '))
-
-    sample = dist.sample(n)
-
-    expected_size = torch.Size([batch_size, n, count_covariates])
-    print("\tExpected size:", expected_size)
-    print("\tRealized size:", sample.shape)
-    print("\tExpectation realized:", sample.shape == expected_size)
-
-    print("\nSixth attempt:  Dummy weigths, unbatched params, weight based deterministic mvn sampling")
-
-    dist = GaussianMixture(
-        mean = mu,
-        cov = all_covs,
-        weights = weights
-    )
-
-    print("Param shapes:\n")
-    print(dist.params_str_rep(' '))
-
-    sample = dist.sample(n, deterministic_weights=True)
-
-    expected_size = torch.Size([batch_size, n, count_covariates])
-    print("\tExpected size:", expected_size)
-    print("\tRealized size:", sample.shape)
-    print("\tExpectation realized:", sample.shape == expected_size)
+        sample = dist.sample(n, deterministic_weights)
+        print("\tExpected size:", expected_size)
+        print("\tRealized size:", sample.shape)
+        print("\tExpectation realized:", sample.shape == expected_size, "\n")
