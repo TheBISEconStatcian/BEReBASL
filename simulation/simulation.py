@@ -1,5 +1,9 @@
-from typing import Optional, Tuple
 import torch
+from warnings import warn
+
+from typing import Dict, Optional, Tuple, Union
+
+
 def random_vcov_matrix(
         k: int,
         generator: Optional[torch.Generator] = None,
@@ -250,6 +254,104 @@ def mvn_random_sample(
 
 
     return mean + deviations
+
+def _mix_mean_dif_as_expected(mix_mean_dif, m, k):
+    if isinstance(mix_mean_dif, float):
+        return True
+    if not isinstance(mix_mean_dif, torch.Tensor):
+        return False
+    if mix_mean_dif.dim() == 0:
+        return True
+    
+    last_dim_compatible = mix_mean_dif.size(-1) in (k, m-1, 1)
+    if not last_dim_compatible:
+        return False
+    
+    if mix_mean_dif.dim() == 1:
+        return True
+    
+    if mix_mean_dif.dim() > 2:
+        return False
+    
+    return mix_mean_dif.size(0) in (m-1, 1)
+
+def _adapt_mix_mean_dif(mix_mean_dif, m, k, security_check : bool = True, dtype : torch.dtype = torch.get_default_dtype()):
+    if security_check:
+        assert _mix_mean_dif_as_expected(mix_mean_dif, m, k)
+
+    is_float = isinstance(mix_mean_dif, float)
+    is_single_element_tensor = not is_float and (mix_mean_dif.numel() == 1)
+    is_singleton = is_float or (mix_mean_dif.dim() == 0) or is_single_element_tensor
+    if is_singleton:
+        if is_float:
+            mix_mean_dif = torch.tensor(mix_mean_dif, dtype = dtype)
+        if is_single_element_tensor:
+            mix_mean_dif = mix_mean_dif.flatten()[0]
+
+        return mix_mean_dif.expand(m-1).unsqueeze(-1) * torch.arange(1, m).unsqueeze(-1)
+    
+    if mix_mean_dif.dim() == 1:
+        dim_size = mix_mean_dif.size(0)
+        if dim_size == k:
+            return mix_mean_dif.unsqueeze(0).expand(m-1, -1) * torch.arange(1, m).unsqueeze(-1)
+        if dim_size == m-1:
+            return mix_mean_dif.unsqueeze(-1)
+        
+    if mix_mean_dif.dim() == 2:
+        return mix_mean_dif
+
+def _mix_var_dif_as_expected(mix_var_dif, m, k):
+    if isinstance(mix_var_dif, float):
+        return True
+    if not isinstance(mix_var_dif, torch.Tensor):
+        return False
+    
+    dim_rank = mix_var_dif.dim()
+    if dim_rank == 0 or (mix_var_dif.numel() == 1):
+        return True
+    
+    dim_rank = mix_var_dif.dim()
+
+    if dim_rank == 1:
+        return mix_var_dif.size(-1) in (m-1, 1)
+    
+    if dim_rank == 2:
+        return mix_var_dif.shape in (torch.Size([m-1, 1]), torch.Size([k,k]))
+    
+    if dim_rank > 3:
+        return False
+    
+    last_dims_ok = mix_var_dif.size(1) == mix_var_dif.size(2) == k
+    return last_dims_ok and (mix_var_dif.size(0) in (m-1, 1))
+
+
+def _adapt_mix_var_dif(mix_var_dif, m, k, security_check : bool = True, dtype : torch.dtype = torch.get_default_dtype()):
+    if security_check:
+        assert _mix_var_dif_as_expected(mix_var_dif, m, k)
+
+    is_float = isinstance(mix_var_dif, float)
+    is_single_element_tensor = not is_float and (mix_var_dif.numel() == 1)
+    is_singleton = is_float or (mix_var_dif.dim() == 0) or is_single_element_tensor
+    if is_singleton:
+        if is_float:
+            mix_var_dif = torch.tensor(mix_var_dif, dtype = dtype)
+        if is_single_element_tensor:
+            mix_var_dif = mix_var_dif.flatten()[0]
+        return mix_var_dif#.expand(m-1).unsqueeze(-1).unsqueeze(-1)
+    
+    if mix_var_dif.dim() == 1:
+        return mix_var_dif.unsqueeze(-1).unsqueeze(-1)
+        
+    if mix_var_dif.dim() == 2:
+        if mix_var_dif.size(0) == k:
+            return mix_var_dif.unsqueeze(0)
+        if mix_var_dif.size(0) == (m-1):
+            return mix_var_dif.unsqueeze(-1)
+    
+    if mix_var_dif.dim() == 3:
+        return mix_var_dif
+    
+
 
 class GaussianMixture:
     r"""
@@ -532,6 +634,59 @@ class GaussianMixture:
         
         assert mean.size(-1) == cov.size(-1) == cov.size(-2), "Covariate count k is not constant"
         assert torch.allclose(cov, cov.transpose(-1, -2), *symmetry_rtol_atol), "Covariance matrix not symmetric"
+
+    @classmethod
+    def generate_good_bad_mixtures(
+        cls,
+        count_covariates : int = 10,
+        mean_bad_diff : Union[torch.Tensor, float] = 1.0,
+        con_var_bad_dif : float = 0.0,
+        covars :  Optional[Dict[str, torch.Tensor]]  = None, # keys = ["bad", "good"]
+        iid : bool              = False,
+        mixture_weights  : Optional[torch.Tensor]    = None,
+        mix_mean_dif_bad  : Union[torch.Tensor, float]   = None,
+        mix_mean_dif_good  : Union[torch.Tensor, float]   = None,
+        mix_var_dif_bad  : Union[torch.Tensor, float]   = None,
+        mix_var_dif_good  : Union[torch.Tensor, float]   = None,
+        device : Optional[torch.device] = None, 
+        dtype : torch.dtype = torch.get_default_dtype(),
+        do_security_checks : bool = True
+    ):
+        # 0. Process "None" logic path and ensure everything is well set
+        ## ensure device is defined
+        if device is None:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        kwargs_for_generated_tensors = {"dtype" : dtype, "device" : device}
+
+        mu_bad = torch.zeros(count_covariates, **kwargs_for_generated_tensors)
+        mu_good = mu_bad + mean_bad_diff
+
+
+
+        if mixture_weights is not None:
+            if mixture_weights.dim() == 1:
+                weights_bad = mixture_weights
+                weights_good = mixture_weights.copy()
+            else:
+                if do_security_checks:
+                    assert mixture_weights.dim() == 2, "mixture_weights has to be a tensor of dim in (1,2)"
+                    assert mixture_weights.size(0) == 2, "Shape should be [2, m]"
+                weights_bad = mixture_weights[0]
+                weights_good = mixture_weights[1]
+            
+            m = weights_bad.size(-1)
+
+            mix_mean_dif_bad, mix_mean_dif_good = [_adapt_mix_mean_dif(d, m, k=count_covariates, security_check=do_security_checks) 
+                                                   for d in (mix_mean_dif_bad, mix_mean_dif_good)]
+            if not iid:
+                mix_var_dif_bad, mix_var_dif_good = [_adapt_mix_var_dif(d, m, k=count_covariates, security_check=do_security_checks) 
+                                                     for d in (mix_var_dif_bad, mix_var_dif_good)]
+
+            
+
+
+
 
 
 
