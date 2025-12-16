@@ -248,14 +248,26 @@ def _adapt_mix_var_dif(
     
 
 class CreditDataGenerator:
+
+    bad_good_encoding = {
+        "bad" : 1,
+        "good" : 0
+    }
+
     def __init__(
             self,
             bad_mixture : GaussianMixture,
             good_mixture : GaussianMixture,
+            noise_var : float,
+            bad_ratio : float,
             seed : Optional[int] = None
     ):
+        if not isinstance(bad_mixture, GaussianMixture) and not isinstance(good_mixture, GaussianMixture):
+            raise ValueError("Mixtures need to be GaussianMixture classes")
+        
         self.bad_mixture = bad_mixture
         self.good_mixture = good_mixture
+        self.noise_std = torch.sqrt(torch.tensor(float(noise_var)))
 
         if seed is not None:
             self.bad_mixture.manual_seed(seed)
@@ -268,6 +280,10 @@ class CreditDataGenerator:
         The device on which both the good and bad Gaussian mixture parameters reside.
         """
         return self.bad_mixture.device
+    
+    @property
+    def rng(self) -> torch.Generator:
+        return self.bad_mixture.rng
     
     def to(
             self, device : torch.device, seed : Optional[int] = None, set_same_initial_seed : bool = True
@@ -296,6 +312,24 @@ class CreditDataGenerator:
         self.good_mixture.to(device, seed, set_same_initial_seed)
         self.good_mixture.rng = self.bad_mixture.rng
         return self
+    
+    def sample(self, n : int, deterministic_weights_for_mixture_sampling : bool = False):
+        n_bad = round(self.bad_ratio * n)
+        n_good = round((1-self.bad_ratio) * n)
+        if (n_bad + n_good) != n:
+            adapt_n_bad = torch.randint(low=0,high=2,size=(1,),generator=self.rng).to(bool).item()
+            if adapt_n_bad:
+                n_bad = n - n_good
+            else:
+                n_good = n - n_bad
+
+        X_bad = self.bad_mixture.sample(n_bad, deterministic_weights = deterministic_weights_for_mixture_sampling)
+        y_bad = torch.full((n_bad,), self.bad_good_encoding["bad"])
+        X_good = self.bad_mixture.sample(n_bad, deterministic_weights = deterministic_weights_for_mixture_sampling)
+        y_good = torch.full((n_bad,), self.bad_good_encoding["bad"])
+
+        X = torch.cat([X_bad, X_good], dim=0)
+        y = torch.cat([y_bad, y_good])
     
     @staticmethod
     def generate_sigma_bad_and_good(
@@ -374,6 +408,8 @@ class CreditDataGenerator:
         mix_mean_dif_good  : Union[torch.Tensor, float]   = None,
         mix_var_dif_bad  : Union[torch.Tensor, float]   = None,
         mix_var_dif_good  : Union[torch.Tensor, float]   = None,
+        noise_var : float = 0.1,
+        bad_ratio : float = 0.5,
         device : Optional[torch.device] = None, 
         dtype : torch.dtype = torch.get_default_dtype(),
         do_security_checks : bool = True,
@@ -497,5 +533,6 @@ class CreditDataGenerator:
         return cls(
             bad_mixture = mixture_bad,
             good_mixture = mixture_good,
-            seed = seed_credit_data_gen
+            seed = seed_credit_data_gen,
+            noise_var=noise_var
         )
