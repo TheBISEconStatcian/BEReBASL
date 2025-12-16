@@ -1,6 +1,6 @@
 import torch
 
-from typing import Tuple
+from typing import Optional, Tuple
 
 import os
 import sys
@@ -174,3 +174,21 @@ def _adapt_mix_var_dif(mix_var_dif, m, k, security_check : bool = True, dtype : 
     
     if mix_var_dif.dim() == 3:
         return mix_var_dif
+    
+
+class CreditDataGenerator:
+    def __init__(
+            self,
+            bad_mixture : GaussianMixture,
+            good_mixture : GaussianMixture,
+            seed : Optional[int]
+    ):
+        self.bad_mixture = bad_mixture
+        self.good_mixture = good_mixture
+
+        if seed is not None:
+            self.bad_mixture.manual_seed(seed)
+
+        self.good_mixture.rng = self.bad_mixture.rng
+
+    
