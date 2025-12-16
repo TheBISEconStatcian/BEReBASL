@@ -1,4 +1,8 @@
+import numpy as np
+import statsmodels.api as sm
+from statsmodels.genmod import families
 import torch
+
 
 from typing import Dict, Optional, Tuple, Union
 
@@ -576,3 +580,64 @@ class CreditDataGenerator:
             bad_ratio=bad_ratio
         )
 
+
+class CreditData:
+    def __init__(
+            self, 
+            X_initial : torch.Tensor, 
+            y_initial : torch.Tensor, 
+            accepted_initial : torch.Tensor
+    ):
+        if not (X_initial.device == y_initial.device == accepted_initial.device):
+            raise ValueError("Not all args have the same device")
+        
+        if not (X_initial.size(0) == y_initial.size(0) == accepted_initial.size(0)):
+            raise ValueError("Shapes are non-compatible")
+        
+        self.X = X_initial.detach().clone()
+        self.y = y_initial.detach().clone()
+        self.accepted = accepted_initial.detach().clone().to(bool)
+        
+        self.gen_idx = torch.tensor(0, dtype=torch.long, device=X_initial.device).expand(X_initial.size(0))
+
+    def to(self, device : torch.device):
+        for var in ["X", "y", "accepted", "gen_idx"]:
+            setattr(self, var, getattr(self, var).to(device))
+
+        return self
+    
+    @property
+    def device(self) -> torch.device:
+        return self.X.device
+    
+    @property
+    def last_gen_idx(self):
+        return self.gen_idx[-1]
+    
+    def add_gen(
+            self, 
+            X_new : torch.Tensor,
+            y_new : torch.Tensor, 
+            accepted_new : torch.Tensor
+        ) -> None:
+        self.X = torch.cat([self.X, X_new])
+        self.y = torch.cat([self.y, y_new])
+        self.accepted = torch.cat([self.accepted, accepted_new])
+
+        new_gen_idx = self.last_gen_idx + 1
+        self.gen_idx = torch.cat([self.gen_idx, new_gen_idx.expand(self.X.size(0))])
+
+
+def fit_and_predict_classic_logistic(X : np.array, y : np.array, add_intercept : bool = True):
+    if add_intercept:
+        X = np.column_stack([np.ones((X.shape[0],1), X.dtype), X])
+
+    model = sm.GLM(
+        endog=y,
+        exog=X_with_const,
+        family=binomial_family # This specifies the logistic regression setup
+    )
+    fitted_model = model.fit()
+    preds = fitted_model.predict()
+    
+    return preds
