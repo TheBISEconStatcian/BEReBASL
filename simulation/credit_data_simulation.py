@@ -1,6 +1,6 @@
 import torch
 
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import os
 import sys
@@ -181,7 +181,7 @@ class CreditDataGenerator:
             self,
             bad_mixture : GaussianMixture,
             good_mixture : GaussianMixture,
-            seed : Optional[int]
+            seed : Optional[int] = None
     ):
         self.bad_mixture = bad_mixture
         self.good_mixture = good_mixture
@@ -191,4 +191,100 @@ class CreditDataGenerator:
 
         self.good_mixture.rng = self.bad_mixture.rng
 
-    
+    @classmethod
+    def init_with_internal_logic(
+        cls,
+        count_covariates : int = 10,
+        mean_bad_diff : Union[torch.Tensor, float] = 1.0,
+        con_var_bad_dif : float = 0.0,
+        covars :  Optional[Dict[str, torch.Tensor]]  = None, # keys = ["bad", "good"]
+        iid : bool              = False,
+        mixture_weights  : Optional[torch.Tensor]    = None,
+        mix_mean_dif_bad  : Union[torch.Tensor, float]   = None,
+        mix_mean_dif_good  : Union[torch.Tensor, float]   = None,
+        mix_var_dif_bad  : Union[torch.Tensor, float]   = None,
+        mix_var_dif_good  : Union[torch.Tensor, float]   = None,
+        device : Optional[torch.device] = None, 
+        dtype : torch.dtype = torch.get_default_dtype(),
+        do_security_checks : bool = True,
+        seed_var_gen : Optional[int] = None,
+        seed_credit_data_gen : Optional[int] = None
+    ):
+        # 0. Process "None" logic path and ensure everything is well set
+        ## ensure device is defined
+        if device is None:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        kwargs_for_generated_tensors = {"dtype" : dtype, "device" : device}
+
+        mu_bad = torch.zeros(count_covariates, **kwargs_for_generated_tensors)
+        mu_good = mu_bad + mean_bad_diff
+
+        if iid:
+            sigma_bad, sigma_good = [torch.eye(count_covariates, **kwargs_for_generated_tensors) for _ in range(2)]
+            mix_var_dif_bad, mix_var_dif_good = 0.0, 0.0
+        elif covars is not None:
+            sigma_bad = covars["bad"]
+            sigma_good = covars["good"]
+        else:
+            rng = torch.Generator(device=device)
+            if seed_var_gen is not None:
+                rng.manual_seed(1807)
+            sigma_bad, sigma_good = generate_sigma_bad_and_good(
+                k = count_covariates, 
+                proportion_var_dif=con_var_bad_dif, 
+                generator = rng, 
+                device=device, dtype= dtype
+            )
+
+        if mixture_weights is None:
+            weights_bad = None
+            weights_good = None
+        else:
+            if mixture_weights.dim() == 1:
+                weights_bad = mixture_weights
+                weights_good = mixture_weights.copy()
+            else:
+                if do_security_checks:
+                    assert mixture_weights.dim() == 2, "mixture_weights has to be a tensor of dim in (1,2)"
+                    assert mixture_weights.size(0) == 2, "Shape should be [2, m]"
+                weights_bad = mixture_weights[0]
+                weights_good = mixture_weights[1]
+            
+            m = weights_bad.size(-1)
+
+            mix_mean_dif_bad, mix_mean_dif_good = [_adapt_mix_mean_dif(d, m, k=count_covariates, security_check=do_security_checks) 
+                                                   for d in (mix_mean_dif_bad, mix_mean_dif_good)]
+            
+            amplify_base_with_dif = lambda param, dif : torch.cat([param.unsqueeze(0), param.unsqueeze(0) + dif],
+                                                                  dim=0)
+
+            mu_bad, mu_good = [amplify_base_with_dif(mu, dif)
+                               for mu, dif in [(mu_bad, mix_mean_dif_bad), (mu_good, mix_mean_dif_good)]]
+            
+            sigma_bad, sigma_good = [_adapt_mix_var_dif(d, m, k=count_covariates, security_check=do_security_checks) 
+                                                    for d in (mix_var_dif_bad, mix_var_dif_good)]
+                
+        mixture_bad = GaussianMixture(
+            mean = mu_bad,
+            cov = sigma_bad,
+            weights = weights_bad,
+            seed = None,
+            cov_symmetry_rtol_atol = [0.0, 0.0],
+            check_params = True
+        )
+        
+        mixture_good = GaussianMixture(
+            mean = mu_good,
+            cov = sigma_good,
+            weights = weights_good,
+            seed = None,
+            cov_symmetry_rtol_atol = [0.0, 0.0],
+            check_params = True
+        )
+
+        return cls(
+            bad_mixture = mixture_bad,
+            good_mixture = mixture_good,
+            seed = seed_credit_data_gen
+        )
