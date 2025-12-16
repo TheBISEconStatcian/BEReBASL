@@ -282,6 +282,10 @@ class CreditDataGenerator:
         return self.bad_mixture.device
     
     @property
+    def dtype(self) -> torch.dtype:
+        return self.bad_mixture.mean.dtype
+    
+    @property
     def rng(self) -> torch.Generator:
         return self.bad_mixture.rng
     
@@ -328,16 +332,19 @@ class CreditDataGenerator:
             else:
                 n_good = n - n_bad
 
+        dtype = self.dtype
+        device = self.device
+
         X_bad = self.bad_mixture.sample(n_bad, deterministic_weights = deterministic_weights_for_mixture_sampling) # [n, k]
-        y_bad = torch.full((n_bad,), self.bad_good_encoding["bad"], device=self.device) # [n]
+        y_bad = torch.full((n_bad,), self.bad_good_encoding["bad"], device=device, dtype=dtype) # [n]
 
         X_good = self.bad_mixture.sample(n_bad, deterministic_weights = deterministic_weights_for_mixture_sampling) # [n, k]
-        y_good = torch.full((n_good,), self.bad_good_encoding["good"], device=self.device) # [n]
+        y_good = torch.full((n_good,), self.bad_good_encoding["good"], device=device, dtype=dtype) # [n]
 
         X = torch.cat([X_bad, X_good], dim=0)
         y = torch.cat([y_bad, y_good])
 
-        X = X + torch.randn(X.shape, generator=self.rng, device=self.device) / self.noise_std
+        X = X + torch.randn(X.shape, generator=self.rng, device=device, dtype=dtype) / self.noise_std
 
         return X, y
 
