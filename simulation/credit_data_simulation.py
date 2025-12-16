@@ -73,7 +73,7 @@ def _adapt_mix_mean_dif(
     m: int,
     k: int,
     security_check: bool = True,
-    dtype: torch.dtype = torch.get_default_dtype(),
+    dtype: torch.dtype = None,
 ) -> torch.Tensor:
     """
     Adapts a mean-difference specification into a tensor of shape ``(m - 1, k)``.
@@ -98,13 +98,16 @@ def _adapt_mix_mean_dif(
             Number of covariates.
         security_check (bool, default=True):
             If ``True``, validates the input shape before adaptation.
-        dtype (torch.dtype, default=torch.get_default_dtype()):
-            Target dtype when constructing tensors from Python scalars.
+        dtype (torch.dtype, default=None):
+            Target dtype when constructing tensors from Python scalars. When None
+            the value is ``torch.get_default_dtype()``
 
     Returns:
         Tensor:
             A tensor of shape ``(m - 1, k)`` or a compatible shape.
     """
+    if dtype is None:
+            dtype = torch.get_default_dtype()
     if security_check:
         assert _mix_mean_dif_as_expected(mix_mean_dif, m, k)
 
@@ -190,7 +193,7 @@ def _adapt_mix_var_dif(
     m: int,
     k: int,
     security_check: bool = True,
-    dtype: torch.dtype = torch.get_default_dtype(),
+    dtype: torch.dtype = None,
 ) -> torch.Tensor:
     """
     Adapts a variance-difference specification into a canonical tensor form.
@@ -214,13 +217,16 @@ def _adapt_mix_var_dif(
         security_check (bool, default=True):
             If ``True``, validates the input shape before adaptation.
         dtype (torch.dtype, default=torch.get_default_dtype()):
-            Target dtype when constructing tensors from Python scalars.
+            Target dtype when constructing tensors from Python scalars. When None
+            the value is ``torch.get_default_dtype()``
 
     Returns:
         Tensor:
             A tensor representing variance adjustments with shape compatible
             with ``(m - 1, k, k)`` broadcasting.
     """
+    if dtype is None:
+            dtype = torch.get_default_dtype()
     if security_check:
         assert _mix_var_dif_as_expected(mix_var_dif, m, k)
 
@@ -268,6 +274,9 @@ class CreditDataGenerator:
         self.bad_mixture = bad_mixture
         self.good_mixture = good_mixture
         self.noise_std = torch.sqrt(torch.tensor(float(noise_var)))
+        self.bad_ratio = float(bad_ratio)
+        
+        self.add_noise = self.noise_std > 0
 
         if seed is not None:
             self.bad_mixture.manual_seed(seed)
@@ -344,7 +353,8 @@ class CreditDataGenerator:
         X = torch.cat([X_bad, X_good], dim=0)
         y = torch.cat([y_bad, y_good])
 
-        X = X + torch.randn(X.shape, generator=self.rng, device=device, dtype=dtype) / self.noise_std
+        if self.add_noise:
+            X = X + torch.randn(X.shape, generator=self.rng, device=device, dtype=dtype) * self.noise_std
 
         return X, y
 
@@ -357,7 +367,7 @@ class CreditDataGenerator:
         var_range: Tuple[float, float] = (0.0, 1.0),
         eps: float = 1e-6,
         device: torch.device = torch.device("cpu"),
-        dtype: torch.dtype = torch.float64
+        dtype: Optional[torch.dtype] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Generate a pair of covariance matrices: one 'good' baseline and one 'bad' perturbed version.
 
@@ -380,7 +390,8 @@ class CreditDataGenerator:
                 Defaults to (0.0, 1.0).
             eps (float, optional): Small diagonal perturbation to ensure positive definiteness.
                 Defaults to ``1e-6``.
-            device (torch.device, optional): Device for tensor allocation. Defaults to CPU.
+            device (torch.device, optional): Device for tensor allocation. Defaults to CPU. When None
+                the value is ``torch.get_default_dtype()``
             dtype (torch.dtype, optional): Data type of the returned tensors. Defaults to ``torch.float64``.
 
         Returns:
@@ -394,6 +405,8 @@ class CreditDataGenerator:
             >>> sigma_bad.shape, sigma_good.shape
             (torch.Size([3, 3]), torch.Size([3, 3]))
         """
+        if dtype is None:
+            dtype = torch.get_default_dtype()
         # Step 1: Generate baseline matrices
         sigma_bad = random_vcov_matrix(k, generator=generator, var_range=var_range, device=device, dtype=dtype, eps=eps)
         sigma_good = random_vcov_matrix(k, generator=generator, var_range=var_range, device=device, dtype=dtype, eps=eps)
@@ -429,7 +442,7 @@ class CreditDataGenerator:
         noise_var : float = 0.1,
         bad_ratio : float = 0.5,
         device : Optional[torch.device] = None, 
-        dtype : torch.dtype = torch.get_default_dtype(),
+        dtype : Optional[torch.dtype] = None,
         do_security_checks : bool = True,
         seed_var_gen : Optional[int] = None,
         seed_credit_data_gen : Optional[int] = None
@@ -459,10 +472,15 @@ class CreditDataGenerator:
                 Mean offsets for mixture components.
             mix_var_dif_bad, mix_var_dif_good (Tensor or float, optional):
                 Variance offsets for mixture components.
+            noise_var (float, default=0.1):
+                Variance of the 0-mean normally distributed noise to be added to covariate
+                samples.
+            bad_ratio (float, default=0.5):
+                ratio of bad among total ``n`` per sample.
             device (torch.device, optional):
                 Target device.
-            dtype (torch.dtype, default=torch.get_default_dtype()):
-                Target dtype.
+            dtype (torch.dtype, default=None):
+                Target dtype. When None it is set to torch.get_default_dtype()
             do_security_checks (bool, default=True):
                 Enables input validation.
             seed_var_gen (int, optional):
@@ -478,6 +496,8 @@ class CreditDataGenerator:
         ## ensure device is defined
         if device is None:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if dtype is None:
+            dtype = torch.get_default_dtype()
 
         kwargs_for_generated_tensors = {"dtype" : dtype, "device" : device}
 
@@ -552,5 +572,7 @@ class CreditDataGenerator:
             bad_mixture = mixture_bad,
             good_mixture = mixture_good,
             seed = seed_credit_data_gen,
-            noise_var=noise_var
+            noise_var=noise_var,
+            bad_ratio=bad_ratio
         )
+
