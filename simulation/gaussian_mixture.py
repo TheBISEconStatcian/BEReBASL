@@ -269,14 +269,8 @@ class GaussianMixture:
         Moves the GaussianMixture parameters to the specified device.
 
         This method transfers all internal tensor parameters (mean, covariance
-        Cholesky decomposition, and mixture weights if present) to the target
+        Cholesky decomposition, and weights_dist if is mixture) to the target
         device and recreates the associated random number generator on that device.
-
-        Note:
-            Random number generator state is not transferred across devices.
-            Instead, a new generator is created. If ``set_same_initial_seed`` is
-            ``True``, the generator is re-seeded using the original initial seed,
-            ensuring deterministic behavior per device.
 
         Args:
             device (torch.device):
@@ -297,9 +291,6 @@ class GaussianMixture:
             >>> gm = GaussianMixture(mean, cov, weights, seed=123)
             >>> gm = gm.to(torch.device("cuda"))
             >>> samples = gm.sample(1000)
-
-            To override the seed on device transfer:
-            >>> gm = gm.to(torch.device("cuda"), seed=42)
         """
         self.mean = self.mean.to(device)
         self.cov_chol_decomp = self.cov_chol_decomp.to(device)
@@ -317,6 +308,13 @@ class GaussianMixture:
             self.rng.manual_seed(seed)
 
         return self
+    
+    @property
+    def device(self) -> torch.device:
+        """
+        The device on which the GaussianMixture parameters reside.
+        """
+        return self.mean.device
 
     def _correction_for_diff(self, diff : torch.Tensor) -> torch.Tensor:
         r"""
