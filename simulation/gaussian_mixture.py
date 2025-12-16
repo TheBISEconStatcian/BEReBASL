@@ -134,8 +134,6 @@ def eigen_decomp_proj_to_pd(
     # Ensure symmetry again
     return (mat_psd + mat_psd.T) / 2
 
-
-
 def mvn_random_sample(
         mean : torch.Tensor, 
         cov_chol_decomp : Optional[torch.Tensor],
@@ -193,103 +191,6 @@ def mvn_random_sample(
 
 
     return mean + deviations
-
-def _mix_mean_dif_as_expected(mix_mean_dif, m, k):
-    if isinstance(mix_mean_dif, float):
-        return True
-    if not isinstance(mix_mean_dif, torch.Tensor):
-        return False
-    if mix_mean_dif.dim() == 0:
-        return True
-    
-    last_dim_compatible = mix_mean_dif.size(-1) in (k, m-1, 1)
-    if not last_dim_compatible:
-        return False
-    
-    if mix_mean_dif.dim() == 1:
-        return True
-    
-    if mix_mean_dif.dim() > 2:
-        return False
-    
-    return mix_mean_dif.size(0) in (m-1, 1)
-
-def _adapt_mix_mean_dif(mix_mean_dif, m, k, security_check : bool = True, dtype : torch.dtype = torch.get_default_dtype()):
-    if security_check:
-        assert _mix_mean_dif_as_expected(mix_mean_dif, m, k)
-
-    is_float = isinstance(mix_mean_dif, float)
-    is_single_element_tensor = not is_float and (mix_mean_dif.numel() == 1)
-    is_singleton = is_float or (mix_mean_dif.dim() == 0) or is_single_element_tensor
-    if is_singleton:
-        if is_float:
-            mix_mean_dif = torch.tensor(mix_mean_dif, dtype = dtype)
-        if is_single_element_tensor:
-            mix_mean_dif = mix_mean_dif.flatten()[0]
-
-        return mix_mean_dif.expand(m-1).unsqueeze(-1) * torch.arange(1, m).unsqueeze(-1)
-    
-    if mix_mean_dif.dim() == 1:
-        dim_size = mix_mean_dif.size(0)
-        if dim_size == k:
-            return mix_mean_dif.unsqueeze(0).expand(m-1, -1) * torch.arange(1, m).unsqueeze(-1)
-        if dim_size == m-1:
-            return mix_mean_dif.unsqueeze(-1)
-        
-    if mix_mean_dif.dim() == 2:
-        return mix_mean_dif
-
-def _mix_var_dif_as_expected(mix_var_dif, m, k):
-    if isinstance(mix_var_dif, float):
-        return True
-    if not isinstance(mix_var_dif, torch.Tensor):
-        return False
-    
-    dim_rank = mix_var_dif.dim()
-    if dim_rank == 0 or (mix_var_dif.numel() == 1):
-        return True
-    
-    dim_rank = mix_var_dif.dim()
-
-    if dim_rank == 1:
-        return mix_var_dif.size(-1) in (m-1, 1)
-    
-    if dim_rank == 2:
-        return mix_var_dif.shape in (torch.Size([m-1, 1]), torch.Size([k,k]))
-    
-    if dim_rank > 3:
-        return False
-    
-    last_dims_ok = mix_var_dif.size(1) == mix_var_dif.size(2) == k
-    return last_dims_ok and (mix_var_dif.size(0) in (m-1, 1))
-
-
-def _adapt_mix_var_dif(mix_var_dif, m, k, security_check : bool = True, dtype : torch.dtype = torch.get_default_dtype()):
-    if security_check:
-        assert _mix_var_dif_as_expected(mix_var_dif, m, k)
-
-    is_float = isinstance(mix_var_dif, float)
-    is_single_element_tensor = not is_float and (mix_var_dif.numel() == 1)
-    is_singleton = is_float or (mix_var_dif.dim() == 0) or is_single_element_tensor
-    if is_singleton:
-        if is_float:
-            mix_var_dif = torch.tensor(mix_var_dif, dtype = dtype)
-        if is_single_element_tensor:
-            mix_var_dif = mix_var_dif.flatten()[0]
-        return mix_var_dif#.expand(m-1).unsqueeze(-1).unsqueeze(-1)
-    
-    if mix_var_dif.dim() == 1:
-        return mix_var_dif.unsqueeze(-1).unsqueeze(-1)
-        
-    if mix_var_dif.dim() == 2:
-        if mix_var_dif.size(0) == k:
-            return mix_var_dif.unsqueeze(0)
-        if mix_var_dif.size(0) == (m-1):
-            return mix_var_dif.unsqueeze(-1)
-    
-    if mix_var_dif.dim() == 3:
-        return mix_var_dif
-    
 
 
 class GaussianMixture:
@@ -362,6 +263,60 @@ class GaussianMixture:
         self.rng = torch.Generator(device=mean.device)
         if seed is not None:
             self.rng.manual_seed(seed)
+
+    def to(self, device : torch.device, seed : Optional[int] = None, set_same_initial_seed : bool = True):
+        """
+        Moves the GaussianMixture parameters to the specified device.
+
+        This method transfers all internal tensor parameters (mean, covariance
+        Cholesky decomposition, and mixture weights if present) to the target
+        device and recreates the associated random number generator on that device.
+
+        Note:
+            Random number generator state is not transferred across devices.
+            Instead, a new generator is created. If ``set_same_initial_seed`` is
+            ``True``, the generator is re-seeded using the original initial seed,
+            ensuring deterministic behavior per device.
+
+        Args:
+            device (torch.device):
+                Target device (e.g. ``torch.device("cpu")`` or ``torch.device("cuda")``).
+            seed (int, optional):
+                Explicit seed to initialize the random number generator on the
+                target device. If provided, overrides ``set_same_initial_seed``.
+            set_same_initial_seed (bool, default=True):
+                If ``True`` and ``seed`` is ``None``, the generator on the target
+                device is initialized with the same initial seed as the previous
+                generator. This preserves reproducibility across device transfers.
+
+        Returns:
+            GaussianMixture:
+                The current instance, moved to the specified device.
+
+        Example:
+            >>> gm = GaussianMixture(mean, cov, weights, seed=123)
+            >>> gm = gm.to(torch.device("cuda"))
+            >>> samples = gm.sample(1000)
+
+            To override the seed on device transfer:
+            >>> gm = gm.to(torch.device("cuda"), seed=42)
+        """
+        self.mean = self.mean.to(device)
+        self.cov_chol_decomp = self.cov_chol_decomp.to(device)
+        if self.is_mixture:
+            self.weights_dist = torch.distributions.Categorical(self.weights_dist.probs.to(device))
+
+        if seed is None:
+            if set_same_initial_seed:
+                self.rng = torch.Generator(device=device)
+                self.rng.manual_seed(self.rng.initial_seed())
+            else:
+                self.rng = torch.Generator(device=device)
+        else:
+            self.rng = torch.Generator(device=device)
+            self.rng.manual_seed(seed)
+
+        return self
 
     def _correction_for_diff(self, diff : torch.Tensor) -> torch.Tensor:
         r"""
