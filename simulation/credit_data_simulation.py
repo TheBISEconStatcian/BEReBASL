@@ -285,6 +285,7 @@ class CreditDataGenerator:
     def rng(self) -> torch.Generator:
         return self.bad_mixture.rng
     
+    
     def to(
             self, device : torch.device, seed : Optional[int] = None, set_same_initial_seed : bool = True
     ):
@@ -313,7 +314,11 @@ class CreditDataGenerator:
         self.good_mixture.rng = self.bad_mixture.rng
         return self
     
-    def sample(self, n : int, deterministic_weights_for_mixture_sampling : bool = False):
+    def sample(
+            self, 
+            n : int, 
+            deterministic_weights_for_mixture_sampling : bool = False
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         n_bad = round(self.bad_ratio * n)
         n_good = round((1-self.bad_ratio) * n)
         if (n_bad + n_good) != n:
@@ -323,13 +328,19 @@ class CreditDataGenerator:
             else:
                 n_good = n - n_bad
 
-        X_bad = self.bad_mixture.sample(n_bad, deterministic_weights = deterministic_weights_for_mixture_sampling)
-        y_bad = torch.full((n_bad,), self.bad_good_encoding["bad"])
-        X_good = self.bad_mixture.sample(n_bad, deterministic_weights = deterministic_weights_for_mixture_sampling)
-        y_good = torch.full((n_bad,), self.bad_good_encoding["bad"])
+        X_bad = self.bad_mixture.sample(n_bad, deterministic_weights = deterministic_weights_for_mixture_sampling) # [n, k]
+        y_bad = torch.full((n_bad,), self.bad_good_encoding["bad"], device=self.device) # [n]
+
+        X_good = self.bad_mixture.sample(n_bad, deterministic_weights = deterministic_weights_for_mixture_sampling) # [n, k]
+        y_good = torch.full((n_good,), self.bad_good_encoding["good"], device=self.device) # [n]
 
         X = torch.cat([X_bad, X_good], dim=0)
         y = torch.cat([y_bad, y_good])
+
+        X = X + torch.randn(X.shape, generator=self.rng, device=self.device) / self.noise_std
+
+        return X, y
+
     
     @staticmethod
     def generate_sigma_bad_and_good(
