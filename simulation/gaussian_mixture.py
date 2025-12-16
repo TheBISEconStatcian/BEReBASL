@@ -134,68 +134,7 @@ def eigen_decomp_proj_to_pd(
     # Ensure symmetry again
     return (mat_psd + mat_psd.T) / 2
 
-def generate_sigma_bad_and_good(
-    k: int,
-    proportion_var_dif: float,
-    generator: torch.Generator,
-    var_range: Tuple[float, float] = (0.0, 1.0),
-    eps: float = 1e-6,
-    device: torch.device = torch.device("cpu"),
-    dtype: torch.dtype = torch.float64
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Generate a pair of covariance matrices: one 'good' baseline and one 'bad' perturbed version.
 
-    The construction proceeds as follows:
-
-    1. Generate two baseline covariance matrices using ``random_vcov_matrix``.
-    2. Sample a random mask over the upper-triangular entries (including diagonal).
-    3. Copy selected entries from the 'good' matrix into the 'bad' matrix, leaving
-       others perturbed.
-    4. Reflect the upper-triangular entries to the lower-triangular part to ensure symmetry.
-    5. Project the 'bad' matrix onto the positive definite cone using
-       :func:`eigen_decomp_proj_to_pd`.
-
-    Args:
-        k (int): Dimension of the covariance matrices.
-        proportion_var_dif (float): Probability of keeping an entry different between
-            the 'bad' and 'good' matrices.
-        generator (torch.Generator): Random number generator for reproducibility.
-        var_range (Tuple[float, float], optional): Range for diagonal variances.
-            Defaults to (0.0, 1.0).
-        eps (float, optional): Small diagonal perturbation to ensure positive definiteness.
-            Defaults to ``1e-6``.
-        device (torch.device, optional): Device for tensor allocation. Defaults to CPU.
-        dtype (torch.dtype, optional): Data type of the returned tensors. Defaults to ``torch.float64``.
-
-    Returns:
-        Tuple[torch.Tensor, torch.Tensor]:
-            - ``sigma_bad``: Perturbed covariance matrix of shape ``(k, k)``, projected to PSD.
-            - ``sigma_good``: Baseline covariance matrix of shape ``(k, k)``.
-
-    Example:
-        >>> g = torch.Generator().manual_seed(123)
-        >>> sigma_bad, sigma_good = generate_sigma_bad_and_good(3, 0.5, generator=g)
-        >>> sigma_bad.shape, sigma_good.shape
-        (torch.Size([3, 3]), torch.Size([3, 3]))
-    """
-    # Step 1: Generate baseline matrices
-    sigma_bad = random_vcov_matrix(k, generator=generator, var_range=var_range, device=device, dtype=dtype, eps=eps)
-    sigma_good = random_vcov_matrix(k, generator=generator, var_range=var_range, device=device, dtype=dtype, eps=eps)
-
-    # Step 2: Random mask for off-diagonal entries
-    count_possible_changes = (k**2 + k) // 2 #Count diagonal entries + upper triangle
-    index_change_vars = ~torch.bernoulli(torch.full((count_possible_changes,), proportion_var_dif, device=device), generator=generator).bool()
-
-    triu_indices = torch.triu_indices(k, k, offset=0)
-    indices_to_copy_sigma_bad = (triu_indices[0][index_change_vars], triu_indices[1][index_change_vars])
-
-    sigma_good[indices_to_copy_sigma_bad] = sigma_bad[indices_to_copy_sigma_bad]
-    i, j = torch.tril_indices(k, k, offset=-1)
-    sigma_good[i, j] = sigma_good[j, i] # ensure symmetry
-    
-    sigma_good = eigen_decomp_proj_to_pd(sigma_good, eps=eps)
-
-    return sigma_bad, sigma_good
 
 def mvn_random_sample(
         mean : torch.Tensor, 
@@ -650,7 +589,8 @@ class GaussianMixture:
         mix_var_dif_good  : Union[torch.Tensor, float]   = None,
         device : Optional[torch.device] = None, 
         dtype : torch.dtype = torch.get_default_dtype(),
-        do_security_checks : bool = True
+        do_security_checks : bool = True,
+        seed_var_gen : Optional[int] = None
     ):
         # 0. Process "None" logic path and ensure everything is well set
         ## ensure device is defined
@@ -662,9 +602,27 @@ class GaussianMixture:
         mu_bad = torch.zeros(count_covariates, **kwargs_for_generated_tensors)
         mu_good = mu_bad + mean_bad_diff
 
+        if iid:
+            sigma_bad, sigma_good = [torch.eye(count_covariates, **kwargs_for_generated_tensors) for _ in range(2)]
+            mix_var_dif_bad, mix_var_dif_good = 0.0, 0.0
+        elif covars is not None:
+            sigma_bad = covars["bad"]
+            sigma_good = covars["good"]
+        else:
+            rng = torch.Generator()
+            if seed_var_gen is not None:
+                rng.manual_seed(1807)
+            sigma_bad, sigma_good = generate_sigma_bad_and_good(
+                k = count_covariates, 
+                proportion_var_dif=con_var_bad_dif, 
+                generator = rng, 
+                device=device, dtype= dtype
+            )
 
-
-        if mixture_weights is not None:
+        if mixture_weights is None:
+            weights_bad = None
+            weights_good = None
+        else:
             if mixture_weights.dim() == 1:
                 weights_bad = mixture_weights
                 weights_good = mixture_weights.copy()
@@ -679,9 +637,36 @@ class GaussianMixture:
 
             mix_mean_dif_bad, mix_mean_dif_good = [_adapt_mix_mean_dif(d, m, k=count_covariates, security_check=do_security_checks) 
                                                    for d in (mix_mean_dif_bad, mix_mean_dif_good)]
-            if not iid:
-                mix_var_dif_bad, mix_var_dif_good = [_adapt_mix_var_dif(d, m, k=count_covariates, security_check=do_security_checks) 
-                                                     for d in (mix_var_dif_bad, mix_var_dif_good)]
+            
+            amplify_base_with_dif = lambda param, dif : torch.cat([param.unsqueeze(0), param.unsqueeze(0) + dif],
+                                                                  dim=0)
+
+            mu_bad, mu_good = [amplify_base_with_dif(mu, dif)
+                               for mu, dif in [(mu_bad, mix_mean_dif_bad), (mu_good, mix_mean_dif_good)]]
+            
+            sigma_bad, sigma_good = [_adapt_mix_var_dif(d, m, k=count_covariates, security_check=do_security_checks) 
+                                                    for d in (mix_var_dif_bad, mix_var_dif_good)]
+                
+        mixture_bad = cls(
+            mean = mu_bad,
+            cov = sigma_bad,
+            weights = weights_bad,
+            seed = None,
+            cov_symmetry_rtol_atol = [0.0, 0.0],
+            check_params = True
+        )
+        
+        mixture_good = cls(
+            mean = mu_good,
+            cov = sigma_good,
+            weights = weights_good,
+            seed = None,
+            cov_symmetry_rtol_atol = [0.0, 0.0],
+            check_params = True
+        )
+        
+        return mixture_bad, mixture_good
+
 
             
 
