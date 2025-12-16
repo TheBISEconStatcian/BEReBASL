@@ -529,32 +529,42 @@ class GaussianMixture:
 
 
 if __name__ == "__main__":
-    print("Functionality checks for all functions and classes within this module")
-
     batch_size, count_mixtures, count_covariates = 4, 4, 5
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.set_default_dtype(torch.float32)
     rng = torch.Generator(device)
 
-    all_covs = []
-    for _ in range(batch_size):
-        covs_mixture = []
-        for i in range(round(count_mixtures/2)):
-            sigma_bad, sigma_good = generate_sigma_bad_and_good(k = count_covariates, proportion_var_dif=1.0, generator = rng, device=device, dtype= torch.get_default_dtype())
-            if i < count_mixtures // 2:
-                covs_mixture.append(
-                    torch.stack([sigma_bad, sigma_good])
-                )
-            else:
-                covs_mixture.append(
-                    sigma_bad.unsqueeze(0)
-                )
-        all_covs.append(torch.cat(covs_mixture, dim=0))
+    functionality_checks = []
 
-    print("generate_sigma_bad_and_good succesful, therefore random_vcov_matrix and eigen_decomp_proj_to_pd as well")
+    print("Step 1: checking functionality of eigen_decomp_proj_to_pd")
+    before_proj_to_pd = torch.randn((count_covariates, count_covariates))
 
-    all_covs = torch.stack(all_covs)
+    after_proj_to_pd = eigen_decomp_proj_to_pd(before_proj_to_pd)
 
+    functionality_checks.append(before_proj_to_pd.shape == after_proj_to_pd.shape)
+
+    print("\tShape mantained:", functionality_checks[-1])
+
+    functionality_checks.append((torch.linalg.eigvalsh(after_proj_to_pd) >=0).all().item())
+    print("\tResult is positive definite:",functionality_checks[-1])
+
+    print("\nStep 2: Checking if matrices can be constructed with random vcovs")
+    batch_size, count_mixtures, count_covariates = 4, 4, 5
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    torch.set_default_dtype(torch.float32)
+    rng = torch.Generator(device)
+
+    all_covs = torch.stack([torch.stack([random_vcov_matrix(k=count_covariates, generator=rng) for _ in range(count_mixtures)]) for _ in range(batch_size)])
+    functionality_checks.append(all_covs.shape == torch.Size([batch_size, count_mixtures, count_covariates, count_covariates]))
+    print("\tall_covs.size is as expected:", functionality_checks[-1])
+    functionality_checks.append((all_covs.transpose(-1,-2) == all_covs).all().item())
+    print("\tGenerated covs are symmetric:", functionality_checks[-1])
+    functionality_checks.append((torch.linalg.eigvalsh(all_covs) > 0).all().item())
+    print("\tGenerated covs are positive definite:", functionality_checks[-1])
+
+    print("\n\nStep 3: Attempts to create and sample with different shapes of params the GaussianMixture\n")
+
+    #Generate the rest of args
     mu = torch.randn((batch_size, count_mixtures, count_covariates), generator=rng)
 
     weights = torch.rand((batch_size, count_mixtures), generator = rng)
@@ -597,4 +607,7 @@ if __name__ == "__main__":
         sample = dist.sample(n, deterministic_weights)
         print("\tExpected size:", expected_size)
         print("\tRealized size:", sample.shape)
-        print("\tExpectation realized:", sample.shape == expected_size, "\n")
+        functionality_checks.append(sample.shape == expected_size)
+        print("\tExpectation realized:", functionality_checks[-1], "\n")
+
+    print("All checks were passed:", all(functionality_checks))

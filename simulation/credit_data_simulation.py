@@ -16,69 +16,6 @@ from simulation.gaussian_mixture import (
     random_vcov_matrix
 )
 
-def generate_sigma_bad_and_good(
-    k: int,
-    proportion_var_dif: float,
-    generator: torch.Generator,
-    var_range: Tuple[float, float] = (0.0, 1.0),
-    eps: float = 1e-6,
-    device: torch.device = torch.device("cpu"),
-    dtype: torch.dtype = torch.float64
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Generate a pair of covariance matrices: one 'good' baseline and one 'bad' perturbed version.
-
-    The construction proceeds as follows:
-
-    1. Generate two baseline covariance matrices using ``random_vcov_matrix``.
-    2. Sample a random mask over the upper-triangular entries (including diagonal).
-    3. Copy selected entries from the 'good' matrix into the 'bad' matrix, leaving
-       others perturbed.
-    4. Reflect the upper-triangular entries to the lower-triangular part to ensure symmetry.
-    5. Project the 'bad' matrix onto the positive definite cone using
-       :func:`eigen_decomp_proj_to_pd`.
-
-    Args:
-        k (int): Dimension of the covariance matrices.
-        proportion_var_dif (float): Probability of keeping an entry different between
-            the 'bad' and 'good' matrices.
-        generator (torch.Generator): Random number generator for reproducibility.
-        var_range (Tuple[float, float], optional): Range for diagonal variances.
-            Defaults to (0.0, 1.0).
-        eps (float, optional): Small diagonal perturbation to ensure positive definiteness.
-            Defaults to ``1e-6``.
-        device (torch.device, optional): Device for tensor allocation. Defaults to CPU.
-        dtype (torch.dtype, optional): Data type of the returned tensors. Defaults to ``torch.float64``.
-
-    Returns:
-        Tuple[torch.Tensor, torch.Tensor]:
-            - ``sigma_bad``: Perturbed covariance matrix of shape ``(k, k)``, projected to PSD.
-            - ``sigma_good``: Baseline covariance matrix of shape ``(k, k)``.
-
-    Example:
-        >>> g = torch.Generator().manual_seed(123)
-        >>> sigma_bad, sigma_good = generate_sigma_bad_and_good(3, 0.5, generator=g)
-        >>> sigma_bad.shape, sigma_good.shape
-        (torch.Size([3, 3]), torch.Size([3, 3]))
-    """
-    # Step 1: Generate baseline matrices
-    sigma_bad = random_vcov_matrix(k, generator=generator, var_range=var_range, device=device, dtype=dtype, eps=eps)
-    sigma_good = random_vcov_matrix(k, generator=generator, var_range=var_range, device=device, dtype=dtype, eps=eps)
-
-    # Step 2: Random mask for off-diagonal entries
-    count_possible_changes = (k**2 + k) // 2 #Count diagonal entries + upper triangle
-    index_change_vars = ~torch.bernoulli(torch.full((count_possible_changes,), proportion_var_dif, device=device), generator=generator).bool()
-
-    triu_indices = torch.triu_indices(k, k, offset=0)
-    indices_to_copy_sigma_bad = (triu_indices[0][index_change_vars], triu_indices[1][index_change_vars])
-
-    sigma_good[indices_to_copy_sigma_bad] = sigma_bad[indices_to_copy_sigma_bad]
-    i, j = torch.tril_indices(k, k, offset=-1)
-    sigma_good[i, j] = sigma_good[j, i] # ensure symmetry
-    
-    sigma_good = eigen_decomp_proj_to_pd(sigma_good, eps=eps)
-
-    return sigma_bad, sigma_good
-
 def _mix_mean_dif_as_expected(
     mix_mean_dif: Union[torch.Tensor, float],
     m: int,
@@ -359,6 +296,70 @@ class CreditDataGenerator:
         self.good_mixture.to(device, seed, set_same_initial_seed)
         self.good_mixture.rng = self.bad_mixture.rng
         return self
+    
+    @staticmethod
+    def generate_sigma_bad_and_good(
+        k: int,
+        proportion_var_dif: float,
+        generator: torch.Generator,
+        var_range: Tuple[float, float] = (0.0, 1.0),
+        eps: float = 1e-6,
+        device: torch.device = torch.device("cpu"),
+        dtype: torch.dtype = torch.float64
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Generate a pair of covariance matrices: one 'good' baseline and one 'bad' perturbed version.
+
+        The construction proceeds as follows:
+
+        1. Generate two baseline covariance matrices using ``random_vcov_matrix``.
+        2. Sample a random mask over the upper-triangular entries (including diagonal).
+        3. Copy selected entries from the 'good' matrix into the 'bad' matrix, leaving
+        others perturbed.
+        4. Reflect the upper-triangular entries to the lower-triangular part to ensure symmetry.
+        5. Project the 'bad' matrix onto the positive definite cone using
+        :func:`eigen_decomp_proj_to_pd`.
+
+        Args:
+            k (int): Dimension of the covariance matrices.
+            proportion_var_dif (float): Probability of keeping an entry different between
+                the 'bad' and 'good' matrices.
+            generator (torch.Generator): Random number generator for reproducibility.
+            var_range (Tuple[float, float], optional): Range for diagonal variances.
+                Defaults to (0.0, 1.0).
+            eps (float, optional): Small diagonal perturbation to ensure positive definiteness.
+                Defaults to ``1e-6``.
+            device (torch.device, optional): Device for tensor allocation. Defaults to CPU.
+            dtype (torch.dtype, optional): Data type of the returned tensors. Defaults to ``torch.float64``.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]:
+                - ``sigma_bad``: Perturbed covariance matrix of shape ``(k, k)``, projected to PSD.
+                - ``sigma_good``: Baseline covariance matrix of shape ``(k, k)``.
+
+        Example:
+            >>> g = torch.Generator().manual_seed(123)
+            >>> sigma_bad, sigma_good = CreditDataGenerator.generate_sigma_bad_and_good(3, 0.5, generator=g)
+            >>> sigma_bad.shape, sigma_good.shape
+            (torch.Size([3, 3]), torch.Size([3, 3]))
+        """
+        # Step 1: Generate baseline matrices
+        sigma_bad = random_vcov_matrix(k, generator=generator, var_range=var_range, device=device, dtype=dtype, eps=eps)
+        sigma_good = random_vcov_matrix(k, generator=generator, var_range=var_range, device=device, dtype=dtype, eps=eps)
+
+        # Step 2: Random mask for off-diagonal entries
+        count_possible_changes = (k**2 + k) // 2 #Count diagonal entries + upper triangle
+        index_change_vars = ~torch.bernoulli(torch.full((count_possible_changes,), proportion_var_dif, device=device), generator=generator).bool()
+
+        triu_indices = torch.triu_indices(k, k, offset=0)
+        indices_to_copy_sigma_bad = (triu_indices[0][index_change_vars], triu_indices[1][index_change_vars])
+
+        sigma_good[indices_to_copy_sigma_bad] = sigma_bad[indices_to_copy_sigma_bad]
+        i, j = torch.tril_indices(k, k, offset=-1)
+        sigma_good[i, j] = sigma_good[j, i] # ensure symmetry
+        
+        sigma_good = eigen_decomp_proj_to_pd(sigma_good, eps=eps)
+
+        return sigma_bad, sigma_good
 
     @classmethod
     def init_with_internal_logic(
@@ -439,11 +440,12 @@ class CreditDataGenerator:
             rng = torch.Generator(device=device)
             if seed_var_gen is not None:
                 rng.manual_seed(1807)
-            sigma_bad, sigma_good = generate_sigma_bad_and_good(
+            sigma_bad, sigma_good = cls.generate_sigma_bad_and_good(
                 k = count_covariates, 
                 proportion_var_dif=con_var_bad_dif, 
                 generator = rng, 
-                device=device, dtype= dtype
+                device=device,
+                dtype= dtype
             )
 
         if mixture_weights is None:
