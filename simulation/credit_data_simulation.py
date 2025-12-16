@@ -79,7 +79,39 @@ def generate_sigma_bad_and_good(
 
     return sigma_bad, sigma_good
 
-def _mix_mean_dif_as_expected(mix_mean_dif, m, k):
+def _mix_mean_dif_as_expected(
+    mix_mean_dif: Union[torch.Tensor, float],
+    m: int,
+    k: int,
+) -> bool:
+    """
+    Checks whether a mean-difference specification for mixture components
+    is compatible with the expected shapes.
+
+    This helper validates that ``mix_mean_dif`` can be broadcast or adapted
+    into a tensor of shape ``(m - 1, k)``, representing offsets applied to
+    the base mean for each additional mixture component.
+
+    Accepted formats:
+        - A scalar float or 0-d tensor (shared scaling factor).
+        - A 1D tensor of length ``k`` (per-covariate offsets).
+        - A 1D tensor of length ``m - 1`` (per-component scaling).
+        - A 2D tensor of shape ``(m - 1, k)``.
+        - Singleton dimensions (size 1) are allowed and broadcastable.
+
+    Args:
+        mix_mean_dif (Tensor or float):
+            Mean difference specification.
+        m (int):
+            Number of mixture components.
+        k (int):
+            Number of covariates (feature dimension).
+
+    Returns:
+        bool:
+            ``True`` if the input is structurally compatible, ``False`` otherwise.
+    """
+
     if isinstance(mix_mean_dif, float):
         return True
     if not isinstance(mix_mean_dif, torch.Tensor):
@@ -99,7 +131,43 @@ def _mix_mean_dif_as_expected(mix_mean_dif, m, k):
     
     return mix_mean_dif.size(0) in (m-1, 1)
 
-def _adapt_mix_mean_dif(mix_mean_dif, m, k, security_check : bool = True, dtype : torch.dtype = torch.get_default_dtype()):
+def _adapt_mix_mean_dif(
+    mix_mean_dif: Union[torch.Tensor, float],
+    m: int,
+    k: int,
+    security_check: bool = True,
+    dtype: torch.dtype = torch.get_default_dtype(),
+) -> torch.Tensor:
+    """
+    Adapts a mean-difference specification into a tensor of shape ``(m - 1, k)``.
+
+    This function normalizes various user-friendly input formats into a
+    canonical tensor representation suitable for constructing mixture means.
+    The first component is assumed to be the base mean; the returned tensor
+    contains offsets for the remaining ``m - 1`` components.
+
+    Broadcasting rules:
+        - Scalars are expanded linearly with component index.
+        - Per-covariate vectors are shared across components.
+        - Per-component vectors are expanded across covariates.
+        - 2D tensors are assumed to already be in canonical form.
+
+    Args:
+        mix_mean_dif (Tensor or float):
+            Mean difference specification.
+        m (int):
+            Number of mixture components.
+        k (int):
+            Number of covariates.
+        security_check (bool, default=True):
+            If ``True``, validates the input shape before adaptation.
+        dtype (torch.dtype, default=torch.get_default_dtype()):
+            Target dtype when constructing tensors from Python scalars.
+
+    Returns:
+        Tensor:
+            A tensor of shape ``(m - 1, k)`` or a compatible shape.
+    """
     if security_check:
         assert _mix_mean_dif_as_expected(mix_mean_dif, m, k)
 
@@ -124,7 +192,38 @@ def _adapt_mix_mean_dif(mix_mean_dif, m, k, security_check : bool = True, dtype 
     if mix_mean_dif.dim() == 2:
         return mix_mean_dif
 
-def _mix_var_dif_as_expected(mix_var_dif, m, k):
+def _mix_var_dif_as_expected(
+    mix_var_dif: Union[torch.Tensor, float],
+    m: int,
+    k: int,
+) -> bool:
+    """
+    Checks whether a variance-difference specification for mixture components
+    is compatible with the expected shapes. It **does not** check for positive
+    definitness or symmetry.
+
+    The variance difference is expected to represent adjustments to covariance
+    matrices for mixture components beyond the base component.
+
+    Accepted formats:
+        - Scalar float or singleton tensor.
+        - 1D tensor of length ``m - 1`` (per-component scaling).
+        - 2D tensor of shape ``(k, k)`` or ``(m - 1, 1)``.
+        - 3D tensor of shape ``(m - 1, k, k)`` or ``(1, k, k)``.
+
+    Args:
+        mix_var_dif (Tensor or float):
+            Variance difference specification.
+        m (int):
+            Number of mixture components.
+        k (int):
+            Number of covariates.
+
+    Returns:
+        bool:
+            ``True`` if the input is structurally compatible, ``False`` otherwise.
+    """
+
     if isinstance(mix_var_dif, float):
         return True
     if not isinstance(mix_var_dif, torch.Tensor):
@@ -149,7 +248,42 @@ def _mix_var_dif_as_expected(mix_var_dif, m, k):
     return last_dims_ok and (mix_var_dif.size(0) in (m-1, 1))
 
 
-def _adapt_mix_var_dif(mix_var_dif, m, k, security_check : bool = True, dtype : torch.dtype = torch.get_default_dtype()):
+def _adapt_mix_var_dif(
+    mix_var_dif: Union[torch.Tensor, float],
+    m: int,
+    k: int,
+    security_check: bool = True,
+    dtype: torch.dtype = torch.get_default_dtype(),
+) -> torch.Tensor:
+    """
+    Adapts a variance-difference specification into a canonical tensor form.
+
+    The returned tensor represents covariance adjustments for mixture
+    components beyond the base component.
+
+    Broadcasting rules:
+        - Scalars are treated as uniform adjustments.
+        - 1D tensors are expanded to diagonal covariance adjustments.
+        - 2D tensors are interpreted as shared covariance matrices.
+        - 3D tensors are assumed to already be in canonical form.
+
+    Args:
+        mix_var_dif (Tensor or float):
+            Variance difference specification.
+        m (int):
+            Number of mixture components.
+        k (int):
+            Number of covariates.
+        security_check (bool, default=True):
+            If ``True``, validates the input shape before adaptation.
+        dtype (torch.dtype, default=torch.get_default_dtype()):
+            Target dtype when constructing tensors from Python scalars.
+
+    Returns:
+        Tensor:
+            A tensor representing variance adjustments with shape compatible
+            with ``(m - 1, k, k)`` broadcasting.
+    """
     if security_check:
         assert _mix_var_dif_as_expected(mix_var_dif, m, k)
 
@@ -161,7 +295,7 @@ def _adapt_mix_var_dif(mix_var_dif, m, k, security_check : bool = True, dtype : 
             mix_var_dif = torch.tensor(mix_var_dif, dtype = dtype)
         if is_single_element_tensor:
             mix_var_dif = mix_var_dif.flatten()[0]
-        return mix_var_dif#.expand(m-1).unsqueeze(-1).unsqueeze(-1)
+        return mix_var_dif
     
     if mix_var_dif.dim() == 1:
         return mix_var_dif.unsqueeze(-1).unsqueeze(-1)
@@ -191,6 +325,41 @@ class CreditDataGenerator:
 
         self.good_mixture.rng = self.bad_mixture.rng
 
+    @property
+    def device(self) -> torch.device:
+        """
+        The device on which both the good and bad Gaussian mixture parameters reside.
+        """
+        return self.bad_mixture.device
+    
+    def to(
+            self, device : torch.device, seed : Optional[int] = None, set_same_initial_seed : bool = True
+    ):
+        """
+        Moves the internal Gaussian mixture generators to the specified device.
+
+        Both the good and bad mixtures are transferred to the target device.
+        A shared random number generator is recreated to ensure consistent
+        sampling behavior across mixtures.
+
+        Args:
+            device (torch.device):
+                Target device.
+            seed (int, optional):
+                Explicit seed for the shared random number generator.
+            set_same_initial_seed (bool, default=True):
+                If ``True`` and ``seed`` is ``None``, preserves the original
+                initial seed when recreating the generator.
+
+        Returns:
+            CreditDataGenerator:
+                The current instance moved to the specified device.
+        """
+        self.bad_mixture.to(device, seed, set_same_initial_seed)
+        self.good_mixture.to(device, seed, set_same_initial_seed)
+        self.good_mixture.rng = self.bad_mixture.rng
+        return self
+
     @classmethod
     def init_with_internal_logic(
         cls,
@@ -210,6 +379,46 @@ class CreditDataGenerator:
         seed_var_gen : Optional[int] = None,
         seed_credit_data_gen : Optional[int] = None
     ):
+        """
+        Constructs a ``CreditDataGenerator`` using internally generated mixture
+        parameters following predefined structural rules.
+
+        This factory method supports IID or correlated covariates, optional
+        mixture structures, and controlled mean/variance offsets between good
+        and bad populations.
+
+        Args:
+            count_covariates (int, default=10):
+                Number of covariates.
+            mean_bad_diff (Tensor or float, default=1.0):
+                Mean shift applied to the good population.
+            con_var_bad_dif (float, default=0.0):
+                Proportional variance difference between populations.
+            covars (dict, optional):
+                Explicit covariance matrices with keys ``"bad"`` and ``"good"``.
+            iid (bool, default=False):
+                If ``True``, uses identity covariance matrices.
+            mixture_weights (Tensor, optional):
+                Mixture weights, shape ``(m,)`` or ``(2, m)``.
+            mix_mean_dif_bad, mix_mean_dif_good (Tensor or float, optional):
+                Mean offsets for mixture components.
+            mix_var_dif_bad, mix_var_dif_good (Tensor or float, optional):
+                Variance offsets for mixture components.
+            device (torch.device, optional):
+                Target device.
+            dtype (torch.dtype, default=torch.get_default_dtype()):
+                Target dtype.
+            do_security_checks (bool, default=True):
+                Enables input validation.
+            seed_var_gen (int, optional):
+                Seed for covariance generation.
+            seed_credit_data_gen (int, optional):
+                Seed for the credit data generator RNG.
+
+        Returns:
+            CreditDataGenerator:
+                A fully initialized credit data generator.
+        """
         # 0. Process "None" logic path and ensure everything is well set
         ## ensure device is defined
         if device is None:
