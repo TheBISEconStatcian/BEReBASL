@@ -583,6 +583,36 @@ class CreditDataGenerator:
 
 
 class CreditData(Dataset):
+    """Dataset for credit rating simulation with reject inference.
+
+    This dataset stores applicant features, default flags (binary repayment outcome),
+    acceptance indicators, and per-sample generation round identifiers. It supports
+    retrieval of either the full dataset or only accepted applications, controlled
+    via a flag. The class is thought for dynamic expanding per generation round the
+    observed data.
+
+    Args:
+        features_initial (torch.Tensor):
+            Shape ``(n_samples, n_features)``. Applicant feature matrix.
+        default_flag_initial (torch.Tensor):
+            Shape ``(n_samples,)``. Binary repayment outcome where ``0`` = repaid
+            and ``1`` = default. Values are expected to be in ``{0, 1}``.
+        accepted_initial (torch.Tensor):
+            Shape ``(n_samples,)``. Boolean acceptance status of applications.
+        retrieve_only_accepted (bool, optional):
+            If ``True``, dataset yields only accepted applications. Defaults to ``True``.
+
+    Raises:
+        ValueError: If input tensors are on different devices or have incompatible shapes.
+
+    Attributes:
+        features (torch.Tensor): Applicant features across generations.
+        default_flag (torch.Tensor): Repayment outcomes across generations.
+        accepted (torch.Tensor): Boolean acceptance flags per sample.
+        accepted_idx (torch.Tensor): Indices of accepted applications.
+        gen_round (torch.Tensor): Generation round index for each sample.
+        retrieve_only_accepted (bool): Whether retrieval is restricted to accepted samples.
+    """
     def __init__(
             self, 
             features_initial : torch.Tensor, 
@@ -606,6 +636,15 @@ class CreditData(Dataset):
         self.retrieve_only_accepted = retrieve_only_accepted
 
     def to(self, device : torch.device):
+        """Move all internal tensors to a target device.
+
+        Args:
+            device (torch.device):
+                Target device for the dataset tensors (e.g., ``torch.device('cuda')``).
+
+        Returns:
+            CreditData: The dataset instance with tensors moved to ``device``.
+        """
         for var in ["features", "default_flag", "accepted_idx", "accepted", "gen_round"]:
             setattr(self, var, getattr(self, var).to(device))
 
@@ -613,10 +652,21 @@ class CreditData(Dataset):
     
     @property
     def device(self) -> torch.device:
+        """Device on which the dataset tensors currently reside.
+
+        Returns:
+            torch.device: The device of ``features`` (and thus all dataset tensors).
+        """
         return self.features.device
     
     @property
     def last_gen_round(self):
+        """Last generation round identifier.
+
+        Returns:
+            torch.Tensor:
+                Scalar long tensor indicating the last generation round.
+        """
         return self.gen_round[-1]
     
     def add_gen(
@@ -625,6 +675,25 @@ class CreditData(Dataset):
             default_flag_new : torch.Tensor, 
             accepted_new : torch.Tensor
         ) -> None:
+        """Append a new generation of samples to the dataset.
+
+        Concatenates new features, outcomes, and acceptance flags, updates
+        accepted indices, and assigns the next generation round identifier
+        to the appended samples.
+
+        Args:
+            features_new (torch.Tensor):
+                Shape ``(m_samples, n_features)``. New applicant features.
+                Must match ``features.shape[1]``.
+            default_flag_new (torch.Tensor):
+                Shape ``(m_samples,)``. Binary repayment outcomes in ``{0, 1}``.
+            accepted_new (torch.Tensor):
+                Shape ``(m_samples,)``. Boolean acceptance flags.
+
+        Raises:
+            ValueError: If feature dimensionality of ``features_new`` does not match
+                existing ``features``.
+        """
         self.features = torch.cat([self.features, features_new])
         self.default_flag = torch.cat([self.default_flag, default_flag_new])
 
@@ -638,9 +707,32 @@ class CreditData(Dataset):
     def return_whole_set(
             self,
             retrieve_only_accepted : Optional[bool] = None,
-            transform : Callable[[torch.Tensor, torch.Tensor, torch.Tensor], Any] = lambda features, default_flag, gen_round : ((features, default_flag), gen_round),
-            return_copies : bool = True
+            transform: Callable[[torch.Tensor, torch.Tensor, torch.Tensor], Any] = (
+                lambda features, default_flag, gen_round: ((features, default_flag), gen_round)
+            ),
+            return_copies : bool = True,
     ) -> Any:
+        """Return the entire dataset tensors, optionally restricted and transformed.
+
+        Retrieves either the full dataset or only accepted samples. A custom
+        ``transform`` function can shape the output, and tensors can be cloned
+        to avoid side effects.
+
+        Args:
+            retrieve_only_accepted (bool, optional):
+                If ``True``, restricts retrieval to accepted samples. If ``None``,
+                uses ``self.retrieve_only_accepted``. Defaults to ``None``.
+            transform (Callable, optional):
+                Callable applied to the retrieved tensors. The callable receives
+                ``(features, default_flag, gen_round)`` and returns any object.
+                Defaults to ``lambda features, default_flag, gen_round: ((features, default_flag), gen_round)``.
+            return_copies (bool, optional):
+                If ``True``, returns cloned tensors to prevent mutation of internal
+                state by downstream code. Defaults to ``True``.
+
+        Returns:
+            Any: Output of the ``transform`` applied to the selected tensors.
+        """
         if retrieve_only_accepted is None:
             retrieve_only_accepted = self.retrieve_only_accepted
 
@@ -655,10 +747,36 @@ class CreditData(Dataset):
 
         return transform(features, default_flag, gen_round)
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """Number of samples available under the current retrieval policy.
+
+        Returns:
+            int:
+                If ``retrieve_only_accepted`` is ``True``, returns the number of
+                accepted samples. Otherwise, returns the total number of samples.
+        """
         return self.accepted_idx.size(0) if self.retrieve_only_accepted else self.accepted.size(0)
     
-    def __getitem__(self, idx : int) -> Tuple[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+    def __getitem__(
+            self, 
+            idx : int
+    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        """Retrieve a single sample.
+
+        Indexing respects the ``retrieve_only_accepted`` flag:
+        - If ``True``, ``idx`` is mapped through ``accepted_idx``.
+        - If ``False``, ``idx`` addresses the full dataset.
+
+        Args:
+            idx (int):
+                Sample index under the current retrieval mode.
+
+        Returns:
+            Tuple[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+                ``((features, default_flag), gen_round)`` for the addressed sample.
+                Tensors are views (not cloned) for performance. Downstream code
+                should avoid in-place mutation if sharing is a concern.
+        """
         retrieval_idx = self.accepted_idx[idx] if self.retrieve_only_accepted else idx
 
         gen_round = self.gen_round[retrieval_idx]
