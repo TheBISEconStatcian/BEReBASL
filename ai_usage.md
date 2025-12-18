@@ -5,8 +5,16 @@ For the master's thesis two AI's have been used
 * ChatGPT (Version 5 - free usage)
 * Copilot by Bing powered with ChatGPT5.
 
+For each used chat a link is provided to be called if wished. I always add a small description on the general topic of the chat.
+
 ## Links to `ChatGPT` usage
 
-- https://chatgpt.com/share/69411a52-58d0-8008-9a1e-fc2d0abce3a6 on understanding and implementation of GaussianMixture sampling
-- https://chatgpt.com/share/69411b62-403c-8008-ad16-5a7a6d3890d0 on `torch.device` nuances and help on docstring documentation.
+- [Understanding and implementation of GaussianMixture sampling](https://chatgpt.com/share/69411a52-58d0-8008-9a1e-fc2d0abce3a6)
+- [`torch.device` nuances and help on docstring documentation.](https://chatgpt.com/share/69411b62-403c-8008-ad16-5a7a6d3890d0)
 
+## Links to `Copilot` usage
+
+- [Technicalities about sampling with `torch.Generator`](https://copilot.microsoft.com/shares/8aPAPMiRK6KnCoTRMDr34)
+- [How to ensure "good copies" of matrices w. r. t. `device` and `dtype`](https://chatgpt.com/share/69411b62-403c-8008-ad16-5a7a6d3890d0)
+- [Nuances between the difference of `torch.Tensor.expand` vs `torch.full` for singleton tensors](https://copilot.microsoft.com/shares/QwmVEjefZbmFM2ULYPB11)
+- [Tensor and pointer arithmetic within `pytorch` for development of `GaussianMixture`](https://copilot.microsoft.com/shares/QwmVEjefZbmFM2ULYPB11)
