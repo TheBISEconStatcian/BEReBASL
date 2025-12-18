@@ -1,10 +1,11 @@
+from torch.utils.data import Dataset
 import numpy as np
 import statsmodels.api as sm
 from statsmodels.genmod import families
 import torch
 
 
-from typing import Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import os
 import sys
@@ -581,51 +582,90 @@ class CreditDataGenerator:
         )
 
 
-class CreditData:
+class CreditData(Dataset):
     def __init__(
             self, 
-            X_initial : torch.Tensor, 
-            y_initial : torch.Tensor, 
-            accepted_initial : torch.Tensor
+            features_initial : torch.Tensor, 
+            default_flag_initial : torch.Tensor, 
+            accepted_initial : torch.Tensor,
+            retrieve_only_accepted : bool = True
     ):
-        if not (X_initial.device == y_initial.device == accepted_initial.device):
+        if not (features_initial.device == default_flag_initial.device == accepted_initial.device):
             raise ValueError("Not all args have the same device")
         
-        if not (X_initial.size(0) == y_initial.size(0) == accepted_initial.size(0)):
+        if not (features_initial.size(0) == default_flag_initial.size(0) == accepted_initial.size(0)):
             raise ValueError("Shapes are non-compatible")
         
-        self.X = X_initial.detach().clone()
-        self.y = y_initial.detach().clone()
+        self.features = features_initial.detach().clone()
+        self.default_flag = default_flag_initial.detach().clone()
         self.accepted = accepted_initial.detach().clone().to(bool)
+        self.accepted_idx = torch.nonzero(self.accepted).flatten()
         
-        self.gen_idx = torch.tensor(0, dtype=torch.long, device=X_initial.device).expand(X_initial.size(0))
+        self.gen_round = torch.tensor(0, dtype=torch.long, device=features_initial.device).expand(features_initial.size(0))
+
+        self.retrieve_only_accepted = retrieve_only_accepted
 
     def to(self, device : torch.device):
-        for var in ["X", "y", "accepted", "gen_idx"]:
+        for var in ["features", "default_flag", "accepted_idx", "accepted", "gen_round"]:
             setattr(self, var, getattr(self, var).to(device))
 
         return self
     
     @property
     def device(self) -> torch.device:
-        return self.X.device
+        return self.features.device
     
     @property
-    def last_gen_idx(self):
-        return self.gen_idx[-1]
+    def last_gen_round(self):
+        return self.gen_round[-1]
     
     def add_gen(
             self, 
-            X_new : torch.Tensor,
-            y_new : torch.Tensor, 
+            features_new : torch.Tensor,
+            default_flag_new : torch.Tensor, 
             accepted_new : torch.Tensor
         ) -> None:
-        self.X = torch.cat([self.X, X_new])
-        self.y = torch.cat([self.y, y_new])
+        self.features = torch.cat([self.features, features_new])
+        self.default_flag = torch.cat([self.default_flag, default_flag_new])
+
+        obs_count_before_adding_new_gen = self.accepted.size(0)
+        self.accepted_idx = torch.cat([self.accepted_idx, torch.nonzero(accepted_new).flatten() + obs_count_before_adding_new_gen])
         self.accepted = torch.cat([self.accepted, accepted_new])
 
-        new_gen_idx = self.last_gen_idx + 1
-        self.gen_idx = torch.cat([self.gen_idx, new_gen_idx.expand(self.X.size(0))])
+        new_gen_round = self.last_gen_round + 1
+        self.gen_round = torch.cat([self.gen_round, new_gen_round.expand(features_new.size(0))])
+
+    def return_whole_set(
+            self,
+            retrieve_only_accepted : Optional[bool] = None,
+            transform : Callable[[torch.Tensor, torch.Tensor, torch.Tensor], Any] = lambda features, default_flag, gen_round : ((features, default_flag), gen_round),
+            return_copies : bool = True
+    ) -> Any:
+        if retrieve_only_accepted is None:
+            retrieve_only_accepted = self.retrieve_only_accepted
+
+        members_to_retrieve = ["features", "default_flag", "gen_round"]
+
+        if retrieve_only_accepted:
+            retriever = lambda member : getattr(self, member)[self.accepted_idx]
+        else:
+            retriever = lambda member : getattr(self, member)
+        
+        features, default_flag, gen_round = [(retriever(member).clone() if return_copies else retriever(member)) for member in members_to_retrieve]
+
+        return transform(features, default_flag, gen_round)
+
+    def __len__(self):
+        return self.accepted_idx.size(0) if self.retrieve_only_accepted else self.accepted.size(0)
+    
+    def __getitem__(self, idx : int) -> Tuple[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        retrieval_idx = self.accepted_idx[idx] if self.retrieve_only_accepted else idx
+
+        gen_round = self.gen_round[retrieval_idx]
+        features = self.features[retrieval_idx]
+        default_flag = self.default_flag[retrieval_idx]
+
+        return (features, default_flag), gen_round
 
 
 def fit_and_predict_classic_logistic(X : np.array, y : np.array, add_intercept : bool = True):
