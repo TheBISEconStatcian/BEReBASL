@@ -259,7 +259,6 @@ def _adapt_mix_var_dif(
     
 
 class CreditDataGenerator:
-
     bad_good_encoding = {
         "bad" : 1,
         "good" : 0
