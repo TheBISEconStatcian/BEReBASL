@@ -1,7 +1,4 @@
 from torch.utils.data import Dataset
-import numpy as np
-import statsmodels.api as sm
-from statsmodels.genmod import families
 import torch
 
 
@@ -825,16 +822,3 @@ def accept_based_on_top_percentent_of_arbitrary_var(
     
     return accepts
 
-def fit_and_predict_classic_logistic(X : np.array, y : np.array, add_intercept : bool = True):
-    if add_intercept:
-        X = np.column_stack([np.ones((X.shape[0],1), X.dtype), X])
-
-    model = sm.GLM(
-        endog=y,
-        exog=X,
-        family=binomial_family # This specifies the logistic regression setup
-    )
-    fitted_model = model.fit()
-    preds = fitted_model.predict()
-    
-    return preds

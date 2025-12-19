@@ -1,6 +1,9 @@
 from sklearn.ensemble import IsolationForest
 import numpy as np
 
+import statsmodels.api as sm
+from statsmodels.genmod import families
+
 def filter(
     ifo: IsolationForest,
     lower_trim_quantile: float,
@@ -79,3 +82,17 @@ def filter(
     )
 
     return keep_mask if return_index else features[keep_mask]
+
+def fit_and_predict_classic_logistic(X : np.array, y : np.array, add_intercept : bool = True):
+    if add_intercept:
+        X = np.column_stack([np.ones((X.shape[0],1), X.dtype), X])
+
+    model = sm.GLM(
+        endog=y,
+        exog=X,
+        family=families.Binomial # This specifies the logistic regression setup
+    )
+    fitted_model = model.fit()
+    preds = fitted_model.predict()
+    
+    return preds
