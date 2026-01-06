@@ -667,7 +667,17 @@ class CreditData(Dataset):
         """
         return self.gen_round[-1]
     
-
+    @property
+    def accepted_count(self):
+        return self.accepted_idx.size(0)
+    
+    @property
+    def all_observations_count(self):
+        return self.accepted.size(0)
+    
+    @property
+    def rejected_count(self):
+        return self.all_observations_count - self.accepted_count
     
     def add_gen(
             self, 
@@ -755,7 +765,7 @@ class CreditData(Dataset):
                 If ``retrieve_only_accepted`` is ``True``, returns the number of
                 accepted samples. Otherwise, returns the total number of samples.
         """
-        return self.accepted_idx.size(0) if self.retrieve_only_accepted else self.accepted.size(0)
+        return self.accepted_count if self.retrieve_only_accepted else self.all_observations_count
     
     def __getitem__(
             self, 
