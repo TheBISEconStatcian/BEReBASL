@@ -299,6 +299,8 @@ class CreditDataGenerator:
     def rng(self) -> torch.Generator:
         return self.bad_mixture.rng
     
+    def manual_seed(self, seed : int) -> torch.Generator:
+        self.rng.manual_seed(seed)
     
     def to(
             self, device : torch.device, seed : Optional[int] = None, set_same_initial_seed : bool = True
@@ -823,4 +825,3 @@ def accept_based_on_top_percentent_of_arbitrary_var(
 if __name__ == "__main__":
     print('*' * 10,"Initializing credit data simulation", '*' * 10)
 
-    
