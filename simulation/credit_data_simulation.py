@@ -820,3 +820,7 @@ def accept_based_on_top_percentent_of_arbitrary_var(
     
     return accepts
 
+if __name__ == "__main__":
+    print('*' * 10,"Initializing credit data simulation", '*' * 10)
+
+    
