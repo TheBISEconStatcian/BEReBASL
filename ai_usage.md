@@ -15,6 +15,7 @@ For each used chat a link is provided to be called if wished. I always add a sma
 ## Links to `Copilot` usage
 
 - [Technicalities about sampling with `torch.Generator`](https://copilot.microsoft.com/shares/8aPAPMiRK6KnCoTRMDr34)
-- [How to ensure "good copies" of matrices w. r. t. `device` and `dtype`](https://chatgpt.com/share/69411b62-403c-8008-ad16-5a7a6d3890d0)
 - [Nuances between the difference of `torch.Tensor.expand` vs `torch.full` for singleton tensors](https://copilot.microsoft.com/shares/QwmVEjefZbmFM2ULYPB11)
 - [Tensor and pointer arithmetic within `pytorch` for development of `GaussianMixture`](https://copilot.microsoft.com/shares/QwmVEjefZbmFM2ULYPB11)
+- [Help on designing and documenting the CreditData class](https://copilot.microsoft.com/shares/wbyEnAbf9rrAhBcMcWPnY)
+- [Understanding better the unbiased bad ratio calculation](https://copilot.microsoft.com/shares/dbwim2EaiZE4UxRxkuURcunt)
