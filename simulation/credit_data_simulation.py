@@ -659,13 +659,15 @@ class CreditData(Dataset):
     
     @property
     def last_gen_round(self):
-        """Last generation round identifier.
+        """Last generation round identifier/index.
 
         Returns:
             torch.Tensor:
                 Scalar long tensor indicating the last generation round.
         """
         return self.gen_round[-1]
+    
+
     
     def add_gen(
             self, 
