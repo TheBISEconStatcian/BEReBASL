@@ -451,7 +451,7 @@ class GaussianMixture:
 
         return sample
     
-    def manual_seed(self, seed : int):
+    def manual_seed(self, seed : int) -> None:
         r"""
         Manually set the internal RNG seed.
 
