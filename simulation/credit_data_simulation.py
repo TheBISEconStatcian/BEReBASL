@@ -658,7 +658,7 @@ class CreditData(Dataset):
         return self.features.device
     
     @property
-    def last_gen_round(self):
+    def last_gen_round(self) -> torch.Tensor:
         """Last generation round identifier/index.
 
         Returns:
@@ -668,15 +668,15 @@ class CreditData(Dataset):
         return self.gen_round[-1]
     
     @property
-    def accepted_count(self):
+    def accepted_count(self) -> int:
         return self.accepted_idx.size(0)
     
     @property
-    def all_observations_count(self):
+    def all_observations_count(self) -> int:
         return self.accepted.size(0)
     
     @property
-    def rejected_count(self):
+    def rejected_count(self) -> int:
         return self.all_observations_count - self.accepted_count
     
     def add_gen(
