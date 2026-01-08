@@ -19,3 +19,5 @@ For each used chat a link is provided to be called if wished. I always add a sma
 - [Tensor and pointer arithmetic within `pytorch` for development of `GaussianMixture`](https://copilot.microsoft.com/shares/QwmVEjefZbmFM2ULYPB11)
 - [Help on designing and documenting the CreditData class](https://copilot.microsoft.com/shares/wbyEnAbf9rrAhBcMcWPnY)
 - [Understanding better the unbiased bad ratio calculation](https://copilot.microsoft.com/shares/dbwim2EaiZE4UxRxkuURcunt)
+- [Help with `CreditData` docstrings, iris-data-set retrieval and implementation of Logit in torch](https://copilot.microsoft.com/shares/6ZQt1YN531MpHUZjHipFk)
+    - The purpose was to ensure a torch based option to match R's GLM behaviour
