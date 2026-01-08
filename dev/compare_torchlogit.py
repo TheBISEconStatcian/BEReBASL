@@ -61,7 +61,9 @@ if __name__ == "__main__":
             )
             fitted_glm = glm_lr.fit()
             end_glm = time.time()
-            print("\t\t\tTime needed:", round((end_sklearn - begin_sklearn)*1e3,2), "(ns)")
+            print("\t\t\tTime needed:", round((end_glm - begin_glm)*1e3,2), "(ns)")
+            glm_probs = torch.from_numpy(fitted_glm.predict(X_glm))
+            glm_probs = torch.stack([1 - glm_probs, glm_probs], dim=1)
 
         print("\t\t1. scikit learn")
         begin_sklearn = time.time()
@@ -99,7 +101,12 @@ if __name__ == "__main__":
 
         # This has to bee completed with the 
         print("\t\tRandomly chosen probs:")
-        print(torch.stack([sk_probs, torch_probs.detach()], dim=1)[torch.randint(0, sk_probs.shape[0], size=(6,))])
+        print(
+            torch.stack(
+                ([glm_probs] if is_binary else [])+ [sk_probs, torch_probs], 
+                dim=1
+            )[torch.randint(0, sk_probs.shape[0], size=(6,))]
+            )
         print("\t\tAbsolute Distances: (mean and quantiles=.01,.25,.5,.75,.99)")
         mae = lambda a, b : (a-b).abs().mean().detach().item()
         ae_quantiles = lambda a, b, q=torch.tensor([0.01,0.25,0.5,.75,.99]): (a - b).abs().quantile(q)
@@ -107,10 +114,7 @@ if __name__ == "__main__":
         for f in [mae, ae_quantiles]:
             print("\t\t\t", f(sk_probs, torch_probs))
 
-        if is_binary:
-            glm_probs = torch.from_numpy(fitted_glm.predict(X_glm))
-            glm_probs = torch.stack([1 - glm_probs, glm_probs], dim=1)
-            
+        if is_binary:            
             print("\t\tGLM vs sklearn:")
             print(mae(glm_probs, sk_probs))
             print(ae_quantiles(glm_probs, sk_probs))
