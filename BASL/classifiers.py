@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+from typing import Optional
+
 class TorchLogistic(nn.Module):
     r"""
     Multinomial or binary logistic regression implemented in PyTorch using full-batch
@@ -54,7 +56,7 @@ class TorchLogistic(nn.Module):
             self, 
             n_features : int, 
             n_classes : int = 2,
-            lbfgs_kwargs : dict = None,
+            lbfgs_kwargs : Optional[dict] = None,
             secure_init : bool = True
         ):
         r"""
@@ -207,13 +209,13 @@ class TorchLogistic(nn.Module):
           compatibility with scikit-learn and classical GLM terminology, where the
           linear predictor is often inspected directly.
         - The output of ``decision_function`` is typically used for ROC curves,
-          precision–recall curves, calibration analysis, and threshold tuning, since
+          precision-recall curves, calibration analysis, and threshold tuning, since
           it exposes the model's unnormalized decision scores.
         """
         return self.forward(X)
 
     
-    def fit(self, X, y):
+    def fit(self, X : torch.Tensor, y : torch.Tensor, reduction : str = "sum"):
         r"""
         Fit the logistic regression model via full-batch L-BFGS.
 
@@ -221,13 +223,20 @@ class TorchLogistic(nn.Module):
         ----------
         X : torch.Tensor
             Input tensor of shape ``[..., n_features]``. All leading dimensions are
-            flattened into a single batch for optimization.
+            flattened into a single batch for optimization (only works for binary 
+            classification with different leading dimensions, in multiclass it 
+            needs to have the shape ``[N, n_features]``)
 
         y : torch.Tensor
-            Target tensor. For binary classification, must contain values ``0`` or
-            ``1`` and have shape ``[...]`` matching the leading dimensions of ``X``.
-            For multinomial classification, must contain integer class labels in
-            ``{0, ..., n_classes-1}``.
+            Target tensor. 
+            - **For binary classification:** must contain values ``0`` or ``1`` 
+              and have shape ``[...]`` matching the leading dimensions of ``X``.
+            - **For multinomial classification**, must contain integer class labels
+              in ``{0, ..., n_classes-1}`` and have the shape [N,]
+
+        reduction : Optional[str], default = "sum"
+            ``reduction`` argument for the cross entropy loss. Either ``'sum'`` or  
+            ``'mean'``.
 
         Returns
         -------
@@ -244,9 +253,9 @@ class TorchLogistic(nn.Module):
           random seeds and uses deterministic linear algebra kernels.
         """
         if self.n_classes==2:
-            loss_fn = nn.BCEWithLogitsLoss(reduction="sum")
+            loss_fn = nn.BCEWithLogitsLoss(reduction=reduction)
         else:
-            loss_fn = nn.CrossEntropyLoss(reduction="sum")
+            loss_fn = nn.CrossEntropyLoss(reduction=reduction)
 
         optimizer = optim.LBFGS(self.parameters(), **self.lbfgs_kwargs)
 
