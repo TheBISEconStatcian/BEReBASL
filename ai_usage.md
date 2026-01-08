@@ -21,3 +21,4 @@ For each used chat a link is provided to be called if wished. I always add a sma
 - [Understanding better the unbiased bad ratio calculation](https://copilot.microsoft.com/shares/dbwim2EaiZE4UxRxkuURcunt)
 - [Help with `CreditData` docstrings, iris-data-set retrieval and implementation of Logit in torch](https://copilot.microsoft.com/shares/6ZQt1YN531MpHUZjHipFk)
     - The purpose was to ensure a torch based option to match R's GLM behaviour
+- [How to set up repo to look profesional and be an importable package](https://copilot.microsoft.com/shares/oWZVD4bAURP55UEFk2p92)
