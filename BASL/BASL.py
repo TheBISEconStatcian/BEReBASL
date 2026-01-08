@@ -8,7 +8,8 @@ def filter(
     ifo: IsolationForest,
     lower_trim_quantile: float,
     upper_trim_quantile: float,
-    features: np.ndarray,
+    features_accept: np.ndarray,
+    features_reject: np.ndarray,
     return_index: bool = True,
 ) -> Union[np.ndarray, np.ndarray]:
     """
@@ -68,20 +69,20 @@ def filter(
             "lower_trim_quantile must be strictly smaller than upper_trim_quantile."
         )
 
-    ifo.fit(features)
-    normality_scores = ifo.score_samples(features)
+    ifo.fit(features_accept)
+    normality_ranking = ifo.score_samples(features_reject)
 
     lower_score_bound, upper_score_bound = np.quantile(
-        normality_scores,
+        normality_ranking,
         [lower_trim_quantile, upper_trim_quantile],
     )
 
     keep_mask = (
-        (lower_score_bound <= normality_scores)
-        & (normality_scores <= upper_score_bound)
+        (lower_score_bound <= normality_ranking)
+        & (normality_ranking <= upper_score_bound)
     )
 
-    return keep_mask if return_index else features[keep_mask]
+    return keep_mask if return_index else features_reject[keep_mask]
 
 def fit_and_predict_classic_logistic(X : np.array, y : np.array, add_intercept : bool = True):
     if add_intercept:
