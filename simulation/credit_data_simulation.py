@@ -661,6 +661,9 @@ class CreditData(Dataset):
     def last_gen_round(self) -> torch.Tensor:
         """Last generation round identifier/index.
 
+        This corresponds to the maximum generation round identifier present in
+        the dataset
+
         Returns:
             torch.Tensor:
                 Scalar long tensor indicating the last generation round.
@@ -669,14 +672,32 @@ class CreditData(Dataset):
     
     @property
     def accepted_count(self) -> int:
+        """Number of accepted applications in the dataset.
+
+        Returns:
+            int:
+                Count of samples where the acceptance flag is ``True``.
+        """
         return self.accepted_idx.size(0)
     
     @property
     def all_observations_count(self) -> int:
+        """Total number of observations in the dataset.
+
+        Returns:
+            int:
+                Total number of samples stored in the dataset.
+        """
         return self.accepted.size(0)
     
     @property
     def rejected_count(self) -> int:
+        """Number of rejected applications in the dataset.
+
+        Returns:
+            int:
+                Count of samples where the acceptance flag is ``False``.
+        """
         return self.all_observations_count - self.accepted_count
     
     def add_gen(
@@ -707,7 +728,7 @@ class CreditData(Dataset):
         self.features = torch.cat([self.features, features_new])
         self.default_flag = torch.cat([self.default_flag, default_flag_new])
 
-        obs_count_before_adding_new_gen = self.accepted.size(0)
+        obs_count_before_adding_new_gen = self.all_observations_count
         self.accepted_idx = torch.cat([self.accepted_idx, torch.nonzero(accepted_new).flatten() + obs_count_before_adding_new_gen])
         self.accepted = torch.cat([self.accepted, accepted_new])
 
@@ -794,6 +815,40 @@ class CreditData(Dataset):
         default_flag = self.default_flag[retrieval_idx]
 
         return (features, default_flag), gen_round
+
+    def data_stats(self) -> Dict[str, Union[float, int]]:
+        """Compute descriptive statistics of the current dataset.
+
+        The statistics are based on the acceptance flags and default outcomes and
+        are computed across all samples currently stored in the dataset.
+
+        Returns:
+            Dict[str, Union[float, int]]:
+                Dictionary containing:
+                    - ``sample_size``: Total number of observations.
+                    - ``accept_ratio``: Fraction of accepted applications among all observations.
+                    - ``bad_ratio_accepts``: Default rate among accepted applications.
+                    - ``bad_ratio_rejects``: Default rate among rejected applications.
+                    - ``bad_ratio_unbiased``: Overall default rate across all observations.
+
+        Raises:
+            ZeroDivisionError:
+                If there are no accepted and no rejected applications when computing
+                the corresponding unbiased bad rate.
+        """
+        bads_count_among_accepts = self.default_flag[self.accepted_idx].sum().item()
+        bads_count_among_rejects = self.default_flag[~self.accepted].sum().item()
+        all_obs_count = self.all_observations_count
+
+        stats = {
+            "sample_size" : all_obs_count,
+            "accept_ratio" : self.accepted_count / all_obs_count,
+            "bad_ratio_accepts" : float("nan") if self.accepted_count == 0 else bads_count_among_accepts / self.accepted_count,
+            "bad_ratio_rejects" : float("nan") if self.rejected_count == 0 else bads_count_among_rejects / self.rejected_count,
+            "bad_ratio_unbiased" : (bads_count_among_accepts + bads_count_among_rejects) / all_obs_count # assumes there is at least one reject or accept
+        }
+        
+        return stats
 
 
 def accept_based_on_top_percentent_of_arbitrary_var(
