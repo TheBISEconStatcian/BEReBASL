@@ -23,12 +23,64 @@ from berebasl.BASL.classifiers import TorchLogistic
 # Global configuration
 # ============================
 torch.set_default_dtype(torch.float64)
+torch.set_printoptions(precision=6)
+# Supurious warning which was corrected in github repo but not
+# in the current sci-kit learn release
 warnings.filterwarnings(
     "ignore",
     message="Setting penalty=None will ignore the C and l1_ratio parameters"
 )
 
+def fit_glm(X : np.array, label : np.array):
+    begin_glm = time.time()
+    X_glm = sm.add_constant(X)
+    glm_lr = sm.GLM(
+        endog = label,
+        exog = X_glm,
+        family = families.Binomial()
+    )
+    fitted_glm = glm_lr.fit()
+    end_glm = time.time()
 
+    train_time = end_glm - begin_glm
+
+    begin_inference = time.time()
+    glm_probs = fitted_glm.predict(X_glm)
+    glm_probs = np.column_stack([1 - glm_probs, glm_probs])
+    end_inference = time.time()
+    inference_time = end_inference - begin_inference
+
+    return (fitted_glm, X_glm), glm_probs, train_time, inference_time
+
+def fit_sklearn(X, label : np.array):
+    begin_sklearn = time.time()
+    sk_lr = LogisticRegression(C=np.inf, l1_ratio=0, solver="lbfgs")
+    sk_lr = sk_lr.fit(X, label)
+    end_sklearn = time.time()
+
+    train_time = end_sklearn - begin_sklearn
+
+    begin_inference = time.time()
+    sk_probs = sk_lr.predict_proba(X)
+    end_inference = time.time()
+    inference_time = end_inference - begin_inference
+
+    return sk_lr, sk_probs, train_time, inference_time
+
+def fit_torch(X_torch, label_torch):
+    begin_torch = time.time()
+    torch_lr = TorchLogistic(n_features=X.shape[1], n_classes=label_torch.max()+1)
+    torch_lr.fit(X_torch, label_torch, reduction='sum')
+    end_torch = time.time()
+
+    train_time = end_torch - begin_torch
+
+    begin_inference = time.time()
+    torch_probs = torch_lr.predict_proba(X_torch)
+    end_inference = time.time()
+    inference_time = end_inference - begin_inference
+
+    return torch_lr, torch_probs.detach(), train_time, inference_time
 
 if __name__ == "__main__":
     iris = load_iris()
@@ -52,17 +104,11 @@ if __name__ == "__main__":
         print("\tStep 0: Estimation")
         if is_binary: # This gives an error
             print("\t\t0. GLM:")
-            begin_glm = time.time()
-            X_glm = sm.add_constant(X)
-            glm_lr = sm.GLM(
-                endog = label,
-                exog = X_glm,
-                family = families.Binomial()
-            )
-            fitted_glm = glm_lr.fit()
-            end_glm = time.time()
-            print("\t\t\tTime needed:", round((end_glm - begin_glm)*1e3,2), "(ns)")
-            glm_probs = torch.from_numpy(fitted_glm.predict(X_glm))
+            (fitted_glm, X_glm), glm_probs, train_time, _ = fit_glm(X, label)
+            
+            print("\t\t\tTime needed:", round(train_time*1e3,2), "(ms)")
+
+            glm_probs = torch.from_numpy(glm_probs)
             glm_probs = torch.stack([1 - glm_probs, glm_probs], dim=1)
 
         print("\t\t1. scikit learn")
@@ -70,7 +116,7 @@ if __name__ == "__main__":
         sk_lr = LogisticRegression(C=np.inf, l1_ratio=0, solver="lbfgs")
         sk_lr = sk_lr.fit(X, label)
         end_sklearn = time.time()
-        print("\t\t\tTime needed:", round((end_sklearn - begin_sklearn)*1e3,2), "(ns)")
+        print("\t\t\tTime needed:", round((end_sklearn - begin_sklearn)*1e3,2), "(ms)")
 
         print("\t\t2. torch implementation")
         begin_torch = time.time()
@@ -81,11 +127,18 @@ if __name__ == "__main__":
 
         print("\tStep 1: Parameter Comparision. Order (GLM), Sklearn, torch")
         print("\t\tComparision of weights")
-        print(torch.cat(
-            ([torch.from_numpy(fitted_glm.params[1:]).unsqueeze(0)] if is_binary else []) + [
-                torch.from_numpy(sk_lr.coef_), torch_lr.lin_estimator.weight.detach()
-                ]
-        ))
+        if is_binary:
+            joint_weights = torch.cat([
+                torch.from_numpy(fitted_glm.params[1:]).unsqueeze(0), 
+                torch.from_numpy(sk_lr.coef_), 
+                torch_lr.lin_estimator.weight.detach()
+            ])
+        else:
+            joint_weights = torch.stack([
+                torch.from_numpy(sk_lr.coef_), 
+                torch_lr.lin_estimator.weight.detach()
+            ], dim = 1)
+        print(joint_weights)
 
         print("\n\t\tComparision of intercept")
         print(torch.stack(
@@ -98,29 +151,36 @@ if __name__ == "__main__":
         print("\tStep 2: Comparision of predicted probabilities.")
         sk_probs = torch.from_numpy(sk_lr.predict_proba(X))
         torch_probs = torch_lr.predict_proba(X_torch).detach()
-
-        # This has to bee completed with the 
-        print("\t\tRandomly chosen probs:")
-        print(
-            torch.stack(
+        joint_probs = torch.stack(
                 ([glm_probs] if is_binary else [])+ [sk_probs, torch_probs], 
                 dim=1
-            )[torch.randint(0, sk_probs.shape[0], size=(6,))]
             )
+
+        print("\t\tRandomly chosen probs:")
+        print(joint_probs[torch.randint(0, sk_probs.shape[0], size=(6,))])
         print("\t\tAbsolute Distances: (mean and quantiles=.01,.25,.5,.75,.99)")
         mae = lambda a, b : (a-b).abs().mean().detach().item()
         ae_quantiles = lambda a, b, q=torch.tensor([0.01,0.25,0.5,.75,.99]): (a - b).abs().quantile(q)
-        print("\t\t\tscikit vs. torch:")
-        for f in [mae, ae_quantiles]:
-            print("\t\t\t", f(sk_probs, torch_probs))
 
-        if is_binary:            
-            print("\t\tGLM vs sklearn:")
-            print(mae(glm_probs, sk_probs))
-            print(ae_quantiles(glm_probs, sk_probs))
+        comp_spec = [
+            ((sk_probs, torch_probs), "scikit vs. torch:")
+        ]
+        if is_binary:
+            comp_spec += [
+                ((sk_probs, glm_probs), "scikit vs. GLM:"),
+                ((glm_probs, torch_probs), "GLM vs. torch:"),
+                ((glm_probs, sk_probs), "GLM vs. scikit:"),
+            ]
 
-            print("\t\tGLM vs torch:")
-            print(mae(glm_probs, torch_probs))
-            print(ae_quantiles(glm_probs, torch_probs))
+        for pair, desc_pair in comp_spec:
+            print('\t'*3, desc_pair)
+            for f in [mae, ae_quantiles]:
+                print('\t'*4, f(*pair))
         
+        print("\tStep 3: Comparision of predictions (argmax threshold)")
+        preds = joint_probs.argmax(dim=-1, keepdim=False)
+        predicts_the_same_class = (preds == preds[:, :1]).all(dim=1)
+        print("\t\tProportion equal predictions among models:", 
+              (predicts_the_same_class.sum() / predicts_the_same_class.shape[0]).round(decimals=2).item() * 100,
+              "%")
 
