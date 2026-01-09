@@ -266,6 +266,7 @@ class TorchLogistic(nn.Module):
             loss.backward()
             return loss
         
+        self.train()
         optimizer.step(train_step)
 
         return self
