@@ -624,10 +624,13 @@ class CreditData(Dataset):
         if not (features_initial.size(0) == default_flag_initial.size(0) == accepted_initial.size(0)):
             raise ValueError("Shapes are non-compatible")
         
+        if accepted_initial.dim() != 1:
+            raise ValueError("accepted_initial needs to be one dimensional")
+        
         self.features = features_initial.detach().clone()
         self.default_flag = default_flag_initial.detach().clone()
         self.accepted = accepted_initial.detach().clone().to(bool)
-        self.accepted_idx = torch.nonzero(self.accepted).flatten()
+        self.accepted_idx = torch.nonzero(self.accepted)
         
         self.gen_round = torch.tensor(0, dtype=torch.long, device=features_initial.device).expand(features_initial.size(0))
 
@@ -729,7 +732,7 @@ class CreditData(Dataset):
         self.default_flag = torch.cat([self.default_flag, default_flag_new])
 
         obs_count_before_adding_new_gen = self.all_observations_count
-        self.accepted_idx = torch.cat([self.accepted_idx, torch.nonzero(accepted_new).flatten() + obs_count_before_adding_new_gen])
+        self.accepted_idx = torch.cat([self.accepted_idx, torch.nonzero(accepted_new) + obs_count_before_adding_new_gen])
         self.accepted = torch.cat([self.accepted, accepted_new])
 
         new_gen_round = self.last_gen_round + 1
@@ -770,11 +773,11 @@ class CreditData(Dataset):
         members_to_retrieve = ["features", "default_flag", "gen_round"]
 
         if retrieve_only_accepted:
-            retriever = lambda member : getattr(self, member)[self.accepted_idx]
+            retriever = lambda member : getattr(self, member)[self.accepted_idx].squeeze(1)
         else:
             retriever = lambda member : getattr(self, member)
         
-        features, default_flag, gen_round = [(retriever(member).clone() if return_copies else retriever(member)) for member in members_to_retrieve]
+        features, default_flag, gen_round = [(retriever(member).detach().clone() if return_copies else retriever(member)) for member in members_to_retrieve]
 
         return transform(features, default_flag, gen_round)
 
@@ -808,7 +811,7 @@ class CreditData(Dataset):
                 Tensors are views (not cloned) for performance. Downstream code
                 should avoid in-place mutation if sharing is a concern.
         """
-        retrieval_idx = self.accepted_idx[idx] if self.retrieve_only_accepted else idx
+        retrieval_idx = self.accepted_idx[idx].item() if self.retrieve_only_accepted else idx
 
         gen_round = self.gen_round[retrieval_idx]
         features = self.features[retrieval_idx]
