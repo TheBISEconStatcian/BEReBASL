@@ -37,7 +37,7 @@ warnings.filterwarnings(
 def fit_glm(
     X: np.ndarray,
     label: np.ndarray
-) -> Tuple[Tuple[GLMResults, np.ndarray], np.ndarray, float, float]:
+) -> Tuple[GLMResults, np.ndarray, float, float]:
     r"""
     Fit a classical GLM logistic regression model using ``statsmodels`` and measure
     both training and inference time.
@@ -96,7 +96,7 @@ def fit_glm(
     end_inference = time.time()
     inference_time = end_inference - begin_inference
 
-    return (fitted_glm, X_glm), glm_probs, train_time, inference_time
+    return fitted_glm, glm_probs, train_time, inference_time
 
 
 def fit_sklearn(
@@ -235,7 +235,7 @@ if __name__ == "__main__":
         print("\tStep 0: Estimation")
         if is_binary: # This gives an error
             print("\t\t0. GLM:")
-            (fitted_glm, X_glm), glm_probs, train_time, _ = fit_glm(X, label)
+            fitted_glm, glm_probs, train_time, _ = fit_glm(X, label)
 
             print("\t\t\tTime needed:", round(train_time*1e3, 2), "(ms)")
 
