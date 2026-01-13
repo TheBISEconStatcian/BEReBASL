@@ -962,7 +962,11 @@ class CreditData(Dataset):
                 Count of samples where the acceptance flag is ``False``.
         """
         return self.count_all - self.count_accepts
-    
+
+    # -------------------------------------------------------------------------
+    # Mutation
+    # -------------------------------------------------------------------------
+
     def add_gen(
             self, 
             features_new : torch.Tensor,
@@ -972,8 +976,8 @@ class CreditData(Dataset):
         """Append a new generation of samples to the dataset.
 
         Concatenates new features, outcomes, and acceptance flags, updates
-        accepted indices, and assigns the next generation round identifier
-        to the appended samples.
+        accepted and rejected indices, and assigns the next generation round 
+        identifier to the appended samples.
 
         Args:
             features_new (torch.Tensor):
@@ -988,15 +992,27 @@ class CreditData(Dataset):
             ValueError: If feature dimensionality of ``features_new`` does not match
                 existing ``features``.
         """
+        if features_new.size(1) != self.features.size(1):
+            raise ValueError("Feature dimension mismatch in features_new")
+        
         self.features = torch.cat([self.features, features_new])
         self.default_flag = torch.cat([self.default_flag, default_flag_new.to(self.features.dtype)])
 
         obs_count_before_adding_new_gen = self.count_all
-        self.accepted_idx = torch.cat([self.accepted_idx, torch.nonzero(accepted_new) + obs_count_before_adding_new_gen])
+
+        # Update accepted and rejected indices
+        new_accepted_idx = torch.nonzero(accepted_new).flatten() + obs_count_before_adding_new_gen
+        new_reject_idx = torch.nonzero(~accepted_new).flatten() + obs_count_before_adding_new_gen
+
+        self.accepted_idx = torch.cat([self.accepted_idx, new_accepted_idx])
+        self.reject_idx = torch.cat([self.reject_idx, new_reject_idx])
+
         self.accepted = torch.cat([self.accepted, accepted_new])
 
         new_gen_round = self.last_gen_round + 1
-        self.gen_round = torch.cat([self.gen_round, new_gen_round.expand(features_new.size(0))])
+        self.gen_round = torch.cat(
+            [self.gen_round, new_gen_round.expand(features_new.size(0))]
+        )
 
     def rejects(self, include_gen_round: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """Return feature observations corresponding to rejected applications.
