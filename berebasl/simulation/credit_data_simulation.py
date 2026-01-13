@@ -570,6 +570,252 @@ class CreditDataGenerator:
             noise_var=noise_var,
             bad_ratio=bad_ratio
         )
+    
+
+
+class CreditDataSample(Dataset):
+    """Leakage-safe dataset for reject inference experiments.
+
+    This class provides a structured and safe representation of credit data
+    split into *accepted* and *rejected* applications. It enforces the core
+    reject-inference constraint that rejected applications must never expose
+    their repayment outcomes, while accepted applications retain both features
+    and labels.
+
+    The dataset supports:
+    - retrieval of either accepted or rejected samples
+    - reproducible train/test splits
+    - device transfers with preservation of RNG state
+    - manual reseeding for deterministic behavior
+
+    A device-specific :class:`torch.Generator` instance is maintained internally
+    and is used for all stochastic operations, including permutation and
+    train/test splitting. The generator is transferred when calling :meth:`to`
+    and can be reseeded via :meth:`manual_seed` to ensure reproducibility across
+    runs and devices.
+
+    Attributes:
+        features_rejects (torch.Tensor):
+            Feature matrix for rejected applications. Shape ``(n_rejects, n_features)``.
+        features_accepts (torch.Tensor):
+            Feature matrix for accepted applications. Shape ``(n_accepts, n_features)``.
+        default_flag_accepts (torch.Tensor):
+            Repayment outcomes for accepted applications. Shape ``(n_accepts,)``.
+        retrieve_only_accepted (bool):
+            If ``True``, the dataset yields only accepted samples. If ``False``,
+            only rejected samples are returned.
+        rng (torch.Generator):
+            Device-specific random number generator used for all stochastic
+            operations.
+    """
+
+    def __init__(
+        self,
+        features_rejects: torch.Tensor,
+        features_accepts: torch.Tensor,
+        default_flag_accepts: torch.Tensor,
+        retrieve_only_accepted: bool,
+        seed: Optional[int] = None,
+    ):
+        """Initialize a leakage-safe credit dataset sample.
+
+        Args:
+            features_rejects (torch.Tensor):
+                Feature matrix for rejected applications. Must reside on the same
+                device as the other tensors. Shape ``(n_rejects, n_features)``.
+            features_accepts (torch.Tensor):
+                Feature matrix for accepted applications. Shape ``(n_accepts, n_features)``.
+            default_flag_accepts (torch.Tensor):
+                Repayment outcomes for accepted applications. Shape ``(n_accepts,)``.
+            retrieve_only_accepted (bool):
+                If ``True``, the dataset yields only accepted samples during
+                indexing. If ``False``, only rejected samples are returned.
+            seed (int, optional):
+                Seed used to initialize the internal device-specific random number
+                generator. If ``None``, the generator is left in its default state.
+
+        Notes:
+            - Rejected samples never expose repayment outcomes.
+            - The internal RNG controls all stochastic behavior, including
+              train/test splitting and permutations.
+            - The RNG is device-specific and is recreated when calling :meth:`to`.
+        """
+        self.features_rejects = features_rejects
+        self.features_accepts = features_accepts
+        self.default_flag_accepts = default_flag_accepts
+
+        self.retrieve_only_accepted = retrieve_only_accepted
+
+        # RNG is device-specific, so we create it on the same device as the data
+        device = features_rejects.device
+        self.rng = torch.Generator(device=device)
+        if seed is not None:
+            self.rng.manual_seed(seed)
+
+    # -------------------------------------------------------------------------
+    # RNG utilities
+    # -------------------------------------------------------------------------
+
+    def manual_seed(self, seed: int):
+        """Manually reseed the internal random number generator.
+
+        Args:
+            seed (int): New seed value.
+
+        Returns:
+            CreditDataSample: The dataset instance.
+        """
+        self.rng.manual_seed(seed)
+        return self
+
+    # -------------------------------------------------------------------------
+    # Device transfer
+    # -------------------------------------------------------------------------
+
+    def to(
+        self,
+        device: torch.device,
+        seed: Optional[int] = None,
+        set_same_initial_seed: bool = True,
+    ):
+        """Move all tensors and the RNG to a target device.
+
+        Args:
+            device (torch.device):
+                Target device for the dataset tensors.
+            seed (int, optional):
+                Explicit seed for the RNG on the new device. Overrides
+                ``set_same_initial_seed`` if provided.
+            set_same_initial_seed (bool, optional):
+                If ``True`` and ``seed`` is ``None``, the RNG on the new device
+                is initialized with the same initial seed as the previous RNG.
+
+        Returns:
+            CreditDataSample: The dataset instance with tensors moved to ``device``.
+        """
+        for var in ["features_rejects", "features_accepts", "default_flag_accepts"]:
+            setattr(self, var, getattr(self, var).to(device))
+
+        # Preserve reproducibility across device transfers
+        if seed is None and set_same_initial_seed:
+            seed = self.rng.initial_seed()
+
+        self.rng = torch.Generator(device=device)
+        if seed is not None:
+            self.rng.manual_seed(seed)
+
+        return self
+
+    # -------------------------------------------------------------------------
+    # Train/test split
+    # -------------------------------------------------------------------------
+
+    def _generate_test_mask(
+        self,
+        n: int,
+        test_proportion: float,
+        device: torch.device,
+    ) -> torch.Tensor:
+        """Generate a boolean mask selecting test samples.
+
+        Args:
+            n (int): Number of samples.
+            test_proportion (float): Fraction of samples to assign to the test set.
+            device (torch.device): Device for the mask.
+
+        Returns:
+            torch.Tensor: Boolean mask of shape ``(n,)``.
+        """
+        test_count = round(test_proportion * n)
+        mask = torch.zeros(n, dtype=torch.bool, device=device)
+        perm = torch.randperm(n, generator=self.rng, device=device)
+        mask[perm[:test_count]] = True
+        return mask
+
+    def train_test_split(self, test_proportion: float):
+        """Split the dataset into train and test subsets.
+
+        The split is performed independently for accepts and rejects, ensuring
+        no leakage and preserving the acceptance structure.
+
+        Args:
+            test_proportion (float):
+                Fraction of samples to assign to the test set. Must be in ``[0, 1]``.
+
+        Returns:
+            Tuple[CreditDataSample, CreditDataSample]:
+                ``(train_sample, test_sample)``.
+        """
+        if not (0.0 <= test_proportion <= 1.0):
+            raise ValueError("test_proportion must be between 0 and 1")
+
+        device = self.features_rejects.device
+
+        # Generate masks
+        test_mask_rej = self._generate_test_mask(
+            self.features_rejects.size(0), test_proportion, device
+        )
+        test_mask_acc = self._generate_test_mask(
+            self.features_accepts.size(0), test_proportion, device
+        )
+
+        # Slice data
+        train_sample = CreditDataSample(
+            features_rejects=self.features_rejects[~test_mask_rej],
+            features_accepts=self.features_accepts[~test_mask_acc],
+            default_flag_accepts=self.default_flag_accepts[~test_mask_acc],
+            retrieve_only_accepted=self.retrieve_only_accepted,
+            seed=self.rng.initial_seed(),
+        )
+
+        test_sample = CreditDataSample(
+            features_rejects=self.features_rejects[test_mask_rej],
+            features_accepts=self.features_accepts[test_mask_acc],
+            default_flag_accepts=self.default_flag_accepts[test_mask_acc],
+            retrieve_only_accepted=self.retrieve_only_accepted,
+            seed=self.rng.initial_seed(),
+        )
+
+        return train_sample, test_sample
+
+    # -------------------------------------------------------------------------
+    # Dataset interface
+    # -------------------------------------------------------------------------
+
+    @property
+    def count_accepts(self) -> int:
+        """Number of accepted samples."""
+        return self.features_accepts.size(0)
+
+    @property
+    def count_rejects(self) -> int:
+        """Number of rejected samples."""
+        return self.features_rejects.size(0)
+
+    def __len__(self) -> int:
+        """Dataset length under the current retrieval mode."""
+        return self.count_accepts if self.retrieve_only_accepted else self.count_rejects
+
+    def __getitem__(self, idx: int) -> Tuple[Any, Optional[torch.Tensor]]:
+        """Retrieve a single sample.
+
+        Returns:
+            Tuple[Any, Optional[torch.Tensor]]:
+                - If retrieving accepts: ``(features, default_flag)``
+                - If retrieving rejects: ``(features, None)``
+        """
+        if self.retrieve_only_accepted:
+            return (
+                self.features_accepts[idx],
+                self.default_flag_accepts[idx],
+            )
+        else:
+            return (
+                self.features_rejects[idx],
+                None,
+            )
+
+
 
 
 class CreditData(Dataset):
@@ -666,7 +912,7 @@ class CreditData(Dataset):
         return self.gen_round[-1]
     
     @property
-    def accepted_count(self) -> int:
+    def count_accepts(self) -> int:
         """Number of accepted applications in the dataset.
 
         Returns:
@@ -676,7 +922,7 @@ class CreditData(Dataset):
         return self.accepted_idx.size(0)
     
     @property
-    def all_observations_count(self) -> int:
+    def count_all(self) -> int:
         """Total number of observations in the dataset.
 
         Returns:
@@ -686,14 +932,14 @@ class CreditData(Dataset):
         return self.accepted.size(0)
     
     @property
-    def rejected_count(self) -> int:
+    def count_rejects(self) -> int:
         """Number of rejected applications in the dataset.
 
         Returns:
             int:
                 Count of samples where the acceptance flag is ``False``.
         """
-        return self.all_observations_count - self.accepted_count
+        return self.count_all - self.count_accepts
     
     def add_gen(
             self, 
@@ -723,7 +969,7 @@ class CreditData(Dataset):
         self.features = torch.cat([self.features, features_new])
         self.default_flag = torch.cat([self.default_flag, default_flag_new])
 
-        obs_count_before_adding_new_gen = self.all_observations_count
+        obs_count_before_adding_new_gen = self.count_all
         self.accepted_idx = torch.cat([self.accepted_idx, torch.nonzero(accepted_new) + obs_count_before_adding_new_gen])
         self.accepted = torch.cat([self.accepted, accepted_new])
 
@@ -850,7 +1096,7 @@ class CreditData(Dataset):
                 If ``retrieve_only_accepted`` is ``True``, returns the number of
                 accepted samples. Otherwise, returns the total number of samples.
         """
-        return self.accepted_count if self.retrieve_only_accepted else self.all_observations_count
+        return self.count_accepts if self.retrieve_only_accepted else self.count_all
     
     def __getitem__(
             self, 
@@ -902,13 +1148,13 @@ class CreditData(Dataset):
         """
         bads_count_among_accepts = self.default_flag[self.accepted_idx].sum().item()
         bads_count_among_rejects = self.default_flag[~self.accepted].sum().item()
-        all_obs_count = self.all_observations_count
+        all_obs_count = self.count_all
 
         stats = {
             "sample_size" : all_obs_count,
-            "accept_ratio" : self.accepted_count / all_obs_count,
-            "bad_ratio_accepts" : float("nan") if self.accepted_count == 0 else bads_count_among_accepts / self.accepted_count,
-            "bad_ratio_rejects" : float("nan") if self.rejected_count == 0 else bads_count_among_rejects / self.rejected_count,
+            "accept_ratio" : self.count_accepts / all_obs_count,
+            "bad_ratio_accepts" : float("nan") if self.count_accepts == 0 else bads_count_among_accepts / self.count_accepts,
+            "bad_ratio_rejects" : float("nan") if self.count_rejects == 0 else bads_count_among_rejects / self.count_rejects,
             "bad_ratio_unbiased" : (bads_count_among_accepts + bads_count_among_rejects) / all_obs_count # assumes there is at least one reject or accept
         }
         
