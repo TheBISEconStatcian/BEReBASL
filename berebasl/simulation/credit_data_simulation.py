@@ -2,7 +2,7 @@ from torch.utils.data import Dataset
 import torch
 
 
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Literal, Optional, Tuple, Union
 
 from berebasl.simulation.gaussian_mixture import (
     eigen_decomp_proj_to_pd,
@@ -835,7 +835,7 @@ class CreditData(Dataset):
             and ``1`` = default. Values are expected to be in ``{0, 1}``.
         accepted_initial (torch.Tensor):
             Shape ``(n_samples,)``. Boolean acceptance status of applications.
-        retrieve_only_accepted (bool, optional):
+        retrieval_mode (Literal["accepts", "rejects", "unbiased"], optional) default "accepts":
             If ``True``, dataset yields only accepted applications. Defaults to ``True``.
 
     Raises:
@@ -854,7 +854,7 @@ class CreditData(Dataset):
             features_initial : torch.Tensor, 
             default_flag_initial : torch.Tensor, 
             accepted_initial : torch.Tensor,
-            retrieve_only_accepted : bool = True
+            retrieval_mode : Literal["accepts", "rejects", "unbiased"] = "accepts"
     ):
         if not (features_initial.device == default_flag_initial.device == accepted_initial.device):
             raise ValueError("Not all args have the same device")
@@ -866,13 +866,13 @@ class CreditData(Dataset):
             raise ValueError("accepted_initial needs to be one dimensional")
         
         self.features = features_initial.detach().clone()
-        self.default_flag = default_flag_initial.detach().clone()
+        self.default_flag = default_flag_initial.detach().clone().to(self.features.dtype)
         self.accepted = accepted_initial.detach().clone().to(bool)
         self.accepted_idx = torch.nonzero(self.accepted)
         
         self.gen_round = torch.tensor(0, dtype=torch.long, device=features_initial.device).expand(features_initial.size(0))
 
-        self.retrieve_only_accepted = retrieve_only_accepted
+        self.retrieval_mode = retrieval_mode
 
     def to(self, device : torch.device):
         """Move all internal tensors to a target device.
@@ -967,7 +967,7 @@ class CreditData(Dataset):
                 existing ``features``.
         """
         self.features = torch.cat([self.features, features_new])
-        self.default_flag = torch.cat([self.default_flag, default_flag_new])
+        self.default_flag = torch.cat([self.default_flag, default_flag_new.to(self.features.dtype)])
 
         obs_count_before_adding_new_gen = self.count_all
         self.accepted_idx = torch.cat([self.accepted_idx, torch.nonzero(accepted_new) + obs_count_before_adding_new_gen])
@@ -1048,8 +1048,34 @@ class CreditData(Dataset):
             return self.features, self.default_flag, self.gen_round
         return self.features, self.default_flag
 
+    def current_obs(
+        self,
+        retrieve_only_accepted: bool = True,
+    ) -> CreditDataSample:
+        """Return a leakage-safe snapshot of the current dataset state.
 
-    
+        This method constructs a :class:`CreditDataSample` instance from the
+        dataset's present observations. Rejected applications contribute only
+        their feature vectors, while accepted applications contribute both
+        features and repayment outcomes. No labels from rejected samples are
+        ever exposed, ensuring reject-inference safety.
+
+        Args:
+            retrieve_only_accepted (bool, optional):
+                If ``True``, the returned :class:`CreditDataSample` will yield only
+                accepted samples during indexing. If ``False``, only rejected
+                samples will be returned. Defaults to ``True``.
+
+        Returns:
+            CreditDataSample:
+                A leakage-safe dataset containing the current accepted and rejected
+                observations, suitable for training, evaluation, or splitting.
+        """
+        return CreditDataSample(
+            self.rejects(include_gen_round=False),
+            *self.accepts(include_gen_round=False),
+            retrieve_only_accepted=retrieve_only_accepted,
+        )
 
     def __len__(self) -> int:
         """Number of samples available under the current retrieval policy.
@@ -1059,7 +1085,14 @@ class CreditData(Dataset):
                 If ``retrieve_only_accepted`` is ``True``, returns the number of
                 accepted samples. Otherwise, returns the total number of samples.
         """
-        return self.count_accepts if self.retrieve_only_accepted else self.count_all
+        if self.retrieval_mode=="accepts":
+            return self.count_accepts
+        elif self.retrieval_mode=="rejects":
+            return self.count_rejects
+        elif self.retrieval_mode=="unbiased":
+            return self.count_all
+        else:
+            raise ValueError("retrieval_mode not recognized")
     
     def __getitem__(
             self, 
@@ -1081,13 +1114,17 @@ class CreditData(Dataset):
                 Tensors are views (not cloned) for performance. Downstream code
                 should avoid in-place mutation if sharing is a concern.
         """
-        retrieval_idx = self.accepted_idx[idx].item() if self.retrieve_only_accepted else idx
 
-        gen_round = self.gen_round[retrieval_idx]
-        features = self.features[retrieval_idx]
-        default_flag = self.default_flag[retrieval_idx]
+        if self.retrieval_mode=="accepts":
+            idx = self.accepted_idx[idx]
+        elif self.retrieval_mode=="rejects":
+            idx = torch.nonzero(~self.accepted).flatten()[idx]
 
-        return (features, default_flag), gen_round
+        features, default_flag, accepted, gen_round = [
+            getattr(self, att_name)[idx] for att_name in ["features", "default_flag", "accepted", "gen_round"]
+        ]
+
+        return (features, default_flag), accepted, gen_round
 
     def data_stats(self) -> Dict[str, Union[float, int]]:
         """Compute descriptive statistics of the current dataset.
