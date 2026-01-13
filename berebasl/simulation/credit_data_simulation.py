@@ -906,7 +906,11 @@ class CreditData(Dataset):
             setattr(self, var, getattr(self, var).to(device))
 
         return self
-    
+
+    # -------------------------------------------------------------------------
+    # Properties
+    # -------------------------------------------------------------------------
+
     @property
     def device(self) -> torch.device:
         """Device on which the dataset tensors currently reside.
