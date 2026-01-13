@@ -1122,54 +1122,68 @@ class CreditData(Dataset):
             retrieve_only_accepted=retrieve_only_accepted,
         )
 
+    # -------------------------------------------------------------------------
+    # Dataset interface
+    # -------------------------------------------------------------------------
+
     def __len__(self) -> int:
         """Number of samples available under the current retrieval policy.
 
         Returns:
             int:
-                If ``retrieve_only_accepted`` is ``True``, returns the number of
-                accepted samples. Otherwise, returns the total number of samples.
+                - If ``retrieval_mode == "accepts"``: number of accepted samples.
+                - If ``retrieval_mode == "rejects"``: number of rejected samples.
+                - If ``retrieval_mode == "unbiased"``: total number of samples.
         """
-        if self.retrieval_mode=="accepts":
+        if self.retrieval_mode == "accepts":
             return self.count_accepts
-        elif self.retrieval_mode=="rejects":
+        elif self.retrieval_mode == "rejects":
             return self.count_rejects
-        elif self.retrieval_mode=="unbiased":
+        elif self.retrieval_mode == "unbiased":
             return self.count_all
         else:
-            raise ValueError("retrieval_mode not recognized")
-    
-    def __getitem__(
-            self, 
-            idx : int
-    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
-        """Retrieve a single sample.
+            raise ValueError("saved retrieval_mode not recognized")
 
-        Indexing respects the ``retrieve_only_accepted`` flag:
-        - If ``True``, ``idx`` is mapped through ``accepted_idx``.
-        - If ``False``, ``idx`` addresses the full dataset.
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        """Retrieve a single sample as a dictionary.
+
+        Indexing respects the current ``retrieval_mode``:
+        - ``"accepts"``: ``idx`` is mapped through ``accepted_idx``.
+        - ``"rejects"``: ``idx`` is mapped through ``reject_idx``.
+        - ``"unbiased"``: ``idx`` addresses the full dataset.
 
         Args:
             idx (int):
                 Sample index under the current retrieval mode.
 
         Returns:
-            Tuple[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
-                ``((features, default_flag), gen_round)`` for the addressed sample.
-                Tensors are views (not cloned) for performance. Downstream code
-                should avoid in-place mutation if sharing is a concern.
+            Dict[str, Any]:
+                A dictionary with keys:
+                    - ``"features"`` (torch.Tensor): Feature vector.
+                    - ``"default_flag"`` (torch.Tensor): Repayment outcome.
+                    - ``"accepted"`` (torch.Tensor): Boolean acceptance flag.
+                    - ``"gen_round"`` (torch.Tensor): Generation round index.
         """
-
-        if self.retrieval_mode=="accepts":
+        if self.retrieval_mode == "accepts":
             idx = self.accepted_idx[idx]
-        elif self.retrieval_mode=="rejects":
-            idx = torch.nonzero(~self.accepted).flatten()[idx]
+        elif self.retrieval_mode == "rejects":
+            idx = self.reject_idx[idx]
+        elif self.retrieval_mode == "unbiased":
+            pass
+        else:
+            raise ValueError("saved retrieval_mode not recognized")
 
-        features, default_flag, accepted, gen_round = [
-            getattr(self, att_name)[idx] for att_name in ["features", "default_flag", "accepted", "gen_round"]
-        ]
+        features = self.features[idx]
+        default_flag = self.default_flag[idx]
+        accepted = self.accepted[idx]
+        gen_round = self.gen_round[idx]
 
-        return (features, default_flag), accepted, gen_round
+        return {
+            "features": features,
+            "default_flag": default_flag,
+            "accepted": accepted,
+            "gen_round": gen_round,
+        }
 
     def data_stats(self) -> Dict[str, Union[float, int]]:
         """Compute descriptive statistics of the current dataset.
