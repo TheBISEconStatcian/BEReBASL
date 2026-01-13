@@ -738,11 +738,11 @@ class CreditData(Dataset):
         new_gen_round = self.last_gen_round + 1
         self.gen_round = torch.cat([self.gen_round, new_gen_round.expand(features_new.size(0))])
 
-    def return_whole_set(
+    def get_all_obs(
             self,
             retrieve_only_accepted : Optional[bool] = None,
             transform: Callable[[torch.Tensor, torch.Tensor, torch.Tensor], Any] = (
-                lambda features, default_flag, gen_round: ((features, default_flag), gen_round)
+                lambda features, default_flag, accepted, gen_round: ((features, default_flag), accepted, gen_round)
             ),
             return_copies : bool = True,
     ) -> Any:
@@ -770,14 +770,14 @@ class CreditData(Dataset):
         if retrieve_only_accepted is None:
             retrieve_only_accepted = self.retrieve_only_accepted
 
-        members_to_retrieve = ["features", "default_flag", "gen_round"]
+        members_to_retrieve = ["features", "default_flag", "accepted", "gen_round"]
 
         if retrieve_only_accepted:
             retriever = lambda member : getattr(self, member)[self.accepted_idx].squeeze(1)
         else:
             retriever = lambda member : getattr(self, member)
         
-        features, default_flag, gen_round = [(retriever(member).detach().clone() if return_copies else retriever(member)) for member in members_to_retrieve]
+        features, default_flag, accepted, gen_round = [(retriever(member).detach().clone() if return_copies else retriever(member)) for member in members_to_retrieve]
 
         return transform(features, default_flag, gen_round)
 
