@@ -797,23 +797,27 @@ class CreditDataSample(Dataset):
         return self.count_accepts if self.retrieve_only_accepted else self.count_rejects
 
     def __getitem__(self, idx: int) -> Tuple[Any, Optional[torch.Tensor]]:
-        """Retrieve a single sample.
+        """Retrieve a single sample as a dictionary.
 
         Returns:
-            Tuple[Any, Optional[torch.Tensor]]:
-                - If retrieving accepts: ``(features, default_flag)``
-                - If retrieving rejects: ``(features, None)``
+            Dict[str, Any]:
+                A dictionary with keys:
+                    - ``"features"`` (torch.Tensor)
+                    - ``"default_flag"`` (torch.Tensor or None)
+                    - ``"accepted"`` (bool)
         """
         if self.retrieve_only_accepted:
-            return (
-                self.features_accepts[idx],
-                self.default_flag_accepts[idx],
-            )
-        else:
-            return (
-                self.features_rejects[idx],
-                None,
-            )
+            return {
+                "features": self.features_accepts[idx],
+                "default_flag": self.default_flag_accepts[idx],
+                "accepted": True,
+            }
+
+        return {
+            "features": self.features_rejects[idx],
+            "default_flag": None,
+            "accepted": False,
+        }
 
 
 
