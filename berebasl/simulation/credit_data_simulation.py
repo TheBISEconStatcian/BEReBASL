@@ -739,49 +739,114 @@ class CreditData(Dataset):
         self.gen_round = torch.cat([self.gen_round, new_gen_round.expand(features_new.size(0))])
 
     def rejects(self, include_gen_round: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        """Return feature observations corresponding to rejected applications.
+
+        This method provides access to the rejected samples without exposing their
+        repayment outcomes, ensuring no label leakage during reject inference
+        experiments. Optionally, the generation round of each rejected sample can
+        also be returned.
+
+        Args:
+            include_gen_round (bool, optional):
+                If ``True``, returns both ``features`` and ``gen_round`` for rejected
+                samples. If ``False``, returns only ``features``.
+                Defaults to ``False``.
+
+        Returns:
+            Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+                - If ``include_gen_round=False``: ``features_rejects``  
+                - If ``include_gen_round=True``: ``(features_rejects, gen_round_rejects)``
+        """
         rejects_lidx = ~self.accepted
         if include_gen_round:
             return self.features[rejects_lidx], self.gen_round[rejects_lidx]
-        
         return self.features[rejects_lidx]
+
     
     def accepts(self, include_gen_round: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
-        if include_gen_round:
-            return self.features[self.accepted_idx], self.default_flag[self.accepted_idx], self.gen_round[self.accepted_idx]
+        """Return observations corresponding to accepted applications.
 
+        Accepted samples include both features and repayment outcomes. The generation
+        round can optionally be included.
+
+        Args:
+            include_gen_round (bool, optional):
+                If ``True``, returns ``(features, default_flag, gen_round)`` for accepted
+                samples. If ``False``, returns ``(features, default_flag)``.
+                Defaults to ``False``.
+
+        Returns:
+            Tuple[torch.Tensor, ...]:
+                - If ``include_gen_round=False``: ``(features_accepts, default_flag_accepts)``
+                - If ``include_gen_round=True``: ``(features_accepts, default_flag_accepts, gen_round_accepts)``
+        """
+        if include_gen_round:
+            return (
+                self.features[self.accepted_idx],
+                self.default_flag[self.accepted_idx],
+                self.gen_round[self.accepted_idx],
+            )
         return self.features[self.accepted_idx], self.default_flag[self.accepted_idx]
+
     
     def unbiased_obs(self, include_gen_round: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
-        return self.features, self.default_flag, self.gen_round
+        """Return the full dataset without any acceptance-based filtering.
+
+        This method exposes all observations exactly as stored, making it suitable
+        for analyses that require the complete underlying sample distribution.
+
+        Args:
+            include_gen_round (bool, optional):
+                If ``True``, returns ``(features, default_flag, gen_round)``.
+                If ``False``, returns ``(features, default_flag)``.
+                Defaults to ``False``.
+
+        Returns:
+            Tuple[torch.Tensor, ...]:
+                - If ``include_gen_round=False``: ``(features, default_flag)``
+                - If ``include_gen_round=True``: ``(features, default_flag, gen_round)``
+        """
+        if include_gen_round:
+            return self.features, self.default_flag, self.gen_round
+        return self.features, self.default_flag
+
 
     def all_obs(
-            self,
-            transform: Callable[[torch.Tensor, torch.Tensor, torch.Tensor], Any] = (
-                lambda features, default_flag, accepted, gen_round: ((features, default_flag), accepted, gen_round)
-            ),
-            return_copies : bool = True,
+        self,
+        transform: Callable[[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], Any] = (
+            lambda features, default_flag, accepted, gen_round: (
+                (features, default_flag),
+                accepted,
+                gen_round,
+            )
+        ),
+        return_copies: bool = True,
     ) -> Any:
-        """Return the entire dataset tensors, optionally restricted and transformed.
+        """Return all dataset tensors, optionally transformed or cloned.
 
-        Retrieves either the full dataset or only accepted samples. A custom
-        ``transform`` function can shape the output, and tensors can be cloned
-        to avoid side effects.
+        This method provides direct access to the complete internal tensors:
+        ``features``, ``default_flag``, ``accepted``, and ``gen_round``. A custom
+        ``transform`` function can be supplied to reshape or package the output.
+        Tensors may be cloned to avoid accidental mutation of internal state.
 
         Args:
             transform (Callable, optional):
-                Callable applied to the retrieved tensors. The callable receives
-                ``(features, default_flag, gen_round)`` and returns any object.
-                Defaults to ``lambda features, default_flag, gen_round: ((features, default_flag), gen_round)``.
+                A callable receiving ``(features, default_flag, accepted, gen_round)``
+                and returning any desired object. Defaults to a function returning
+                ``((features, default_flag), accepted, gen_round)``.
             return_copies (bool, optional):
-                If ``True``, returns cloned tensors to prevent mutation of internal
-                state by downstream code. Defaults to ``True``.
+                If ``True``, returns cloned tensors to prevent downstream code from
+                modifying the dataset's internal state. Defaults to ``True``.
 
         Returns:
-            Any: Output of the ``transform`` applied to the selected tensors.
+            Any:
+                The output of the ``transform`` function applied to the dataset tensors.
         """
         members_to_retrieve = ["features", "default_flag", "accepted", "gen_round"]
-        features, default_flag, accepted, gen_round = [(getattr(self, member).detach().clone() if return_copies else getattr(self, member)) 
-                                                       for member in members_to_retrieve]
+        features, default_flag, accepted, gen_round = [
+            getattr(self, member).detach().clone() if return_copies else getattr(self, member)
+            for member in members_to_retrieve
+        ]
 
         return transform(features, default_flag, accepted, gen_round)
 
