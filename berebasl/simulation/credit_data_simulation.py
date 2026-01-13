@@ -1185,11 +1185,18 @@ class CreditData(Dataset):
             "gen_round": gen_round,
         }
 
+    # -------------------------------------------------------------------------
+    # Diagnostics
+    # -------------------------------------------------------------------------
+
     def data_stats(self) -> Dict[str, Union[float, int]]:
         """Compute descriptive statistics of the current dataset.
 
         The statistics are based on the acceptance flags and default outcomes and
-        are computed across all samples currently stored in the dataset.
+        are computed across all samples currently stored in the dataset. In the
+        simulation setting, default outcomes for rejected applications are also
+        observed and are used here purely for diagnostic purposes. In real-world
+        reject inference, such labels would typically be unobserved.
 
         Returns:
             Dict[str, Union[float, int]]:
@@ -1197,7 +1204,8 @@ class CreditData(Dataset):
                     - ``sample_size``: Total number of observations.
                     - ``accept_ratio``: Fraction of accepted applications among all observations.
                     - ``bad_ratio_accepts``: Default rate among accepted applications.
-                    - ``bad_ratio_rejects``: Default rate among rejected applications.
+                    - ``bad_ratio_rejects``: Default rate among rejected applications
+                      (simulation-only quantity).
                     - ``bad_ratio_unbiased``: Overall default rate across all observations.
 
         Raises:
@@ -1206,17 +1214,22 @@ class CreditData(Dataset):
                 the corresponding unbiased bad rate.
         """
         bads_count_among_accepts = self.default_flag[self.accepted_idx].sum().item()
-        bads_count_among_rejects = self.default_flag[~self.accepted].sum().item()
+        bads_count_among_rejects = self.default_flag[self.reject_idx].sum().item()
         all_obs_count = self.count_all
 
         stats = {
-            "sample_size" : all_obs_count,
-            "accept_ratio" : self.count_accepts / all_obs_count,
-            "bad_ratio_accepts" : float("nan") if self.count_accepts == 0 else bads_count_among_accepts / self.count_accepts,
-            "bad_ratio_rejects" : float("nan") if self.count_rejects == 0 else bads_count_among_rejects / self.count_rejects,
-            "bad_ratio_unbiased" : (bads_count_among_accepts + bads_count_among_rejects) / all_obs_count # assumes there is at least one reject or accept
+            "sample_size": all_obs_count,
+            "accept_ratio": self.count_accepts / all_obs_count,
+            "bad_ratio_accepts": float("nan")
+            if self.count_accepts == 0
+            else bads_count_among_accepts / self.count_accepts,
+            "bad_ratio_rejects": float("nan")
+            if self.count_rejects == 0
+            else bads_count_among_rejects / self.count_rejects,
+            "bad_ratio_unbiased": (bads_count_among_accepts + bads_count_among_rejects)
+            / all_obs_count,
         }
-        
+
         return stats
 
 
