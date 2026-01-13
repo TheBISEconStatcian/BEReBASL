@@ -1049,44 +1049,7 @@ class CreditData(Dataset):
         return self.features, self.default_flag
 
 
-    def all_obs(
-        self,
-        transform: Callable[[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], Any] = (
-            lambda features, default_flag, accepted, gen_round: (
-                (features, default_flag),
-                accepted,
-                gen_round,
-            )
-        ),
-        return_copies: bool = True,
-    ) -> Any:
-        """Return all dataset tensors, optionally transformed or cloned.
-
-        This method provides direct access to the complete internal tensors:
-        ``features``, ``default_flag``, ``accepted``, and ``gen_round``. A custom
-        ``transform`` function can be supplied to reshape or package the output.
-        Tensors may be cloned to avoid accidental mutation of internal state.
-
-        Args:
-            transform (Callable, optional):
-                A callable receiving ``(features, default_flag, accepted, gen_round)``
-                and returning any desired object. Defaults to a function returning
-                ``((features, default_flag), accepted, gen_round)``.
-            return_copies (bool, optional):
-                If ``True``, returns cloned tensors to prevent downstream code from
-                modifying the dataset's internal state. Defaults to ``True``.
-
-        Returns:
-            Any:
-                The output of the ``transform`` function applied to the dataset tensors.
-        """
-        members_to_retrieve = ["features", "default_flag", "accepted", "gen_round"]
-        features, default_flag, accepted, gen_round = [
-            getattr(self, member).detach().clone() if return_copies else getattr(self, member)
-            for member in members_to_retrieve
-        ]
-
-        return transform(features, default_flag, accepted, gen_round)
+    
 
     def __len__(self) -> int:
         """Number of samples available under the current retrieval policy.
