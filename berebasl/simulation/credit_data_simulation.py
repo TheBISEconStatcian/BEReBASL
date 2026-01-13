@@ -1014,6 +1014,10 @@ class CreditData(Dataset):
             [self.gen_round, new_gen_round.expand(features_new.size(0))]
         )
 
+    # -------------------------------------------------------------------------
+    # Accessors
+    # -------------------------------------------------------------------------
+
     def rejects(self, include_gen_round: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """Return feature observations corresponding to rejected applications.
 
