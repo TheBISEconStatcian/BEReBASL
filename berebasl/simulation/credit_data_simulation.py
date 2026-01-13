@@ -4,15 +4,7 @@ import torch
 
 from typing import Any, Callable, Dict, Optional, Tuple, Union
 
-import os
-import sys
-
-current_file_dir = os.path.dirname(os.path.abspath(__file__))
-proj_root_path = os.path.abspath(os.path.join(current_file_dir, ".."))
-if proj_root_path not in sys.path:
-    sys.path.append(proj_root_path)
-
-from simulation.gaussian_mixture import (
+from berebasl.simulation.gaussian_mixture import (
     eigen_decomp_proj_to_pd,
     GaussianMixture,
     random_vcov_matrix
