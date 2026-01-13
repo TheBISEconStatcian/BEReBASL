@@ -870,13 +870,21 @@ class CreditData(Dataset):
         
         if accepted_initial.dim() != 1:
             raise ValueError("accepted_initial needs to be one dimensional")
-        
+
+        if retrieval_mode not in ("accepts", "rejects", "unbiased"):
+            raise ValueError('retrieval_mode must be one of "accepts", "rejects", "unbiased"')
+
         self.features = features_initial.detach().clone()
         self.default_flag = default_flag_initial.detach().clone().to(self.features.dtype)
         self.accepted = accepted_initial.detach().clone().to(bool)
-        self.accepted_idx = torch.nonzero(self.accepted)
-        
-        self.gen_round = torch.tensor(0, dtype=torch.long, device=features_initial.device).expand(features_initial.size(0))
+
+        # Cache indices for accepts and rejects as 1D tensors
+        self.accepted_idx = torch.nonzero(self.accepted).flatten()
+        self.reject_idx = torch.nonzero(~self.accepted).flatten()
+
+        self.gen_round = torch.tensor(
+            0, dtype=torch.long, device=features_initial.device
+        ).expand(features_initial.size(0))
 
         self.retrieval_mode = retrieval_mode
 
