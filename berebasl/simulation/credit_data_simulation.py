@@ -888,7 +888,11 @@ class CreditData(Dataset):
 
         self.retrieval_mode = retrieval_mode
 
-    def to(self, device : torch.device):
+    # -------------------------------------------------------------------------
+    # Device handling
+    # -------------------------------------------------------------------------
+
+    def to(self, device: torch.device):
         """Move all internal tensors to a target device.
 
         Args:
@@ -898,7 +902,7 @@ class CreditData(Dataset):
         Returns:
             CreditData: The dataset instance with tensors moved to ``device``.
         """
-        for var in ["features", "default_flag", "accepted_idx", "accepted", "gen_round"]:
+        for var in ["features", "default_flag", "accepted_idx", "reject_idx", "accepted", "gen_round"]:
             setattr(self, var, getattr(self, var).to(device))
 
         return self
