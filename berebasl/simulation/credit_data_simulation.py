@@ -823,9 +823,9 @@ class CreditData(Dataset):
 
     This dataset stores applicant features, default flags (binary repayment outcome),
     acceptance indicators, and per-sample generation round identifiers. It supports
-    retrieval of either the full dataset or only accepted applications, controlled
-    via a flag. The class is thought for dynamic expanding per generation round the
-    observed data.
+    retrieval of either the full dataset, only accepted applications, or only
+    rejected applications, controlled via a retrieval mode. The class is designed
+    for dynamically expanding the observed data per generation round.
 
     Args:
         features_initial (torch.Tensor):
@@ -835,19 +835,25 @@ class CreditData(Dataset):
             and ``1`` = default. Values are expected to be in ``{0, 1}``.
         accepted_initial (torch.Tensor):
             Shape ``(n_samples,)``. Boolean acceptance status of applications.
-        retrieval_mode (Literal["accepts", "rejects", "unbiased"], optional) default "accepts":
-            If ``True``, dataset yields only accepted applications. Defaults to ``True``.
+        retrieval_mode (Literal["accepts", "rejects", "unbiased"], optional):
+            Retrieval mode for indexing. ``"accepts"`` yields only accepted
+            applications, ``"rejects"`` yields only rejected applications, and
+            ``"unbiased"`` yields all observations. Defaults to ``"accepts"``.
 
     Raises:
-        ValueError: If input tensors are on different devices or have incompatible shapes.
+        ValueError:
+            If input tensors are on different devices, have incompatible shapes,
+            if ``accepted_initial`` is not one-dimensional, or if
+            ``retrieval_mode`` is not recognized.
 
     Attributes:
         features (torch.Tensor): Applicant features across generations.
         default_flag (torch.Tensor): Repayment outcomes across generations.
         accepted (torch.Tensor): Boolean acceptance flags per sample.
-        accepted_idx (torch.Tensor): Indices of accepted applications.
+        accepted_idx (torch.Tensor): Indices of accepted applications (1D).
+        reject_idx (torch.Tensor): Indices of rejected applications (1D).
         gen_round (torch.Tensor): Generation round index for each sample.
-        retrieve_only_accepted (bool): Whether retrieval is restricted to accepted samples.
+        retrieval_mode (str): Current retrieval mode.
     """
     def __init__(
             self, 
