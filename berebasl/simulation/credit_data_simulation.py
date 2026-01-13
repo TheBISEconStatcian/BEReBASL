@@ -1043,8 +1043,9 @@ class CreditData(Dataset):
             return self.features[self.reject_idx], self.gen_round[self.reject_idx]
         return self.features[self.reject_idx]
 
-    
-    def accepts(self, include_gen_round: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
+    def accepts(
+        self, include_gen_round: bool = False
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Return observations corresponding to accepted applications.
 
         Accepted samples include both features and repayment outcomes. The generation
@@ -1069,8 +1070,9 @@ class CreditData(Dataset):
             )
         return self.features[self.accepted_idx], self.default_flag[self.accepted_idx]
 
-    
-    def unbiased_obs(self, include_gen_round: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
+    def unbiased_obs(
+        self, include_gen_round: bool = False
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Return the full dataset without any acceptance-based filtering.
 
         This method exposes all observations exactly as stored, making it suitable
