@@ -738,6 +738,14 @@ class CreditData(Dataset):
         new_gen_round = self.last_gen_round + 1
         self.gen_round = torch.cat([self.gen_round, new_gen_round.expand(features_new.size(0))])
 
+    @property
+    def rejects(self) -> torch.Tensor:
+        return self.features[~self.accepted]
+    
+    @property
+    def accepts(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        return self.features[self.accepted_idx], self.default_flag[self.accepted_idx]
+
     def get_all_obs(
             self,
             retrieve_only_accepted : Optional[bool] = None,
