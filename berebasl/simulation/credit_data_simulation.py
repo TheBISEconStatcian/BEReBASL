@@ -1018,7 +1018,9 @@ class CreditData(Dataset):
     # Accessors
     # -------------------------------------------------------------------------
 
-    def rejects(self, include_gen_round: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    def rejects(
+        self, include_gen_round: bool = False
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """Return feature observations corresponding to rejected applications.
 
         This method provides access to the rejected samples without exposing their
@@ -1037,10 +1039,9 @@ class CreditData(Dataset):
                 - If ``include_gen_round=False``: ``features_rejects``  
                 - If ``include_gen_round=True``: ``(features_rejects, gen_round_rejects)``
         """
-        rejects_lidx = ~self.accepted
         if include_gen_round:
-            return self.features[rejects_lidx], self.gen_round[rejects_lidx]
-        return self.features[rejects_lidx]
+            return self.features[self.reject_idx], self.gen_round[self.reject_idx]
+        return self.features[self.reject_idx]
 
     
     def accepts(self, include_gen_round: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
