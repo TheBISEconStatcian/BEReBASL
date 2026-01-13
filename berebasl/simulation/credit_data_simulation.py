@@ -1093,11 +1093,11 @@ class CreditData(Dataset):
             return self.features, self.default_flag, self.gen_round
         return self.features, self.default_flag
 
-    def current_obs(
+    def to_sample_dataset(
         self,
         retrieve_only_accepted: bool = True,
     ) -> CreditDataSample:
-        """Return a leakage-safe snapshot of the current dataset state.
+        """Create a leakage-safe sample dataset from current observations.
 
         This method constructs a :class:`CreditDataSample` instance from the
         dataset's present observations. Rejected applications contribute only
