@@ -297,14 +297,12 @@ class GaussianMixture:
         if self.is_mixture:
             self.weights_dist = torch.distributions.Categorical(self.weights_dist.probs.to(device))
 
-        if seed is None:
-            if set_same_initial_seed:
-                self.rng = torch.Generator(device=device)
-                self.rng.manual_seed(self.rng.initial_seed())
-            else:
-                self.rng = torch.Generator(device=device)
-        else:
-            self.rng = torch.Generator(device=device)
+        if seed is None and set_same_initial_seed:
+            seed = self.rng.initial_seed()
+
+        self.rng = torch.Generator(device=device)
+
+        if seed is not None:
             self.rng.manual_seed(seed)
 
         return self
