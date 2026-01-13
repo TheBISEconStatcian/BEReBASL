@@ -738,17 +738,24 @@ class CreditData(Dataset):
         new_gen_round = self.last_gen_round + 1
         self.gen_round = torch.cat([self.gen_round, new_gen_round.expand(features_new.size(0))])
 
-    @property
-    def rejects(self) -> torch.Tensor:
-        return self.features[~self.accepted]
+    def rejects(self, include_gen_round: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        rejects_lidx = ~self.accepted
+        if include_gen_round:
+            return self.features[rejects_lidx], self.gen_round[rejects_lidx]
+        
+        return self.features[rejects_lidx]
     
-    @property
-    def accepts(self) -> Tuple[torch.Tensor, torch.Tensor]:
-        return self.features[self.accepted_idx], self.default_flag[self.accepted_idx]
+    def accepts(self, include_gen_round: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
+        if include_gen_round:
+            return self.features[self.accepted_idx], self.default_flag[self.accepted_idx], self.gen_round[self.accepted_idx]
 
-    def get_all_obs(
+        return self.features[self.accepted_idx], self.default_flag[self.accepted_idx]
+    
+    def unbiased_obs(self, include_gen_round: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
+        return self.features, self.default_flag, self.gen_round
+
+    def all_obs(
             self,
-            retrieve_only_accepted : Optional[bool] = None,
             transform: Callable[[torch.Tensor, torch.Tensor, torch.Tensor], Any] = (
                 lambda features, default_flag, accepted, gen_round: ((features, default_flag), accepted, gen_round)
             ),
@@ -761,9 +768,6 @@ class CreditData(Dataset):
         to avoid side effects.
 
         Args:
-            retrieve_only_accepted (bool, optional):
-                If ``True``, restricts retrieval to accepted samples. If ``None``,
-                uses ``self.retrieve_only_accepted``. Defaults to ``None``.
             transform (Callable, optional):
                 Callable applied to the retrieved tensors. The callable receives
                 ``(features, default_flag, gen_round)`` and returns any object.
@@ -775,19 +779,11 @@ class CreditData(Dataset):
         Returns:
             Any: Output of the ``transform`` applied to the selected tensors.
         """
-        if retrieve_only_accepted is None:
-            retrieve_only_accepted = self.retrieve_only_accepted
-
         members_to_retrieve = ["features", "default_flag", "accepted", "gen_round"]
+        features, default_flag, accepted, gen_round = [(getattr(self, member).detach().clone() if return_copies else getattr(self, member)) 
+                                                       for member in members_to_retrieve]
 
-        if retrieve_only_accepted:
-            retriever = lambda member : getattr(self, member)[self.accepted_idx].squeeze(1)
-        else:
-            retriever = lambda member : getattr(self, member)
-        
-        features, default_flag, accepted, gen_round = [(retriever(member).detach().clone() if return_copies else retriever(member)) for member in members_to_retrieve]
-
-        return transform(features, default_flag, gen_round)
+        return transform(features, default_flag, accepted, gen_round)
 
     def __len__(self) -> int:
         """Number of samples available under the current retrieval policy.
