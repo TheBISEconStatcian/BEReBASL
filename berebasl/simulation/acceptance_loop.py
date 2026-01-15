@@ -1,3 +1,5 @@
+import torch
+
 def accept_based_on_top_percentent_of_arbitrary_var(
         features : torch.Tensor, 
         default_flag : torch.Tensor, 
@@ -5,7 +7,7 @@ def accept_based_on_top_percentent_of_arbitrary_var(
         top_percent : float,
         default_value : int = 1, # 1 or 0
         min_count_bads : int = 4
-):
+) -> torch.Tensor:
     if var_for_rule >= features.shape[1]:
         raise ValueError("var_for_rule outside of index")
     
