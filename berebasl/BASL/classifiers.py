@@ -114,11 +114,13 @@ class TorchLogistic(nn.Module):
         Returns
         -------
         torch.Tensor
-            Logits of shape ``[..., 1]`` for binary classification or
+            Logits of shape ``[...]`` for binary classification or
             ``[..., n_classes]`` for multinomial classification.
         """
         # X has shape [..., n_features]
         logits = self.lin_estimator(X) # [..., n_logits_output]
+        if self.n_classes == 2:
+            return logits.flatten(-2,-1)
         return logits
     
     def predict_proba(self, X : torch.Tensor) -> torch.Tensor:
@@ -149,7 +151,7 @@ class TorchLogistic(nn.Module):
         # X has shape [..., n_features]
         logits = self.forward(X) # [..., n_logits_output]
         if self.n_classes == 2:
-            p1 = torch.sigmoid(logits) # [..., 1]
+            p1 = torch.sigmoid(logits).unsqueeze(-1) # [..., 1]
             p0 = 1 - p1 # [..., 1]
             probs = torch.cat([p0, p1], dim=-1) # [..., 2]
         else:
