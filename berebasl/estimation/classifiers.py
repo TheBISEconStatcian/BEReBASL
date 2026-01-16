@@ -4,7 +4,55 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from typing import Optional
+from typing import Callable, Optional
+
+def function_has_expected_signature(fun : Callable, count_params : int):
+    sig = inspect.signature(fun)
+
+    parameter_count = len(sig.parameters)
+
+    if parameter_count < count_params:
+        return False
+    
+    if parameter_count == count_params:
+        return True
+    
+    return sum([p.default is inspect._empty for p in sig.parameters.values()]) <= count_params
+
+class Classifier:
+    def __init__(
+            self,
+            model,
+            predict_model_probs : Callable[["model", torch.Tensor], torch.Tensor],
+            train_model : Callable[["model", torch.Tensor, torch.Tensor], None]
+    ):
+        self.model = model
+        self.predict_model_probs = predict_model_probs
+        self.train_model = train_model
+
+    def fit(self, features : torch.Tensor, labels : torch.Tensor) -> None:
+        self.train_model(self.model, features, labels)
+
+    def predict_proba(self, features : torch.Tensor) -> torch.Tensor:
+        # with features.shape = [..., k], it should
+        # return a tensor of shape [..., 2] containing the predicted
+        # probabilities of label = 0, 1 respectively along the last axis
+        return self.predict_model_probs(self.model, features)
+
+    @staticmethod
+    def obj_has_needed_funs(obj, member_fun : str, count_params : int):
+        expected_funs_with_param_count = [
+            ("fit", 2),
+            ("predict_proba")
+        ]
+        for fun_name, param_count in expected_funs_with_param_count:
+            if not hasattr(obj, fun_name):
+                return False
+            
+            if not function_has_expected_signature(getattr(obj, fun_name), param_count):
+                return False
+            
+        return True
 
 class TorchLogistic(nn.Module):
     r"""
