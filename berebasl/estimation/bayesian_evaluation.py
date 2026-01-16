@@ -3,27 +3,27 @@ from typing import Optional, Callable
 import torch
 
 from berebasl.simulation.credit_data_simulation import CreditDataSample
+from berebasl.estimation.classifiers import Classifier
 
 class BayesianMetric:
     # Only implemented for binary classification right now
     # multiclass classification should be straight forward from here
     def __init__(
             self,
-            model,
+            model : Classifier,
             min_iterations : int,
             max_iterations : int,
             epsilon : float,
             metric : Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-            predict_model : Callable[["self.model", torch.Tensor], torch.Tensor] = lambda model, features_rejects : model.predict_proba(features_rejects)[..., 1],
             seed : Optional[int] = 1807,
             device : Optional[torch.device] = None
     ):
+        if not Classifier.obj_has_needed_funs(model):
+            raise ValueError("Model has not the fit and predict_proba functions with the expected signature")
         self.model = model
         self.min_iterations = int(min_iterations)
         self.max_iterations = int(max_iterations)
         self.epsilon = float(epsilon)
-
-        self.predict_model = predict_model
         self.metric = metric
 
         if device is None:
@@ -46,18 +46,17 @@ class BayesianMetric:
             self.rng.manual_seed(seed)
 
 
-    def model_prediction(self, features_rejects):
-        return self.predict_model(self.model, features_rejects)
+    def predict_proba_model(self, features):
+        return self.model.predict_proba(features)[..., 1]
     
-    def update_model(
+    def change_model(
             self, 
-            new_model: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None, 
-            new_prediction_model: Optional[Callable[["self.model", torch.Tensor], torch.Tensor]] = None,
+            new_model: Classifier
         ) -> None:
-        if new_model is not None:
-            self.model=new_model
-        if new_prediction_model is not None:
-            self.predict_model = new_prediction_model
+        if not Classifier.obj_has_needed_funs(new_model):
+            raise ValueError("Model has not the fit and predict_proba functions with the expected signature")
+        
+        self.model = new_model
     
     def sample_prior(self, prior_probs : torch.Tensor) -> torch.Tensor:
         return torch.bernoulli(prior_probs, generator=self.rng)
@@ -77,8 +76,9 @@ class BayesianMetric:
         # data.features_accepts has shape [..., N, k] with k being the amount of features
         # just like data.features_rejects. Then data.default_flag_accepts.shape = [..., N]
         # so the same leading dimensions as the features
-        preds_accept = self.model_prediction(data.features_accepts)
-        preds_reject = self.model_prediction(data.features_rejects)
+        
+        preds_accept = self.predict_proba_model(data.features_accepts)
+        preds_reject = self.predict_proba_model(data.features_rejects)
 
         joint_preds = torch.cat([preds_accept, preds_reject], dim=-1)
 
@@ -114,3 +114,74 @@ class BayesianMetric:
                 break
 
         return metric_mean_up_to_last_it
+    
+
+def batched_auroc(
+    preds: torch.Tensor,
+    targets: torch.Tensor,
+) -> torch.Tensor:
+    """
+    Batched AUROC computed via explicit ROC construction with
+    grouped thresholds and trapezoidal integration.
+
+    AUROC is computed independently along the last dimension,
+    treating all leading dimensions as batch dimensions
+    (analoguous to nn.Linear-style semantics).
+
+    Matches torchmetrics.BinaryAUROC semantics.
+
+    Args:
+        preds:   Tensor of shape (*batch_dims, N), prediction scores
+        targets: Tensor of shape (*batch_dims, N), binary labels {0,1}
+
+    Returns:
+        auc: Tensor of shape (*batch_dims), AUROC per mini-dataset
+    """
+    if preds.shape != targets.shape:
+        raise ValueError("preds and targets must have the same shape")
+
+    *batch_dims, N = preds.shape
+    device = preds.device
+
+    # Flatten batch dimensions
+    B = int(torch.tensor(batch_dims).prod()) if batch_dims else 1
+    preds = preds.reshape(B, N)
+    targets = targets.reshape(B, N)
+
+    # Sort by descending score
+    order = preds.argsort(dim=-1, descending=True)
+    sorted_preds = preds.gather(dim=-1, index=order)
+    sorted_targets = targets.gather(dim=-1, index=order)
+
+    # Count positives / negatives
+    P = sorted_targets.sum(dim=-1)           # [B]
+    Q = N - P                                # [B]
+
+    # Cumulative true / false positives
+    tps = torch.cumsum(sorted_targets, dim=-1)
+    fps = torch.cumsum(1 - sorted_targets, dim=-1)
+
+    # Identify score changes (grouped thresholds)
+    score_change = torch.ones_like(sorted_preds, dtype=torch.bool)
+    score_change[:, 1:] = sorted_preds[:, 1:] != sorted_preds[:, :-1]
+
+    # Select ROC vertices
+    tps = tps[score_change].view(B, -1)
+    fps = fps[score_change].view(B, -1)
+
+    # Normalize to TPR / FPR
+    tpr = tps / P.unsqueeze(-1)
+    fpr = fps / Q.unsqueeze(-1)
+
+    # Explicit (0,0) start point
+    zero = torch.zeros(B, 1, device=device)
+    tpr = torch.cat([zero, tpr], dim=-1)
+    fpr = torch.cat([zero, fpr], dim=-1)
+
+    # Trapezoidal integration
+    auc = torch.trapz(tpr, fpr, dim=-1)
+
+    # Reshape back to batch dimensions
+    auc = auc.reshape(*batch_dims) if batch_dims else auc[0] # get 0 dim tensor in this case
+
+    return auc
