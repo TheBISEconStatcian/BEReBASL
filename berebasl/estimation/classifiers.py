@@ -40,10 +40,10 @@ class Classifier:
         return self.predict_model_probs(self.model, features)
 
     @staticmethod
-    def obj_has_needed_funs(obj, member_fun : str, count_params : int):
+    def obj_has_needed_funs(obj):
         expected_funs_with_param_count = [
             ("fit", 2),
-            ("predict_proba")
+            ("predict_proba", 1)
         ]
         for fun_name, param_count in expected_funs_with_param_count:
             if not hasattr(obj, fun_name):
