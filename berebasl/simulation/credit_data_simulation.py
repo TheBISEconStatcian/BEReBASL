@@ -653,6 +653,30 @@ class CreditDataSample(Dataset):
             self.rng.manual_seed(seed)
 
     # -------------------------------------------------------------------------
+    # Properties
+    # -------------------------------------------------------------------------
+
+    @property
+    def count_accepts(self) -> int:
+        """Number of accepted applications in the dataset.
+
+        Returns:
+            int:
+                Count of samples where the acceptance flag is ``True``.
+        """
+        return self.features_accepts.size(0)
+    
+    @property
+    def count_rejects(self) -> int:
+        """Number of accepted applications in the dataset.
+
+        Returns:
+            int:
+                Count of samples where the acceptance flag is ``True``.
+        """
+        return self.features_rejects.size(0)
+
+    # -------------------------------------------------------------------------
     # RNG utilities
     # -------------------------------------------------------------------------
 
@@ -707,7 +731,7 @@ class CreditDataSample(Dataset):
         return self
 
     # -------------------------------------------------------------------------
-    # Train/test split
+    # (Reject) Inference related
     # -------------------------------------------------------------------------
 
     def _generate_test_mask(
@@ -777,6 +801,47 @@ class CreditDataSample(Dataset):
         )
 
         return train_sample, test_sample
+
+    def label_rejects(
+            self, 
+            infered_labels : torch.Tensor, 
+            mask_infered_rej_lbls : torch.Tensor,
+            inplace : bool = False,
+            safety_checks : bool = True
+    ) -> Union[None, "CreditDataSample"]:
+        #lidx_infered refers to the index across the rejected observations
+        if safety_checks:
+            if mask_infered_rej_lbls.dtype != torch.bool:
+                raise ValueError("mask_infered_rej_lbls should be of type bool")
+            if mask_infered_rej_lbls.dim() != 1 and mask_infered_rej_lbls.size(0) != self.count_rejects:
+                raise ValueError("mask_infered_rej_lbls has wrong shape. Expected: [self.count_rejects,]")
+            true_elements_lidxs = mask_infered_rej_lbls.sum().item()
+            if true_elements_lidxs > self.count_rejects:
+                raise ValueError("There are more true elements in mask_infered_rej_lbls as there are rejected observations")
+            if infered_labels.dtype != torch.bool:
+                raise ValueError("infered_labels need to be of boolean type")
+            if infered_labels.dim() != 1 and true_elements_lidxs != infered_labels.size(0):
+                raise ValueError("infered_labels has a wrong shape, expected : [count_true_elements_in_mask_infered_rej_lbls,]")
+            
+        with torch.no_grad():
+            filtered_feats_rej = self.features_rejects[~mask_infered_rej_lbls]
+            inferred_feats_rej = self.features_rejects[mask_infered_rej_lbls]
+
+            new_features_accept = torch.cat([self.features_accepts, inferred_feats_rej])
+            new_default_flags = torch.cat([self.default_flag_accepts, infered_labels])
+
+        if inplace:
+            self.features_accepts = new_features_accept
+            self.features_rejects = filtered_feats_rej
+            self.default_flag_accepts = new_default_flags
+            return
+
+        return CreditDataSample(
+            features_rejects=filtered_feats_rej,
+            features_accepts=new_features_accept,
+            default_flag_accepts=new_default_flags,
+            retrieve_only_accepted=self.retrieve_only_accepted
+        )
 
     # -------------------------------------------------------------------------
     # Dataset interface
