@@ -20,7 +20,7 @@ import torch
 # ============================
 # Local project imports
 # ============================
-from berebasl.BASL.classifiers import TorchLogistic
+from berebasl.estimation.classifiers import TorchLogistic
 
 # ============================
 # Global configuration
