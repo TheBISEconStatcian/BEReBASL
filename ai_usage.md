@@ -11,6 +11,7 @@ For each used chat a link is provided to be called if wished. I always add a sma
 
 - [Understanding and implementation of GaussianMixture sampling](https://chatgpt.com/share/69411a52-58d0-8008-9a1e-fc2d0abce3a6)
 - [`torch.device` nuances and help on docstring documentation.](https://chatgpt.com/share/69411b62-403c-8008-ad16-5a7a6d3890d0)
+- [Implementation of batched ROC-AUC to match torch.metrics.BinaryAUROC behavior](https://chatgpt.com/share/696a9ebb-da1c-8008-b3bc-c0a2a0b621ea)
 
 ## Links to `Copilot` usage
 
