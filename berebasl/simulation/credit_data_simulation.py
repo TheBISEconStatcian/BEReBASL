@@ -614,7 +614,8 @@ class CreditDataSample(Dataset):
         features_rejects: torch.Tensor,
         features_accepts: torch.Tensor,
         default_flag_accepts: torch.Tensor,
-        retrieve_only_accepted: bool,
+        ids_rejects : Optional[torch.Tensor] = None,
+        retrieve_only_accepted: bool = True,
         seed: Optional[int] = None,
     ):
         """Initialize a leakage-safe credit dataset sample.
@@ -640,9 +641,9 @@ class CreditDataSample(Dataset):
               train/test splitting and permutations.
             - The RNG is device-specific and is recreated when calling :meth:`to`.
         """
-        self.features_rejects = features_rejects
-        self.features_accepts = features_accepts
-        self.default_flag_accepts = default_flag_accepts
+        self.features_unlabeled = features_rejects
+        self.features_labeled = features_accepts
+        self.labels = default_flag_accepts
 
         self.retrieve_only_accepted = retrieve_only_accepted
 
@@ -651,6 +652,20 @@ class CreditDataSample(Dataset):
         self.rng = torch.Generator(device=device)
         if seed is not None:
             self.rng.manual_seed(seed)
+
+        # Logic to keep track of observations which were labeled
+        rej_batch_shape = features_rejects.shape[:-1]
+        if ids_rejects is None:
+            count_rej_obs = torch.prod(torch.tensor(rej_batch_shape))
+            self._rej_ids = torch.arange(count_rej_obs).reshape(*rej_batch_shape)
+        else:
+            assert ids_rejects.shape == rej_batch_shape, "ids_rejects has the wrong shape. Should be features_rejects.shape[:-1]"
+            self._rej_ids = ids_rejects
+
+        self.mask_inferred_rejs = torch.full(rej_batch_shape, fill_value=False) # to get ids of rejected where inference was made
+
+        self.acc_batch_shape = features_accepts.shape[:-1]
+        self.mask_inferred_lbls = torch.tensor(False).expand(rej_batch_shape) # to get only inferred labels
 
     # -------------------------------------------------------------------------
     # Properties
@@ -664,7 +679,7 @@ class CreditDataSample(Dataset):
             int:
                 Count of samples where the acceptance flag is ``True``.
         """
-        return self.features_accepts.size(0)
+        return self.features_labeled.size(0)
     
     @property
     def count_rejects(self) -> int:
@@ -674,7 +689,7 @@ class CreditDataSample(Dataset):
             int:
                 Count of samples where the acceptance flag is ``True``.
         """
-        return self.features_rejects.size(0)
+        return self.features_unlabeled.size(0)
 
     # -------------------------------------------------------------------------
     # RNG utilities
@@ -773,29 +788,29 @@ class CreditDataSample(Dataset):
         if not (0.0 <= test_proportion <= 1.0):
             raise ValueError("test_proportion must be between 0 and 1")
 
-        device = self.features_rejects.device
+        device = self.features_unlabeled.device
 
         # Generate masks
         test_mask_rej = self._generate_test_mask(
-            self.features_rejects.size(0), test_proportion, device
+            self.features_unlabeled.size(0), test_proportion, device
         )
         test_mask_acc = self._generate_test_mask(
-            self.features_accepts.size(0), test_proportion, device
+            self.features_labeled.size(0), test_proportion, device
         )
 
         # Slice data
         train_sample = CreditDataSample(
-            features_rejects=self.features_rejects[~test_mask_rej],
-            features_accepts=self.features_accepts[~test_mask_acc],
-            default_flag_accepts=self.default_flag_accepts[~test_mask_acc],
+            features_rejects=self.features_unlabeled[~test_mask_rej],
+            features_accepts=self.features_labeled[~test_mask_acc],
+            default_flag_accepts=self.labels[~test_mask_acc],
             retrieve_only_accepted=self.retrieve_only_accepted,
             seed=self.rng.initial_seed(),
         )
 
         test_sample = CreditDataSample(
-            features_rejects=self.features_rejects[test_mask_rej],
-            features_accepts=self.features_accepts[test_mask_acc],
-            default_flag_accepts=self.default_flag_accepts[test_mask_acc],
+            features_rejects=self.features_unlabeled[test_mask_rej],
+            features_accepts=self.features_labeled[test_mask_acc],
+            default_flag_accepts=self.labels[test_mask_acc],
             retrieve_only_accepted=self.retrieve_only_accepted,
             seed=self.rng.initial_seed(),
         )
@@ -824,16 +839,16 @@ class CreditDataSample(Dataset):
                 raise ValueError("infered_labels has a wrong shape, expected : [count_true_elements_in_mask_infered_rej_lbls,]")
             
         with torch.no_grad():
-            filtered_feats_rej = self.features_rejects[~mask_infered_rej_lbls]
-            inferred_feats_rej = self.features_rejects[mask_infered_rej_lbls]
+            filtered_feats_rej = self.features_unlabeled[~mask_infered_rej_lbls]
+            inferred_feats_rej = self.features_unlabeled[mask_infered_rej_lbls]
 
-            new_features_accept = torch.cat([self.features_accepts, inferred_feats_rej])
-            new_default_flags = torch.cat([self.default_flag_accepts, infered_labels])
+            new_features_accept = torch.cat([self.features_labeled, inferred_feats_rej])
+            new_default_flags = torch.cat([self.labels, infered_labels])
 
         if inplace:
-            self.features_accepts = new_features_accept
-            self.features_rejects = filtered_feats_rej
-            self.default_flag_accepts = new_default_flags
+            self.features_labeled = new_features_accept
+            self.features_unlabeled = filtered_feats_rej
+            self.labels = new_default_flags
             return
 
         return CreditDataSample(
@@ -850,12 +865,12 @@ class CreditDataSample(Dataset):
     @property
     def count_accepts(self) -> int:
         """Number of accepted samples."""
-        return self.features_accepts.size(0)
+        return self.features_labeled.size(0)
 
     @property
     def count_rejects(self) -> int:
         """Number of rejected samples."""
-        return self.features_rejects.size(0)
+        return self.features_unlabeled.size(0)
 
     def __len__(self) -> int:
         """Dataset length under the current retrieval mode."""
@@ -873,13 +888,13 @@ class CreditDataSample(Dataset):
         """
         if self.retrieve_only_accepted:
             return {
-                "features": self.features_accepts[idx],
-                "default_flag": self.default_flag_accepts[idx],
+                "features": self.features_labeled[idx],
+                "default_flag": self.labels[idx],
                 "accepted": True,
             }
 
         return {
-            "features": self.features_rejects[idx],
+            "features": self.features_unlabeled[idx],
             "default_flag": None,
             "accepted": False,
         }
