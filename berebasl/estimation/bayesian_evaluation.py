@@ -77,20 +77,20 @@ class BayesianMetric:
         # just like data.features_rejects. Then data.default_flag_accepts.shape = [..., N]
         # so the same leading dimensions as the features
         
-        preds_accept = self.predict_proba_model(data.features_accepts)
-        preds_reject = self.predict_proba_model(data.features_rejects)
+        preds_accept = self.predict_proba_model(data.features_labeled)
+        preds_reject = self.predict_proba_model(data.features_unlabeled)
 
         joint_preds = torch.cat([preds_accept, preds_reject], dim=-1)
 
         
-        metric_mean_up_to_last_it = torch.full(size = data.default_flag_accepts.shape[:-1], fill_value=0.0)
-        mask_nonconverged = torch.full(size = data.default_flag_accepts.shape[:-1], fill_value=True)
+        metric_mean_up_to_last_it = torch.full(size = data.labels.shape[:-1], fill_value=0.0)
+        mask_nonconverged = torch.full(size = data.labels.shape[:-1], fill_value=True)
 
         should_stop = False
 
         for it_nr in range(1, self.max_iterations + 1):
             reject_pseudo_labels = self.sample_prior(rejects_prior_probs)
-            joint_labels = torch.cat([data.default_flag_accepts, reject_pseudo_labels], dim=-1)
+            joint_labels = torch.cat([data.labels, reject_pseudo_labels], dim=-1)
 
             new_metric = self.metric(joint_preds, joint_labels)
 
