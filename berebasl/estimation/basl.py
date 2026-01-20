@@ -1,12 +1,355 @@
 from sklearn.ensemble import IsolationForest
 import numpy as np
-
-import statsmodels.api as sm
-from statsmodels.genmod import families
-
 import torch
 
-from typing import Union
+from typing import Literal, Optional, Tuple, Union
+
+from berebasl.estimation.bayesian_evaluation import BayesianMetric
+from berebasl.estimation.classifiers import Classifier
+from berebasl.simulation.credit_data_simulation import CreditDataSample
+
+class BASLPartialUnbiaser:
+    filtering_beta : torch.Tensor #filtering_beta in algorithm are both of these
+    weak_learner : Classifier
+    strong_learner : Classifier
+    holdout_percent : float
+    labeling_percent : float
+    multiplier : float
+    max_iterations :int
+    early_stop : bool
+    isolation_forest : IsolationForest
+
+    def __init__(
+            self,
+            filtering_quantiles : dict[str, float], #filtering_beta in algorithm are both of these
+            weak_learner : Classifier,
+            strong_learner : Classifier,
+            holdout_percent : float,
+            sampling_percent : float,
+            label_bads_percent : float, # labeling_percent in R implementation
+            label_goods_percent : float, # labeling_percent / multiplier in R implementation
+            max_iterations :int,
+            early_stop : bool,
+            isolation_forest : IsolationForest,
+            bayesian_metric : BayesianMetric
+    ):
+        self.__class__.check_filtering_quantiles(filtering_quantiles)
+        self.filtering_quantiles = filtering_quantiles
+
+        for learner in [weak_learner, strong_learner]:
+            if not Classifier.obj_has_needed_funs(learner):
+                raise ValueError("weak_learner or strong_learner do not have methods predict_proba and fit as expected")
+        
+        self.weak_learner = weak_learner
+        self.strong_learner = strong_learner
+        self.holdout_percent = float(holdout_percent)
+        self.sampling_percent = float(sampling_percent)
+        self.label_bads_percent = float(label_bads_percent)
+        self.label_goods_percent = float(label_goods_percent)
+
+        members_expected_as_per = ["holdout_percent", "sampling_percent", "label_bads_percent", "label_goods_percent"]
+
+        for member_var in members_expected_as_per:
+            if not (0 <= getattr(self, member_var) <= 1):
+                raise ValueError(f"{member_var} needs to be between 0 and 1")
+
+        self.max_iterations = int(max_iterations)
+        if self.max_iterations < 1:
+            raise ValueError("max_iterations needs to be at least 1")
+        
+        self.early_stop = bool(early_stop)
+        self.isolation_forest = isolation_forest
+        self.bayesian_metric = bayesian_metric
+
+        self.bayesian_metric.change_model(self.strong_learner)
+
+    @staticmethod
+    def check_filtering_quantiles(filtering_quantiles) -> None:
+        if not 0.0 <= filtering_quantiles['lower'] <= 1.0:
+            raise ValueError("filtering_quantiles['lower'] must be in the interval [0, 1].")
+        if not 0.0 <= filtering_quantiles['lower'] <= 1.0:
+            raise ValueError("filtering_quantiles['upper'] must be in the interval [0, 1].")
+        if filtering_quantiles['lower'] >= filtering_quantiles['upper']:
+            raise ValueError(
+                "filtering_quantiles['lower'] must be strictly smaller than filtering_quantiles['upper']."
+            )
+
+    @property
+    def should_filter(self):
+        return (self.filtering_quantiles['lower'] > 0) or (self.filtering_quantiles['upper'] <1)
+    
+    def refit_model(
+            self, 
+            which_one : Literal["strong", "weak"], 
+            features : torch.Tensor, 
+            labels : torch.Tensor
+    ) -> None:
+        model = getattr(self, which_one + "_learner")
+        model.fit(features, labels)
+
+    def predict_proba_model(
+            self, 
+            which_one : Literal["strong", "weak"], 
+            features : torch.Tensor,
+            in_eval_if_possible : bool = False
+    ) -> torch.Tensor:
+        model = getattr(self, which_one + "_learner")
+        if in_eval_if_possible and hasattr(model, "eval"):
+            model.eval()
+        return model.predict_proba(features)[..., 1]
+
+    def self_learn(
+            self,
+            features_accept : torch.Tensor,
+            default_flags_accept : torch.Tensor,
+            features_reject : torch.Tensor,
+            silent : bool = True
+    ) -> torch.Tensor:
+        pass
+
+    def filter_rejects(
+        self,
+        features_rejects: torch.Tensor,
+        return_index: bool = True,
+    ) -> Union[np.ndarray, np.ndarray]:
+        """
+        Filters observations using a two-sided trimming strategy based on
+        Isolation Forest normality scores.
+
+        The function fits an Isolation Forest model on the provided feature
+        matrix and computes the negative anomaly scores via
+        ``IsolationForest.score_samples``. These scores induce a relative
+        normality (similarity) ranking.
+
+        Observations are retained if their score lies within the central
+        quantile interval defined by ``lower_trim_quantile`` and
+        ``upper_trim_quantile``. Consequently, both highly anomalous
+        observations (lower tail) and overly typical observations
+        (upper tail) are removed.
+
+        This procedure corresponds to a two-sided percentile-based filtering
+        scheme as described in Kozodoi et al. (2025), "Fighting Sampling Bias".
+
+        Args:
+            features_rejects (torch.Tensor):
+                Feature matrix of shape ``(n_samples, n_features)``.
+            return_index (bool, optional):
+                If ``True``, return a boolean mask indicating retained
+                observations. If ``False``, return the filtered feature
+                matrix. Defaults to ``True``.
+
+        Returns:
+            torch.Tensor:
+                If ``return_index`` is ``True``, a boolean array of shape
+                ``(n_samples,)`` indicating which observations are retained.
+                Otherwise, a feature matrix containing only the retained
+                observations.
+        """
+        
+        features = features_rejects.detach().numpy()
+        self.isolation_forest.fit(features)
+        normality_scores = self.isolation_forest.score_samples(features)
+
+        lower_score_bound, upper_score_bound = np.quantile(
+            normality_scores,
+            [self.filtering_quantiles["lower"], self.filtering_quantiles["upper"]],
+        )
+
+        keep_mask = (
+                (lower_score_bound <= normality_scores)
+                & (normality_scores <= upper_score_bound)
+        )
+        keep_mask = torch.from_numpy(keep_mask)
+
+        return keep_mask if return_index else features_rejects[keep_mask]
+
+    def bayesian_evaluation( #Next step to implement
+            self,
+            data : CreditDataSample,
+            rejects_prior_probs : torch.Tensor,
+            seed : Optional[int],
+    ) -> torch.Tensor:
+        if seed is not None:
+            self.bayesian_metric.manual_seed(seed)
+
+        return self.bayesian_metric.evaluate(data, rejects_prior_probs)
+    
+    def evaluate_labeled_performance(self, data : CreditDataSample, holdout_data : CreditDataSample) -> torch.Tensor:
+        self.refit_model("strong", data.features_labeled, data.labels) # also refits the model in bayesian_metric
+        strong_prob_bad_rejects = self.predict_proba_model(
+            "strong", holdout_data.features_unlabeled, in_eval_if_possible=True
+        )
+
+        return self.bayesian_evaluation(
+            holdout_data,
+            rejects_prior_probs=strong_prob_bad_rejects,
+            seed=1807
+        )
+    
+    @staticmethod
+    def modify_conf_preds_to_keep_max_labeling_bound(
+            mask_conf_preds : torch.Tensor,
+            label_percent : float
+    ) -> torch.Tensor:
+        # lidx_conf_preds has shape [..., N]
+        orig_shape = mask_conf_preds.shape
+        should_flatten_dims = mask_conf_preds.dim() > 2
+        if should_flatten_dims:
+            mask_conf_preds = mask_conf_preds.flatten(0, -2) #[B, N]
+        count_preds = mask_conf_preds.size(-1) # an int
+        count_conf_preds = mask_conf_preds.sum(dim=-1) # [B] or singleton
+
+        wished_upper_bound_conf_preds = round(count_preds * label_percent) # int
+        if (count_conf_preds > wished_upper_bound_conf_preds).any():
+            #let n_conf = count_conf_preds.sum()
+            #let n_flip = count_conf_to_flip_to_false.sum()
+            count_conf_to_flip_to_false = torch.maximum(count_conf_preds - wished_upper_bound_conf_preds, torch.tensor(0.0))
+            
+            orig_was_not_batched = len(orig_shape) == 1
+            if orig_was_not_batched:
+                idxs_among_conf_to_flip_to_false = torch.randperm(count_conf_preds)[:count_conf_to_flip_to_false] # [n_flip]
+                mask_conf_preds[mask_conf_preds][idxs_among_conf_to_flip_to_false] = False
+            else:
+                # let conf_max = count_conf_preds.max()
+                rand_perms = torch.rand(mask_conf_preds.size(0), #[B, conf_max]
+                                        count_conf_preds.max(), 
+                                        device=count_conf_preds.device).argsort(dim=1)
+                # set to nan where permutation too high according to the amount of conf preds in that batch dimension
+                rand_perms = torch.where(rand_perms < count_conf_preds.unsqueeze(-1), #[B, conf_max]
+                                         rand_perms, 
+                                         torch.tensor(torch.nan, device=count_conf_preds.device)) 
+
+                help_add_to_get_obj_idx = torch.cat([torch.tensor([0]), count_conf_preds[:-1].cumsum(dim=0)]).unsqueeze(-1) # [B, 1]
+
+                rand_perms_with_obj_idx = rand_perms + help_add_to_get_obj_idx #[B, conf_max]
+                # contains the relative indices of the subset of the mask where is true
+                rand_perms_with_obj_idx = rand_perms_with_obj_idx[~rand_perms_with_obj_idx.isnan()].long() #[n_conf]
+
+                # Get now the ":count_conf_to_flip_to_false" slices by getting the indices of rand_perms_with_obj_idx
+                # which would correspond to getting the first count_conf_to_flip_to_false per batch of the made permutation
+                # let to_flip_max = count_conf_to_flip_to_false.max()
+                idx_to_choose_from_randperm = torch.arange(count_conf_to_flip_to_false.max()).unsqueeze(0).repeat(mask_conf_preds.size(0), 1) # [B, to_flip_max]
+                # same nan setting logic as before
+                idx_to_choose_from_randperm = torch.where( #[B, to_flip_max]
+                    idx_to_choose_from_randperm < count_conf_to_flip_to_false.unsqueeze(-1), 
+                    idx_to_choose_from_randperm, 
+                    torch.tensor(torch.nan, device=count_conf_preds.device)
+                )
+                idx_to_choose_from_randperm_obj = idx_to_choose_from_randperm + help_add_to_get_obj_idx #[B, to_flip_max]
+                idx_to_choose_from_randperm_obj = idx_to_choose_from_randperm_obj[~idx_to_choose_from_randperm_obj.isnan()].long() #[n_flip]
+
+                idxs_among_conf_to_flip_to_false = rand_perms_with_obj_idx[idx_to_choose_from_randperm_obj] # [n_flip]
+                shape_before = mask_conf_preds_vec.shape
+                flattened_idxs_to_flip_to_false = torch.arange(mask_conf_preds_vec.numel()).reshape(shape_before)[mask_conf_preds_vec][idxs_among_conf_to_flip_to_false]
+                mask_conf_preds_vec=mask_conf_preds_vec.flatten()
+                mask_conf_preds_vec[flattened_idxs_to_flip_to_false] = False
+                mask_conf_preds_vec = mask_conf_preds_vec.reshape(shape_before)
+
+            mask_conf_preds[mask_conf_preds][idxs_among_conf_to_flip_to_false] = False
+
+        if should_flatten_dims:
+            mask_conf_preds = mask_conf_preds.reshape(orig_shape)
+
+        return mask_conf_preds
+    
+    def confident_reject_labels(
+            self, 
+            data : CreditDataSample,
+            hard_upper_bound_label_percent : bool = False, 
+            rng : Optional[torch.Generator] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        # 1. Refit weak learner with current labeled data
+        self.refit_model("weak", data.features_labeled, data.labels)
+        # 2. Gather indices for candidate rejects to label
+        idx_candidate_rej_to_label = (
+            torch.arange(data.count_rejects) 
+            if self.sampling_percent==1 else 
+            torch.randperm(data.count_rejects, generator=rng)[:round(self.sampling_percent * round(data.count_rejects))]
+        )
+        # 3. Calculate probability of default (bad)
+        weak_prob_bad_rejects = self.predict_proba_model(
+                "weak", 
+                data.features_unlabeled[idx_candidate_rej_to_label], 
+                in_eval_if_possible=True
+            )
+        # 4. Define confidence levels required so that the desired percentage of labelling is kept
+        conf_threshold_bad = weak_prob_bad_rejects.quantile(1-self.label_bads_percent, dim=-1)#.item()
+        conf_threshold_good = 1-weak_prob_bad_rejects.quantile(self.label_goods_percent, dim=-1).item()
+
+        # 5. Identify bad and good confident predictions
+        lidxs_conf_preds_bad = weak_prob_bad_rejects >= conf_threshold_bad
+        lidxs_conf_preds_good = weak_prob_bad_rejects <= (1-conf_threshold_good)
+        ## if wished enforce upper bound of labeling percent
+        if hard_upper_bound_label_percent:
+            lidxs_conf_preds_bad = self.__class__.modify_conf_preds_to_keep_max_labeling_bound(
+                lidxs_conf_preds_bad, 
+                self.label_bads_percent
+            )
+            lidxs_conf_preds_good = self.__class__.modify_conf_preds_to_keep_max_labeling_bound(
+                lidxs_conf_preds_good, 
+                self.label_goods_percent
+            )
+
+        lidx_conf_preds = lidxs_conf_preds_bad | lidxs_conf_preds_good
+
+        # 6. Generate labels with dummy encoding in the dtype of the default_flag
+        #    and filter the corresponding indices
+        bad_val = torch.tensor(1, dtype=data.labels.dtype)
+        good_val = torch.tensor(0, dtype=data.labels.dtype)
+        nan_val = torch.tensor(-1, dtype=data.labels.dtype)
+
+        confident_preds = torch.where(
+            lidxs_conf_preds_bad, 
+            bad_val, 
+            torch.where(lidxs_conf_preds_good, good_val, nan_val)
+        )[lidx_conf_preds]
+        mask_labeled_rejects = torch.zeros((data.count_rejects,), dtype=torch.bool)
+        mask_labeled_rejects[idx_candidate_rej_to_label[lidx_conf_preds]] = True
+
+        return confident_preds, mask_labeled_rejects
+    
+    def basl_augment_sample(
+            self, 
+            data : CreditDataSample, 
+            leave_orig_sample_untouched : bool = True, 
+            early_stop : bool = True
+        ) -> CreditDataSample:
+        if early_stop:
+            data, holdout_data = data.train_test_split(self.holdout_percent)
+        
+        if self.should_filter:
+            data.features_unlabeled = self.filter_rejects(data.features_unlabeled, return_index=False)
+
+        if early_stop:
+            b_metric_last_iter = self.evaluate_labeled_performance(data, holdout_data)
+
+        confident_preds, mask_infered = self.confident_reject_labels(data)
+        if leave_orig_sample_untouched:
+            data = data.label_rejects(infered_labels=confident_preds, mask_infered_rej_lbls=mask_infered, inplace = False)
+        else:
+            data.label_rejects(infered_labels=confident_preds, mask_infered_rej_lbls=mask_infered, inplace = True)
+
+        for _ in range(self.max_iterations-1): # First iteration already done - ensure max iterations is kept
+            next_iteration_is_sensible = mask_infered.any() and data.count_accepts > 0
+            if not next_iteration_is_sensible:
+                break
+
+            if early_stop:
+                b_metric_current_iter = self.evaluate_labeled_performance(data, holdout_data)
+                reject_inference_stopped_improving_metric = b_metric_current_iter <= b_metric_last_iter
+                if reject_inference_stopped_improving_metric:
+                    break
+
+                b_metric_last_iter = b_metric_current_iter
+
+            # Next labeling stage
+            confident_preds, mask_infered = self.confident_reject_labels(data)
+            data.label_rejects(infered_labels=confident_preds, mask_infered_rej_lbls=mask_infered, inplace = True)
+            # still need to find a way to keep track of which observations where labeled
+            # and also a way to ensure that the percentage of obs to label is kept in hard way as in the r implementation
+
+        return data
+
 
 def filter(
     ifo: IsolationForest,
