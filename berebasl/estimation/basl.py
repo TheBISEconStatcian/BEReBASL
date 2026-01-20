@@ -191,64 +191,56 @@ class BASLPartialUnbiaser:
             mask_conf_preds : torch.Tensor,
             label_percent : float
     ) -> torch.Tensor:
-        # lidx_conf_preds has shape [..., N]
+        # 1) Normalize to shape [B, N]
         orig_shape = mask_conf_preds.shape
         should_flatten_dims = mask_conf_preds.dim() > 2
         if should_flatten_dims:
-            mask_conf_preds = mask_conf_preds.flatten(0, -2) #[B, N]
-        count_preds = mask_conf_preds.size(-1) # an int
-        count_conf_preds = mask_conf_preds.sum(dim=-1) # [B] or singleton
+            mask_conf_preds = mask_conf_preds.flatten(0, -2)  # [B, N]
 
-        wished_upper_bound_conf_preds = round(count_preds * label_percent) # int
-        if (count_conf_preds > wished_upper_bound_conf_preds).any():
-            #let n_conf = count_conf_preds.sum()
-            #let n_flip = count_conf_to_flip_to_false.sum()
-            count_conf_to_flip_to_false = torch.maximum(count_conf_preds - wished_upper_bound_conf_preds, torch.tensor(0.0))
-            
-            orig_was_not_batched = len(orig_shape) == 1
-            if orig_was_not_batched:
-                idxs_among_conf_to_flip_to_false = torch.randperm(count_conf_preds)[:count_conf_to_flip_to_false] # [n_flip]
-                mask_conf_preds[mask_conf_preds][idxs_among_conf_to_flip_to_false] = False
-            else:
-                # let conf_max = count_conf_preds.max()
-                rand_perms = torch.rand(mask_conf_preds.size(0), #[B, conf_max]
-                                        count_conf_preds.max(), 
-                                        device=count_conf_preds.device).argsort(dim=1)
-                # set to nan where permutation too high according to the amount of conf preds in that batch dimension
-                rand_perms = torch.where(rand_perms < count_conf_preds.unsqueeze(-1), #[B, conf_max]
-                                         rand_perms, 
-                                         torch.tensor(torch.nan, device=count_conf_preds.device)) 
+        orig_was_1d = mask_conf_preds.dim() == 1
+        if orig_was_1d:
+            mask_conf_preds = mask_conf_preds.unsqueeze(0)  # [1, N]
 
-                help_add_to_get_obj_idx = torch.cat([torch.tensor([0]), count_conf_preds[:-1].cumsum(dim=0)]).unsqueeze(-1) # [B, 1]
+        B, N = mask_conf_preds.shape
 
-                rand_perms_with_obj_idx = rand_perms + help_add_to_get_obj_idx #[B, conf_max]
-                # contains the relative indices of the subset of the mask where is true
-                rand_perms_with_obj_idx = rand_perms_with_obj_idx[~rand_perms_with_obj_idx.isnan()].long() #[n_conf]
+        # Current number of trues per row
+        count_conf_preds = mask_conf_preds.sum(dim=-1)  # [B]
+        upper_bound = round(N * label_percent)
 
-                # Get now the ":count_conf_to_flip_to_false" slices by getting the indices of rand_perms_with_obj_idx
-                # which would correspond to getting the first count_conf_to_flip_to_false per batch of the made permutation
-                # let to_flip_max = count_conf_to_flip_to_false.max()
-                idx_to_choose_from_randperm = torch.arange(count_conf_to_flip_to_false.max()).unsqueeze(0).repeat(mask_conf_preds.size(0), 1) # [B, to_flip_max]
-                # same nan setting logic as before
-                idx_to_choose_from_randperm = torch.where( #[B, to_flip_max]
-                    idx_to_choose_from_randperm < count_conf_to_flip_to_false.unsqueeze(-1), 
-                    idx_to_choose_from_randperm, 
-                    torch.tensor(torch.nan, device=count_conf_preds.device)
-                )
-                idx_to_choose_from_randperm_obj = idx_to_choose_from_randperm + help_add_to_get_obj_idx #[B, to_flip_max]
-                idx_to_choose_from_randperm_obj = idx_to_choose_from_randperm_obj[~idx_to_choose_from_randperm_obj.isnan()].long() #[n_flip]
+        if (count_conf_preds > upper_bound).any():
+            # Number of trues to KEEP per row: min(c_i, upper_bound)
+            keep_counts = torch.clamp(count_conf_preds, max=upper_bound)  # [B]
+            k_max = int(keep_counts.max().item())
+            # Random scores, only finite in true positions of mask_conf_preds
+            scores = torch.where(mask_conf_preds, torch.rand_like(mask_conf_preds, dtype=torch.float), -float('inf')) # [B, N]
 
-                idxs_among_conf_to_flip_to_false = rand_perms_with_obj_idx[idx_to_choose_from_randperm_obj] # [n_flip]
-                shape_before = mask_conf_preds_vec.shape
-                flattened_idxs_to_flip_to_false = torch.arange(mask_conf_preds_vec.numel()).reshape(shape_before)[mask_conf_preds_vec][idxs_among_conf_to_flip_to_false]
-                mask_conf_preds_vec=mask_conf_preds_vec.flatten()
-                mask_conf_preds_vec[flattened_idxs_to_flip_to_false] = False
-                mask_conf_preds_vec = mask_conf_preds_vec.reshape(shape_before)
+            # Get up to k_max candidates per row
+            _, topk_idx = scores.topk(k_max, dim=-1)  # [B, k_max]
+            # Build per-row masks for how many to keep (some rows keep < k_max)
+            idx_range = torch.arange(k_max, device=mask_conf_preds.device)  # [k_max]
+            # valid_idx_mask[b, j] = j < keep_counts[b]
+            # This mask already gets the idxs from topk_idx corresponding to the places where
+            # mask_conf_preds should be true. This is ensured to contain a subset of **only** 
+            # the positions where mask_conf_preds was already true, as top_k of scores is always
+            # a position where mask_conf_preds was true
+            valid_idx_mask = idx_range.unsqueeze(0) < keep_counts.unsqueeze(1)   # [B, k_max]
 
-            mask_conf_preds[mask_conf_preds][idxs_among_conf_to_flip_to_false] = False
+            # Initialize new mask all False
+            new_mask = torch.zeros_like(mask_conf_preds, dtype=torch.bool)
 
+            # Apply valid_idx_mask via advanced indexing
+            # For rows where keep_counts[b] == 0, valid_idx_mask[b] is all False, so nothing is set
+            batch_idx = torch.arange(B, device=mask_conf_preds.device).unsqueeze(1).expand_as(topk_idx)
+            # Filter only positions to keep
+            valid = valid_idx_mask
+            new_mask[batch_idx[valid], topk_idx[valid]] = True
+
+            mask_conf_preds = new_mask
+
+        if orig_was_1d:
+            mask_conf_preds = mask_conf_preds.squeeze(0)
         if should_flatten_dims:
-            mask_conf_preds = mask_conf_preds.reshape(orig_shape)
+            mask_conf_preds = mask_conf_preds.reshape(orig_shape)            
 
         return mask_conf_preds
     
