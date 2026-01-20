@@ -4,6 +4,7 @@ For the master's thesis two AI's have been used
 
 * ChatGPT (Version 5 - free usage)
 * Copilot by Bing powered with ChatGPT5.
+* Perplexity
 
 For each used chat a link is provided to be called if wished. I always add a small description on the general topic of the chat. When I see it necessary/sensible I also add some more notes on the purpose/themes of the chat as sub-bullet points.
 
@@ -23,3 +24,7 @@ For each used chat a link is provided to be called if wished. I always add a sma
 - [Help with `CreditData` docstrings, iris-data-set retrieval and implementation of Logit in torch](https://copilot.microsoft.com/shares/6ZQt1YN531MpHUZjHipFk)
     - The purpose was to ensure a torch based option to match R's GLM behaviour
 - [How to set up repo to look profesional and be an importable package](https://copilot.microsoft.com/shares/oWZVD4bAURP55UEFk2p92)
+
+## Link to `perplexity` usage
+
+- [Designing logic for handling "batched CreditDataSamples" (labels.dim() > 1)](https://www.perplexity.ai/search/in-this-function-i-want-to-kee-hISfZ3XFQ6KMTW1Kyy6h2w#2)
