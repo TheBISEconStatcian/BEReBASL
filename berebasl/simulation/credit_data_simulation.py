@@ -666,6 +666,7 @@ class CreditDataSample(Dataset):
 
         self.acc_batch_shape = features_accepts.shape[:-1]
         self.mask_inferred_lbls = torch.tensor(False).expand(rej_batch_shape) # to get only inferred labels
+        self._ids_inferred = torch.empty(torch.Size([0]), dtype=self._rej_ids.dtype)
 
     # -------------------------------------------------------------------------
     # Properties
