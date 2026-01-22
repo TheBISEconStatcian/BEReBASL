@@ -664,9 +664,9 @@ class CreditDataSample(Dataset):
 
         self.mask_inferred_rejs = torch.full(rej_batch_shape, fill_value=False) # to get ids of rejected where inference was made
 
-        self.acc_batch_shape = features_accepts.shape[:-1]
-        self.mask_inferred_lbls = torch.tensor(False).expand(rej_batch_shape) # to get only inferred labels
-        self._ids_inferred = torch.empty(torch.Size([0]), dtype=self._rej_ids.dtype)
+        self.acc_batch_shape = default_flag_accepts.shape
+        self.mask_inferred_lbls = torch.tensor(False).expand(self.acc_batch_shape) # to get only inferred labels
+        self._ids_inferred = torch.tensor(torch.nan).expand(self.acc_batch_shape)
 
     # -------------------------------------------------------------------------
     # Properties
@@ -820,31 +820,31 @@ class CreditDataSample(Dataset):
 
     def label_rejects(
             self, 
-            infered_labels : torch.Tensor, 
-            mask_infered_rej_lbls : torch.Tensor,
+            inferred_labels : torch.Tensor, 
+            mask_inferred_rej_lbls : torch.Tensor,
             inplace : bool = False,
             safety_checks : bool = True
     ) -> Union[None, "CreditDataSample"]:
         #lidx_infered refers to the index across the rejected observations
         if safety_checks:
-            if mask_infered_rej_lbls.dtype != torch.bool:
+            if mask_inferred_rej_lbls.dtype != torch.bool:
                 raise ValueError("mask_infered_rej_lbls should be of type bool")
-            if mask_infered_rej_lbls.dim() != 1 and mask_infered_rej_lbls.size(0) != self.count_rejects:
+            if mask_inferred_rej_lbls.dim() != 1 and mask_inferred_rej_lbls.size(0) != self.count_rejects:
                 raise ValueError("mask_infered_rej_lbls has wrong shape. Expected: [self.count_rejects,]")
-            true_elements_lidxs = mask_infered_rej_lbls.sum().item()
+            true_elements_lidxs = mask_inferred_rej_lbls.sum().item()
             if true_elements_lidxs > self.count_rejects:
                 raise ValueError("There are more true elements in mask_infered_rej_lbls as there are rejected observations")
-            if infered_labels.dtype != torch.bool:
+            if inferred_labels.dtype != torch.bool:
                 raise ValueError("infered_labels need to be of boolean type")
-            if infered_labels.dim() != 1 and true_elements_lidxs != infered_labels.size(0):
+            if inferred_labels.dim() != 1 and true_elements_lidxs != inferred_labels.size(0):
                 raise ValueError("infered_labels has a wrong shape, expected : [count_true_elements_in_mask_infered_rej_lbls,]")
             
         with torch.no_grad():
-            filtered_feats_rej = self.features_unlabeled[~mask_infered_rej_lbls]
-            inferred_feats_rej = self.features_unlabeled[mask_infered_rej_lbls]
+            filtered_feats_rej = self.features_unlabeled[~mask_inferred_rej_lbls]
+            inferred_feats_rej = self.features_unlabeled[mask_inferred_rej_lbls]
 
             new_features_accept = torch.cat([self.features_labeled, inferred_feats_rej])
-            new_default_flags = torch.cat([self.labels, infered_labels])
+            new_default_flags = torch.cat([self.labels, inferred_labels])
 
         if inplace:
             self.features_labeled = new_features_accept
