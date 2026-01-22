@@ -657,16 +657,16 @@ class CreditDataSample(Dataset):
         rej_batch_shape = features_rejects.shape[:-1]
         if ids_rejects is None:
             count_rej_obs = torch.prod(torch.tensor(rej_batch_shape))
-            self._rej_ids = torch.arange(count_rej_obs).reshape(*rej_batch_shape)
+            self._unlabeled_ids = torch.arange(count_rej_obs).reshape(*rej_batch_shape)
         else:
             assert ids_rejects.shape == rej_batch_shape, "ids_rejects has the wrong shape. Should be features_rejects.shape[:-1]"
-            self._rej_ids = ids_rejects
+            self._unlabeled_ids = ids_rejects
 
         self.mask_inferred_rejs = torch.full(rej_batch_shape, fill_value=False) # to get ids of rejected where inference was made
 
         self.acc_batch_shape = default_flag_accepts.shape
         self.mask_inferred_lbls = torch.tensor(False).expand(self.acc_batch_shape) # to get only inferred labels
-        self._ids_inferred = torch.tensor(torch.nan).expand(self.acc_batch_shape)
+        self._inferred_ids = torch.tensor(torch.nan).expand(self.acc_batch_shape)
 
     # -------------------------------------------------------------------------
     # Properties
