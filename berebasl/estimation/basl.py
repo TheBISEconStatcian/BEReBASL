@@ -189,7 +189,7 @@ class BASLPartialUnbiaser:
     @staticmethod
     def modify_conf_preds_to_keep_max_labeling_bound(
             mask_conf_preds : torch.Tensor,
-            label_percent : float
+            upper_bound : int
     ) -> torch.Tensor:
         # 1) Normalize to shape [B, N]
         orig_shape = mask_conf_preds.shape
@@ -201,11 +201,10 @@ class BASLPartialUnbiaser:
         if orig_was_1d:
             mask_conf_preds = mask_conf_preds.unsqueeze(0)  # [1, N]
 
-        B, N = mask_conf_preds.shape
+        B = mask_conf_preds.size(0)
 
         # Current number of trues per row
         count_conf_preds = mask_conf_preds.sum(dim=-1)  # [B]
-        upper_bound = round(N * label_percent)
 
         if (count_conf_preds > upper_bound).any():
             # Number of trues to KEEP per row: min(c_i, upper_bound)
@@ -253,50 +252,78 @@ class BASLPartialUnbiaser:
         # 1. Refit weak learner with current labeled data
         self.refit_model("weak", data.features_labeled, data.labels)
         # 2. Gather indices for candidate rejects to label
-        idx_candidate_rej_to_label = (
-            torch.arange(data.count_rejects) 
-            if self.sampling_percent==1 else 
-            torch.randperm(data.count_rejects, generator=rng)[:round(self.sampling_percent * round(data.count_rejects))]
+        N, K = data.features_unlabeled.shape[-2:]
+        normalized_shape = data.features_unlabeled.shape[:-1] # [..., N]
+        device = data.features_unlabeled.device
+
+        if self.sampling_percent == 1:
+            M = N
+            idx_candidate_rej_to_label = torch.arange(N, device=device).expand(*normalized_shape) # [..., M]
+        else:
+            M = round(self.sampling_percent * N)
+            idx_shape = normalized_shape[:-1] + torch.Size([M])
+            idx_candidate_rej_to_label = torch.rand(idx_shape, device=device).argsort()[..., :M] # [..., M]
+
+        selected_unlabeled_features = data.features_unlabeled.gather(
+            dim=-2, 
+            index=idx_candidate_rej_to_label.unsqueeze(-1).expand( # # [..., M, K]
+                *idx_candidate_rej_to_label.shape, K
+            )
         )
+
         # 3. Calculate probability of default (bad)
-        weak_prob_bad_rejects = self.predict_proba_model(
+        weak_prob_bad_rejects = self.predict_proba_model( # [..., M]
                 "weak", 
-                data.features_unlabeled[idx_candidate_rej_to_label], 
+                selected_unlabeled_features, 
                 in_eval_if_possible=True
             )
         # 4. Define confidence levels required so that the desired percentage of labelling is kept
-        conf_threshold_bad = weak_prob_bad_rejects.quantile(1-self.label_bads_percent, dim=-1)#.item()
-        conf_threshold_good = 1-weak_prob_bad_rejects.quantile(self.label_goods_percent, dim=-1).item()
+        conf_threshold_bad = weak_prob_bad_rejects.quantile(1-self.label_bads_percent, dim=-1, keepdim=True) # [..., 1]
+        conf_threshold_good = 1-weak_prob_bad_rejects.quantile(self.label_goods_percent, dim=-1, keepdim=True).item() # [..., 1]
 
         # 5. Identify bad and good confident predictions
-        lidxs_conf_preds_bad = weak_prob_bad_rejects >= conf_threshold_bad
-        lidxs_conf_preds_good = weak_prob_bad_rejects <= (1-conf_threshold_good)
+        lidx_conf_preds_bad = torch.zeros(normalized_shape, dtype=torch.bool, device=device) # [..., N]
+        lidx_conf_preds_bad = lidx_conf_preds_bad.scatter( # [..., N]
+            dim=-1,
+            index=idx_candidate_rej_to_label,
+            src= weak_prob_bad_rejects >= conf_threshold_bad # [..., M]
+        )
+        lidxs_conf_preds_good = torch.zeros_like(lidx_conf_preds_bad) # [..., N]
+        lidxs_conf_preds_good = lidxs_conf_preds_good.scatter( # [..., N]
+            dim=-1,
+            index=idx_candidate_rej_to_label,
+            src=weak_prob_bad_rejects <= (1-conf_threshold_good) # [..., M]
+        )
         ## if wished enforce upper bound of labeling percent
         if hard_upper_bound_label_percent:
             lidxs_conf_preds_bad = self.__class__.modify_conf_preds_to_keep_max_labeling_bound(
                 lidxs_conf_preds_bad, 
-                self.label_bads_percent
-            )
+                upper_bound= round(M * self.label_bads_percent)
+            ) # [..., N]
             lidxs_conf_preds_good = self.__class__.modify_conf_preds_to_keep_max_labeling_bound(
                 lidxs_conf_preds_good, 
-                self.label_goods_percent
-            )
+                upper_bound= round(M * self.label_goods_percent)
+            ) # [..., N]
 
-        lidx_conf_preds = lidxs_conf_preds_bad | lidxs_conf_preds_good
+        lidx_conf_preds = lidxs_conf_preds_bad | lidxs_conf_preds_good # [..., N]
 
         # 6. Generate labels with dummy encoding in the dtype of the default_flag
         #    and filter the corresponding indices
-        bad_val = torch.tensor(1, dtype=data.labels.dtype)
-        good_val = torch.tensor(0, dtype=data.labels.dtype)
-        nan_val = torch.tensor(-1, dtype=data.labels.dtype)
+        nan_val = torch.tensor(
+            -1, 
+            dtype=torch.int if data.labels.dtype == torch.bool else data.labels.dtype, 
+            device=device
+        )
+        bad_val = torch.ones_like(nan_val)
+        good_val = torch.zeros_like(nan_val)
 
         confident_preds = torch.where(
             lidxs_conf_preds_bad, 
-            bad_val, 
+            bad_val,
             torch.where(lidxs_conf_preds_good, good_val, nan_val)
-        )[lidx_conf_preds]
-        mask_labeled_rejects = torch.zeros((data.count_rejects,), dtype=torch.bool)
-        mask_labeled_rejects[idx_candidate_rej_to_label[lidx_conf_preds]] = True
+        )
+
+        mask_labeled_rejects = lidx_conf_preds
 
         return confident_preds, mask_labeled_rejects
     
@@ -317,9 +344,9 @@ class BASLPartialUnbiaser:
 
         confident_preds, mask_infered = self.confident_reject_labels(data)
         if leave_orig_sample_untouched:
-            data = data.label_rejects(infered_labels=confident_preds, mask_infered_rej_lbls=mask_infered, inplace = False)
+            data = data.label_rejects(inferred_labels=confident_preds, mask_inferred_rej_lbls=mask_infered, inplace = False)
         else:
-            data.label_rejects(infered_labels=confident_preds, mask_infered_rej_lbls=mask_infered, inplace = True)
+            data.label_rejects(inferred_labels=confident_preds, mask_inferred_rej_lbls=mask_infered, inplace = True)
 
         for _ in range(self.max_iterations-1): # First iteration already done - ensure max iterations is kept
             next_iteration_is_sensible = mask_infered.any() and data.count_accepts > 0
@@ -336,7 +363,7 @@ class BASLPartialUnbiaser:
 
             # Next labeling stage
             confident_preds, mask_infered = self.confident_reject_labels(data)
-            data.label_rejects(infered_labels=confident_preds, mask_infered_rej_lbls=mask_infered, inplace = True)
+            data.label_rejects(inferred_labels=confident_preds, mask_inferred_rej_lbls=mask_infered, inplace = True)
             # still need to find a way to keep track of which observations where labeled
             # and also a way to ensure that the percentage of obs to label is kept in hard way as in the r implementation
 
