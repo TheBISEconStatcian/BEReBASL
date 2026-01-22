@@ -571,7 +571,48 @@ class CreditDataGenerator:
             bad_ratio=bad_ratio
         )
     
+def _padded_gather(
+        gather_from : torch.Tensor, 
+        mask : torch.Tensor,
+        nan_value : Union[int, float] = float('nan')
+) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    mask_int = mask.to(torch.int32)
+    precalc_tensors = {
+        "valid_counts" : mask.sum(-1),
+        "valid_pos" : torch.where(# [B, N]
+            mask,
+            mask_int.cumsum(-1) - 1,
+            -1
+        )
+    }
+    return _padded_gather_with_precalc(gather_from, mask, nan_value=nan_value, **precalc_tensors), precalc_tensors
 
+def _padded_gather_with_precalc(
+        gather_from : torch.Tensor, 
+        mask : torch.Tensor,
+        valid_pos : torch.Tensor,
+        valid_counts : torch.Tensor,
+        nan_value : Union[int, float] = float('nan')
+    ) -> torch.Tensor:
+    assert gather_from.shape[:-1] == mask.shape
+
+    *super_batch_shape, N, K = gather_from.shape # [..., N, K]
+    no_super_batches = len(super_batch_shape) == 0 # -> gather_from.shape=[N, K]
+    if no_super_batches:
+        gathered = gather_from[mask] # [n, K]
+        return gathered
+
+    gather_from = gather_from.flatten(0,-3) # [B, N, K]
+    B = gather_from.size(0)
+    mask = mask.flatten(0,-2) # [B, N]
+
+    max_valid = valid_counts.max()
+    gathered = gather_from.new_full((B, max_valid, K), nan_value)
+
+    batch_idx = torch.arange(B, device=gather_from.device).unsqueeze(-1).expand(B, N)
+    gathered[batch_idx[mask], valid_pos[mask]] = gather_from[mask]
+
+    return gathered.reshape(*super_batch_shape, max_valid, K) # [..., N, K]
 
 class CreditDataSample(Dataset):
     """Leakage-safe dataset for reject inference experiments.
@@ -671,6 +712,10 @@ class CreditDataSample(Dataset):
     # -------------------------------------------------------------------------
     # Properties
     # -------------------------------------------------------------------------
+
+    @property
+    def mask_inferred_lbls(self):
+        return ~self._inferred_ids.isnan()
 
     @property
     def count_accepts(self) -> int:
@@ -825,39 +870,54 @@ class CreditDataSample(Dataset):
             inplace : bool = False,
             safety_checks : bool = True
     ) -> Union[None, "CreditDataSample"]:
-        #lidx_infered refers to the index across the rejected observations
         if safety_checks:
             if mask_inferred_rej_lbls.dtype != torch.bool:
                 raise ValueError("mask_infered_rej_lbls should be of type bool")
-            if mask_inferred_rej_lbls.dim() != 1 and mask_inferred_rej_lbls.size(0) != self.count_rejects:
-                raise ValueError("mask_infered_rej_lbls has wrong shape. Expected: [self.count_rejects,]")
-            true_elements_lidxs = mask_inferred_rej_lbls.sum().item()
-            if true_elements_lidxs > self.count_rejects:
-                raise ValueError("There are more true elements in mask_infered_rej_lbls as there are rejected observations")
-            if inferred_labels.dtype != torch.bool:
-                raise ValueError("infered_labels need to be of boolean type")
-            if inferred_labels.dim() != 1 and true_elements_lidxs != inferred_labels.size(0):
-                raise ValueError("infered_labels has a wrong shape, expected : [count_true_elements_in_mask_infered_rej_lbls,]")
+            if not (mask_inferred_rej_lbls.shape == inferred_labels.shape == self.features_unlabeled.shape[:-1]):
+                raise ValueError("mask_inferred_rej_lbls and inferred_labels should have the same shape as self.features_unlabeled.shape[:-1]")
             
+            inferred_labels_with_vals_as_saved_labels = torch.isin(inferred_labels[mask_inferred_rej_lbls].unique(), self.labels).all()
+            if not inferred_labels_with_vals_as_saved_labels:
+                raise ValueError("Tensor inferred_labels[mask_inferred_rej_lbls] should contain only values like in self.labels")
+        
         with torch.no_grad():
-            filtered_feats_rej = self.features_unlabeled[~mask_inferred_rej_lbls]
-            inferred_feats_rej = self.features_unlabeled[mask_inferred_rej_lbls]
+            inferred_feats_rej, precalcs_inferred = _padded_gather(self.features_unlabeled, mask_inferred_rej_lbls)
+            ids_inferred_feats_rej = _padded_gather_with_precalc(self._unlabeled_ids.unsqueeze(-1).to(float), 
+                                                                 mask_inferred_rej_lbls, 
+                                                                 **precalcs_inferred).squeeze(-1)
+            inferred_labels = _padded_gather_with_precalc(
+                inferred_labels.unsqueeze(-1).to(self.labels.dtype), 
+                mask_inferred_rej_lbls,
+                nan_value=(torch.nan if torch.is_floating_point(self.labels) else -1),
+                **precalcs_inferred
+            ).squeeze(-1)
+            
+            lbld_features = torch.cat([self.features_labeled, inferred_feats_rej], dim=-2)
+            lbls = torch.cat([self.labels, inferred_labels], dim=-1)
+            inferred_ids = torch.cat([self._inferred_ids, ids_inferred_feats_rej], dim=-1)
 
-            new_features_accept = torch.cat([self.features_labeled, inferred_feats_rej])
-            new_default_flags = torch.cat([self.labels, inferred_labels])
 
+            non_inferred_feats_rej, precals_noninf = _padded_gather(self.features_unlabeled, ~mask_inferred_rej_lbls)
+            ids_non_inferred_feats_rej = _padded_gather_with_precalc(self._unlabeled_ids.unsqueeze(-1).to(float),
+                                                                    ~mask_inferred_rej_lbls, 
+                                                                    **precals_noninf).squeeze(-1)
+            
         if inplace:
-            self.features_labeled = new_features_accept
-            self.features_unlabeled = filtered_feats_rej
-            self.labels = new_default_flags
-            return
+            self.features_labeled = lbld_features
+            self.labels = lbls
+            self._inferred_ids = inferred_ids
 
-        return CreditDataSample(
-            features_rejects=filtered_feats_rej,
-            features_accepts=new_features_accept,
-            default_flag_accepts=new_default_flags,
-            retrieve_only_accepted=self.retrieve_only_accepted
+            self.features_unlabeled = non_inferred_feats_rej
+            self._unlabeled_ids = ids_non_inferred_feats_rej
+            return
+        new_instance = CreditDataSample(
+            features_rejects=non_inferred_feats_rej,
+            features_accepts=lbld_features,
+            default_flag_accepts=lbls,
+            ids_rejects=ids_non_inferred_feats_rej
         )
+        new_instance._inferred_ids = inferred_ids
+        return new_instance
 
     # -------------------------------------------------------------------------
     # Dataset interface
