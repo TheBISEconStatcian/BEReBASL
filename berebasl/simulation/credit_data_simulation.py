@@ -585,40 +585,54 @@ def _mask2d_to_int_idxs(mask : torch.Tensor, correction_last_idx : Optional[torc
     return batch_idx[mask], idx_last_axis[mask]
 
 class CreditDataSample(Dataset):
-    """Leakage-safe dataset for reject inference experiments.
+    """
+    Leakage-safe, super-batch-aware dataset for reject-inference experiments.
 
-    This class provides a structured and safe representation of credit data
-    split into *accepted* and *rejected* applications. It enforces the core
-    reject-inference constraint that rejected applications must never expose
-    their repayment outcomes, while accepted applications retain both features
-    and labels.
+    This class represents credit application data split into *accepted* (labeled)
+    and *rejected* (unlabeled) groups, enforcing the core reject-inference rule:
+    rejected applications never expose repayment outcomes. Accepted applications
+    retain both features and labels.
 
-    The dataset supports:
-    - retrieval of either accepted or rejected samples
-    - reproducible train/test splits
-    - device transfers with preservation of RNG state
-    - manual reseeding for deterministic behavior
+    The dataset supports arbitrary super-batch shapes. All tensors follow the
+    contract:
 
-    A device-specific :class:`torch.Generator` instance is maintained internally
-    and is used for all stochastic operations, including permutation and
-    train/test splitting. The generator is transferred when calling :meth:`to`
-    and can be reseeded via :meth:`manual_seed` to ensure reproducibility across
-    runs and devices.
+        features_unlabeled:  (..., N_unlabeled, F)
+        features_labeled:    (..., N_labeled,   F)
+        labels:              (..., N_labeled)
+        _unlabeled_ids:      (..., N_unlabeled)
+        _inferred_ids:       (..., N_labeled)
+
+    where the leading dimensions represent super-batches.
+
+    Key features:
+    - leakage-safe retrieval of accepted or rejected samples
+    - super-batch-compatible train/test splits using gather-based indexing
+    - device-specific RNG with reproducible behavior across transfers
+    - deterministic reseeding via `manual_seed`
+    - shape-agnostic reject-labeling workflow that:
+        * appends inferred labels into the labeled pool
+        * compacts the unlabeled pool
+        * preserves ID alignment
+        * avoids Python loops entirely
 
     Attributes:
-        features_rejects (torch.Tensor):
-            Feature matrix for rejected applications. Shape ``(n_rejects, n_features)``.
-        features_accepts (torch.Tensor):
-            Feature matrix for accepted applications. Shape ``(n_accepts, n_features)``.
-        default_flag_accepts (torch.Tensor):
-            Repayment outcomes for accepted applications. Shape ``(n_accepts,)``.
-        retrieve_only_accepted (bool):
-            If ``True``, the dataset yields only accepted samples. If ``False``,
-            only rejected samples are returned.
+        features_unlabeled (Tensor):
+            Rejected application features, shape (..., N_unlabeled, F).
+        features_labeled (Tensor):
+            Accepted application features, shape (..., N_labeled, F).
+        labels (Tensor):
+            Repayment outcomes for accepted applications, shape (..., N_labeled).
+        retrieve_only_labeled (bool):
+            Controls whether __getitem__ returns labeled or unlabeled samples.
         rng (torch.Generator):
-            Device-specific random number generator used for all stochastic
-            operations.
+            Device-specific RNG used for all stochastic operations.
+        _unlabeled_ids (Tensor):
+            Integer IDs for rejected samples, shape (..., N_unlabeled).
+        _inferred_ids (Tensor):
+            IDs of rejected samples that have been inferred and appended into the
+            labeled pool. NaN indicates “not inferred”.
     """
+
 
     def __init__(
         self,
@@ -629,29 +643,32 @@ class CreditDataSample(Dataset):
         retrieve_only_labeled: bool = True,
         seed: Optional[int] = None,
     ):
-        """Initialize a leakage-safe credit dataset sample.
+        """
+        Initialize a leakage-safe credit dataset sample.
 
         Args:
-            features_rejects (torch.Tensor):
-                Feature matrix for rejected applications. Must reside on the same
-                device as the other tensors. Shape ``(n_rejects, n_features)``.
-            features_accepts (torch.Tensor):
-                Feature matrix for accepted applications. Shape ``(n_accepts, n_features)``.
-            default_flag_accepts (torch.Tensor):
-                Repayment outcomes for accepted applications. Shape ``(n_accepts,)``.
-            retrieve_only_accepted (bool):
-                If ``True``, the dataset yields only accepted samples during
-                indexing. If ``False``, only rejected samples are returned.
+            features_rejects (Tensor):
+                Feature matrix for rejected applications. Shape (..., N_unlabeled, F).
+            features_accepts (Tensor):
+                Feature matrix for accepted applications. Shape (..., N_labeled, F).
+            default_flag_accepts (Tensor):
+                Repayment outcomes for accepted applications. Shape (..., N_labeled).
+            ids_rejects (Tensor, optional):
+                Integer IDs for rejected samples. Must match features_rejects.shape[:-1].
+                If None, IDs are assigned as a flattened arange over the super-batch.
+            retrieve_only_labeled (bool):
+                If True, __getitem__ returns only labeled samples. Otherwise, only
+                unlabeled samples are returned.
             seed (int, optional):
-                Seed used to initialize the internal device-specific random number
-                generator. If ``None``, the generator is left in its default state.
+                Seed for initializing the internal device-specific RNG.
 
         Notes:
+            - All leading dimensions must match across inputs.
             - Rejected samples never expose repayment outcomes.
-            - The internal RNG controls all stochastic behavior, including
-              train/test splitting and permutations.
-            - The RNG is device-specific and is recreated when calling :meth:`to`.
+            - The RNG controls all stochastic behavior (splits, permutations, etc.).
         """
+        if not (features_rejects.shape[:-1] == features_accepts.shape[:-1] == default_flag_accepts.shape):
+            raise ValueError("Shapes are not compatible")
         self.features_unlabeled = features_rejects
         self.features_labeled = features_accepts
         self.labels = default_flag_accepts
@@ -679,48 +696,45 @@ class CreditDataSample(Dataset):
     # -------------------------------------------------------------------------
     @property
     def device(self) -> torch.device:
+        """Device on which the dataset tensors reside."""
         return self.features_unlabeled.device
 
     @property
-    def mask_inferred_lbls(self) -> torch.Tensor:
+    def mask_inferred_lbls(self):
+        """
+        Boolean mask indicating which labeled samples originate from inferred
+        rejected applications. Shape (..., N_labeled).
+        """
         return ~self._inferred_ids.isnan()
 
     @property
-    def count_labeled(self) -> int:
-        """Number of (maximal) accepted applications in the dataset per (super)-batch.
-
-        Returns:
-            int:
-                Count of samples where the acceptance flag is ``True``.
-        """
+    def count_labeled(self):
+        """Number of labeled samples per super-batch (N_labeled)."""
         return self.features_labeled.size(-2)
     
     @property
-    def count_unlabeled(self) -> int:
-        """Number of accepted applications in the dataset.
-
-        Returns:
-            int:
-                Count of samples where the acceptance flag is ``True``.
-        """
+    def count_unlabeled(self):
+        """Number of unlabeled samples per super-batch (N_unlabeled)."""
         return self.features_unlabeled.size(-2)
     
     @property
-    def features_count(self) -> int:
+    def features_count(self):
+        """Number of features per sample (F)."""
         return self.features_unlabeled.size(-1)
 
     # -------------------------------------------------------------------------
     # RNG utilities
     # -------------------------------------------------------------------------
 
-    def manual_seed(self, seed: int):
-        """Manually reseed the internal random number generator.
+    def manual_seed(self, seed):
+        """
+        Reseed the internal RNG deterministically.
 
         Args:
             seed (int): New seed value.
 
         Returns:
-            CreditDataSample: The dataset instance.
+            CreditDataSample: self.
         """
         self.rng.manual_seed(seed)
         return self
@@ -735,22 +749,22 @@ class CreditDataSample(Dataset):
         seed: Optional[int] = None,
         set_same_initial_seed: bool = True,
     ):
-        """Move all tensors and the RNG to a target device.
+        """
+        Move all dataset tensors and the RNG to a target device.
 
         Args:
             device (torch.device):
-                Target device for the dataset tensors.
+                Target device.
             seed (int, optional):
-                Explicit seed for the RNG on the new device. Overrides
-                ``set_same_initial_seed`` if provided.
-            set_same_initial_seed (bool, optional):
-                If ``True`` and ``seed`` is ``None``, the RNG on the new device
-                is initialized with the same initial seed as the previous RNG.
+                Explicit seed for the new RNG. Overrides set_same_initial_seed.
+            set_same_initial_seed (bool):
+                If True and seed is None, the new RNG is initialized with the
+                previous RNG's initial seed.
 
         Returns:
-            CreditDataSample: The dataset instance with tensors moved to ``device``.
+            CreditDataSample: self, moved to the new device.
         """
-        for var in ["features_rejects", "features_accepts", "default_flag_accepts", "_unlabeled_ids", "mask_inferred_rejs", "_inferred_ids"]:
+        for var in ["features_rejects", "features_accepts", "default_flag_accepts", "_unlabeled_ids", "_inferred_ids"]:
             setattr(self, var, getattr(self, var).to(device))
 
         # Preserve reproducibility across device transfers
@@ -770,19 +784,24 @@ class CreditDataSample(Dataset):
     def _generate_random_train_test_idxs(
         self,
         shape_up_to_N_dim : Union[tuple[int], torch.Size],
-        n: int,
         test_proportion: float,
         device: torch.device,
     ) -> torch.Tensor:
-        """Generate a boolean mask selecting test samples.
+        """
+        Generate random train/test index splits along the sample dimension.
 
         Args:
-            n (int): Number of samples.
-            test_proportion (float): Fraction of samples to assign to the test set.
-            device (torch.device): Device for the mask.
+            shape_up_to_N_dim (tuple or torch.Size):
+                Super-batch shape ending with N (number of samples).
+            test_proportion (float):
+                Fraction of samples to assign to the test set.
+            device (torch.device):
+                Device for the generated index tensors.
 
         Returns:
-            torch.Tensor: Boolean mask of shape ``(n,)``.
+            Tuple[Tensor, Tensor]:
+                (train_indices, test_indices), each of shape (..., N_train) and
+                (..., N_test), suitable for gather-based slicing.
         """
         test_count = round(test_proportion * shape_up_to_N_dim[-1])
         scores = torch.randn(shape_up_to_N_dim, generator=self.rng, device=device).argsort(dim=-1)
@@ -791,18 +810,20 @@ class CreditDataSample(Dataset):
         return idx_N_dim_gather_train, idx_N_dim_gather_test
 
     def train_test_split(self, test_proportion: float):
-        """Split the dataset into train and test subsets.
+        """
+        Split the dataset into train and test subsets without leakage.
 
-        The split is performed independently for accepts and rejects, ensuring
-        no leakage and preserving the acceptance structure.
+        The split is performed independently for labeled and unlabeled pools,
+        preserving super-batch structure and using gather-based indexing.
 
         Args:
             test_proportion (float):
-                Fraction of samples to assign to the test set. Must be in ``[0, 1]``.
+                Fraction of samples to assign to the test set.
 
         Returns:
-            Tuple[CreditDataSample, CreditDataSample]:
-                ``(train_sample, test_sample)``.
+            (CreditDataSample, CreditDataSample):
+                (train_sample, test_sample), each containing consistent subsets of
+                features, labels, IDs, and inferred-ID tracking.
         """
         if not (0.0 <= test_proportion <= 1.0):
             raise ValueError("test_proportion must be between 0 and 1")
@@ -853,6 +874,33 @@ class CreditDataSample(Dataset):
             inplace : bool = False,
             safety_checks : bool = True
     ) -> Union[None, "CreditDataSample"]:
+        """
+        Append inferred labels from the unlabeled pool into the labeled pool and
+        compact the remaining unlabeled pool.
+
+        This operation:
+            - inserts inferred labels into available NaN slots in the labeled pool
+            - pads the labeled pool if more slots are needed
+            - appends corresponding features and IDs
+            - removes inferred samples from the unlabeled pool
+            - preserves super-batch structure
+            - performs all operations without Python loops
+
+        Args:
+            inferred_labels (Tensor):
+                Tensor of inferred labels, shape (..., N_unlabeled).
+            mask_inferred_rej_lbls (Tensor):
+                Boolean mask selecting which unlabeled samples receive inferred labels.
+                Same shape as inferred_labels.
+            inplace (bool):
+                If True, modify the dataset in place. Otherwise, return a new instance.
+            safety_checks (bool):
+                If True, validate shapes and label consistency.
+
+        Returns:
+            CreditDataSample or None:
+                New dataset instance if inplace=False, otherwise None.
+        """
         if safety_checks:
             if mask_inferred_rej_lbls.dtype != torch.bool:
                 raise ValueError("mask_infered_rej_lbls should be of type bool")
@@ -877,7 +925,7 @@ class CreditDataSample(Dataset):
         slots_available = mask_nans_labels.sum(dim=-1)
         slots_needed = mask_inf.sum(dim=-1)
 
-        needed_padding = torch.maximum(slots_needed - slots_available, torch.tensor(0))
+        needed_padding = torch.maximum(slots_needed - slots_available, torch.tensor(0, device=self.device))
         max_needed_padding = needed_padding.max()
 
         # specifics
@@ -890,6 +938,7 @@ class CreditDataSample(Dataset):
             appended = torch.nn.functional.pad(append_to, pad=pad_spec, **pad_mode_val)
             appended[batch_idx_valid_lbls, N_idx_valid_lbls] = append_to[mask_valid_lbls].to(appended.dtype)
             appended[batch_idx_inf_lbls, N_idx_inf_lbls] = to_append[mask_inf].to(appended.dtype)
+            return appended
 
         new_labels = _append_obs(append_to=current_labels, to_append=inf_lbls, pad_spec=(0, max_needed_padding))
         new_inferred_ids = _append_obs(
@@ -903,7 +952,7 @@ class CreditDataSample(Dataset):
             pad_spec=(0, 0, 0, max_needed_padding)
         )
 
-        new_N_unlabeled = N_unlabeled - slots_needed.max()
+        new_N_unlabeled = N_unlabeled - slots_needed.min()
         mask_non_inferred = ~mask_inferred_rej_lbls
         batch_idx_resized_unlbld, N_idx_resized_unlbld = _mask2d_to_int_idxs(mask_non_inferred)
         def _resize_obs(to_resize : torch.Tensor):
@@ -931,7 +980,8 @@ class CreditDataSample(Dataset):
             features_rejects=features_unlabeled,
             features_accepts=new_features_labeled,
             default_flag_accepts=new_labels,
-            ids_rejects=unlabeled_ids
+            ids_rejects=unlabeled_ids,
+            retrieve_only_labeled=self.retrieve_only_labeled
         )
         new_instance._inferred_ids = new_inferred_ids
         return new_instance
@@ -941,18 +991,35 @@ class CreditDataSample(Dataset):
     # -------------------------------------------------------------------------
 
     def __len__(self) -> int:
-        """Dataset length under the current retrieval mode."""
+        """
+        Number of samples returned by __getitem__, depending on retrieval mode.
+
+        Returns:
+            int: N_labeled if retrieve_only_labeled=True, else N_unlabeled.
+        """
         return self.count_labeled if self.retrieve_only_labeled else self.count_unlabeled
 
     def __getitem__(self, idx: int) -> Tuple[Any, Optional[torch.Tensor]]:
-        """Retrieve a single sample as a dictionary.
+        """
+        Retrieve a single sample from either the labeled or unlabeled pool.
 
         Returns:
-            Dict[str, Any]:
-                A dictionary with keys:
-                    - ``"features"`` (torch.Tensor)
-                    - ``"default_flag"`` (torch.Tensor or None)
-                    - ``"accepted"`` (bool)
+            dict:
+                If retrieving labeled samples:
+                    {
+                        "features": Tensor (..., F),
+                        "default_flag": Tensor (...,),
+                        "is_inferred": Tensor (...,),
+                        "accepted": True
+                    }
+
+                If retrieving unlabeled samples:
+                    {
+                        "features": Tensor (..., F),
+                        "default_flag": None,
+                        "is_inferred" : None,
+                        "accepted": False
+                    }
         """
         if self.retrieve_only_labeled:
             return {
@@ -965,6 +1032,7 @@ class CreditDataSample(Dataset):
         return {
             "features": self.features_unlabeled[..., idx, :],
             "default_flag": None,
+            "is_inferred" : None,
             "accepted": False,
         }
 
