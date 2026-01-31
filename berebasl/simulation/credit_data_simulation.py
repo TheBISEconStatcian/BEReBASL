@@ -767,8 +767,9 @@ class CreditDataSample(Dataset):
     # (Reject) Inference related
     # -------------------------------------------------------------------------
 
-    def _generate_test_mask(
+    def _generate_random_train_test_idxs(
         self,
+        shape_up_to_N_dim : Union[tuple[int], torch.Size],
         n: int,
         test_proportion: float,
         device: torch.device,
@@ -783,11 +784,11 @@ class CreditDataSample(Dataset):
         Returns:
             torch.Tensor: Boolean mask of shape ``(n,)``.
         """
-        test_count = round(test_proportion * n)
-        mask = torch.zeros(n, dtype=torch.bool, device=device)
-        perm = torch.randperm(n, generator=self.rng, device=device)
-        mask[perm[:test_count]] = True
-        return mask
+        test_count = round(test_proportion * shape_up_to_N_dim[-1])
+        scores = torch.randn(shape_up_to_N_dim, generator=self.rng, device=device).argsort(dim=-1)
+        idx_N_dim_gather_test, idx_N_dim_gather_train = scores[..., :test_count], scores[..., test_count:]
+
+        return idx_N_dim_gather_train, idx_N_dim_gather_test
 
     def train_test_split(self, test_proportion: float):
         """Split the dataset into train and test subsets.
@@ -809,29 +810,39 @@ class CreditDataSample(Dataset):
         device = self.features_unlabeled.device
 
         # Generate masks
-        test_mask_rej = self._generate_test_mask(
-            self.features_unlabeled.size(0), test_proportion, device
+        gather_idx_train_unlbld, gather_idx_test_unlbld = self._generate_random_train_test_idxs(
+            self.features_unlabeled.shape[:-1], test_proportion, device
         )
-        test_mask_acc = self._generate_test_mask(
-            self.features_labeled.size(0), test_proportion, device
+        gather_idx_train_lbld, gather_idx_test_lbld = self._generate_random_train_test_idxs(
+            self.features_labeled.shape[:-1], test_proportion, device
         )
+
+        gather_features = lambda gather_from, idx_gather : gather_from.gather(
+            dim=-2,
+            index=idx_gather.unsqueeze(-1).expand(*idx_gather.shape, self.features_count)
+        )
+
 
         # Slice data
         train_sample = CreditDataSample(
-            features_rejects=self.features_unlabeled[~test_mask_rej],
-            features_accepts=self.features_labeled[~test_mask_acc],
-            default_flag_accepts=self.labels[~test_mask_acc],
-            retrieve_only_accepted=self.retrieve_only_accepted,
+            features_rejects= gather_features(self.features_unlabeled, gather_idx_train_unlbld),
+            ids_rejects=self._unlabeled_ids.gather(dim=-1, index=gather_idx_train_unlbld),
+            features_accepts=gather_features(self.features_labeled, gather_idx_train_lbld),
+            default_flag_accepts=self.labels.gather(dim=-1, index=gather_idx_train_lbld),
+            retrieve_only_labeled=self.retrieve_only_labeled,
             seed=self.rng.initial_seed(),
         )
+        train_sample._inferred_ids = self._inferred_ids.gather(dim=-1, index=gather_idx_train_lbld)
 
         test_sample = CreditDataSample(
-            features_rejects=self.features_unlabeled[test_mask_rej],
-            features_accepts=self.features_labeled[test_mask_acc],
-            default_flag_accepts=self.labels[test_mask_acc],
-            retrieve_only_accepted=self.retrieve_only_accepted,
+            features_rejects= gather_features(self.features_unlabeled, gather_idx_test_unlbld),
+            ids_rejects=self._unlabeled_ids.gather(dim=-1, index=gather_idx_test_unlbld),
+            features_accepts=gather_features(self.features_labeled, gather_idx_test_lbld),
+            default_flag_accepts=self.labels.gather(dim=-1, index=gather_idx_test_lbld),
+            retrieve_only_labeled=self.retrieve_only_labeled,
             seed=self.rng.initial_seed(),
         )
+        test_sample._inferred_ids = self._inferred_ids.gather(dim=-1, index=gather_idx_test_lbld)
 
         return train_sample, test_sample
 
