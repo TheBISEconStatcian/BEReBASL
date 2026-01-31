@@ -626,7 +626,7 @@ class CreditDataSample(Dataset):
         features_accepts: torch.Tensor,
         default_flag_accepts: torch.Tensor,
         ids_rejects : Optional[torch.Tensor] = None,
-        retrieve_only_accepted: bool = True,
+        retrieve_only_labeled: bool = True,
         seed: Optional[int] = None,
     ):
         """Initialize a leakage-safe credit dataset sample.
@@ -656,7 +656,7 @@ class CreditDataSample(Dataset):
         self.features_labeled = features_accepts
         self.labels = default_flag_accepts
 
-        self.retrieve_only_accepted = retrieve_only_accepted
+        self.retrieve_only_labeled = retrieve_only_labeled
 
         # RNG is device-specific, so we create it on the same device as the data
         self.rng = torch.Generator(device=features_rejects.device)
@@ -686,8 +686,8 @@ class CreditDataSample(Dataset):
         return ~self._inferred_ids.isnan()
 
     @property
-    def count_accepts(self) -> int:
-        """Number of accepted applications in the dataset.
+    def count_labeled(self) -> int:
+        """Number of (maximal) accepted applications in the dataset per (super)-batch.
 
         Returns:
             int:
@@ -696,7 +696,7 @@ class CreditDataSample(Dataset):
         return self.features_labeled.size(-2)
     
     @property
-    def count_rejects(self) -> int:
+    def count_unlabeled(self) -> int:
         """Number of accepted applications in the dataset.
 
         Returns:
@@ -704,6 +704,10 @@ class CreditDataSample(Dataset):
                 Count of samples where the acceptance flag is ``True``.
         """
         return self.features_unlabeled.size(-2)
+    
+    @property
+    def features_count(self) -> int:
+        return self.features_unlabeled.size(-1)
 
     # -------------------------------------------------------------------------
     # RNG utilities
@@ -925,19 +929,9 @@ class CreditDataSample(Dataset):
     # Dataset interface
     # -------------------------------------------------------------------------
 
-    @property
-    def count_accepts(self) -> int:
-        """Number of accepted samples."""
-        return self.features_labeled.size(0)
-
-    @property
-    def count_rejects(self) -> int:
-        """Number of rejected samples."""
-        return self.features_unlabeled.size(0)
-
     def __len__(self) -> int:
         """Dataset length under the current retrieval mode."""
-        return self.count_accepts if self.retrieve_only_accepted else self.count_rejects
+        return self.count_labeled if self.retrieve_only_labeled else self.count_unlabeled
 
     def __getitem__(self, idx: int) -> Tuple[Any, Optional[torch.Tensor]]:
         """Retrieve a single sample as a dictionary.
@@ -949,15 +943,16 @@ class CreditDataSample(Dataset):
                     - ``"default_flag"`` (torch.Tensor or None)
                     - ``"accepted"`` (bool)
         """
-        if self.retrieve_only_accepted:
+        if self.retrieve_only_labeled:
             return {
-                "features": self.features_labeled[idx],
-                "default_flag": self.labels[idx],
+                "features": self.features_labeled[..., idx, :],
+                "default_flag": self.labels[..., idx],
+                "is_inferred" : self.mask_inferred_lbls[..., idx],
                 "accepted": True,
             }
 
         return {
-            "features": self.features_unlabeled[idx],
+            "features": self.features_unlabeled[..., idx, :],
             "default_flag": None,
             "accepted": False,
         }
@@ -1266,7 +1261,7 @@ class CreditData(Dataset):
         return CreditDataSample(
             self.rejects(include_gen_round=False),
             *self.accepts(include_gen_round=False),
-            retrieve_only_accepted=retrieve_only_accepted,
+            retrieve_only_labeled=retrieve_only_accepted,
         )
 
     # -------------------------------------------------------------------------
