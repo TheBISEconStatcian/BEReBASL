@@ -571,48 +571,18 @@ class CreditDataGenerator:
             bad_ratio=bad_ratio
         )
     
-def _padded_gather(
-        gather_from : torch.Tensor, 
-        mask : torch.Tensor,
-        nan_value : Union[int, float] = float('nan')
-) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+def _mask2d_to_int_idxs(mask : torch.Tensor, correction_last_idx : Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
     mask_int = mask.to(torch.int32)
-    precalc_tensors = {
-        "valid_counts" : mask.sum(-1),
-        "valid_pos" : torch.where(# [B, N]
+    idx_last_axis = torch.where(# [B, N]
             mask,
             mask_int.cumsum(-1) - 1,
             -1
-        )
-    }
-    return _padded_gather_with_precalc(gather_from, mask, nan_value=nan_value, **precalc_tensors), precalc_tensors
-
-def _padded_gather_with_precalc(
-        gather_from : torch.Tensor, 
-        mask : torch.Tensor,
-        valid_pos : torch.Tensor,
-        valid_counts : torch.Tensor,
-        nan_value : Union[int, float] = float('nan')
-    ) -> torch.Tensor:
-    assert gather_from.shape[:-1] == mask.shape
-
-    *super_batch_shape, N, K = gather_from.shape # [..., N, K]
-    no_super_batches = len(super_batch_shape) == 0 # -> gather_from.shape=[N, K]
-    if no_super_batches:
-        gathered = gather_from[mask] # [n, K]
-        return gathered
-
-    gather_from = gather_from.flatten(0,-3) # [B, N, K]
-    B = gather_from.size(0)
-    mask = mask.flatten(0,-2) # [B, N]
-
-    max_valid = valid_counts.max()
-    gathered = gather_from.new_full((B, max_valid, K), nan_value)
-
-    batch_idx = torch.arange(B, device=gather_from.device).unsqueeze(-1).expand(B, N)
-    gathered[batch_idx[mask], valid_pos[mask]] = gather_from[mask]
-
-    return gathered.reshape(*super_batch_shape, max_valid, K) # [..., N, K]
+    )
+    if correction_last_idx is not None:
+        idx_last_axis = idx_last_axis + correction_last_idx
+    batch_idx = torch.arange(mask.size(0), device=mask.device).unsqueeze(-1).expand(mask.shape)
+    
+    return batch_idx[mask], idx_last_axis[mask]
 
 class CreditDataSample(Dataset):
     """Leakage-safe dataset for reject inference experiments.
@@ -689,8 +659,7 @@ class CreditDataSample(Dataset):
         self.retrieve_only_accepted = retrieve_only_accepted
 
         # RNG is device-specific, so we create it on the same device as the data
-        device = features_rejects.device
-        self.rng = torch.Generator(device=device)
+        self.rng = torch.Generator(device=features_rejects.device)
         if seed is not None:
             self.rng.manual_seed(seed)
 
@@ -703,18 +672,17 @@ class CreditDataSample(Dataset):
             assert ids_rejects.shape == rej_batch_shape, "ids_rejects has the wrong shape. Should be features_rejects.shape[:-1]"
             self._unlabeled_ids = ids_rejects
 
-        self.mask_inferred_rejs = torch.full(rej_batch_shape, fill_value=False) # to get ids of rejected where inference was made
-
-        self.acc_batch_shape = default_flag_accepts.shape
-        self.mask_inferred_lbls = torch.tensor(False).expand(self.acc_batch_shape) # to get only inferred labels
-        self._inferred_ids = torch.tensor(torch.nan).expand(self.acc_batch_shape)
+        self._inferred_ids = torch.tensor(torch.nan).expand(default_flag_accepts.shape)
 
     # -------------------------------------------------------------------------
     # Properties
     # -------------------------------------------------------------------------
+    @property
+    def device(self) -> torch.device:
+        return self.features_unlabeled.device
 
     @property
-    def mask_inferred_lbls(self):
+    def mask_inferred_lbls(self) -> torch.Tensor:
         return ~self._inferred_ids.isnan()
 
     @property
@@ -725,7 +693,7 @@ class CreditDataSample(Dataset):
             int:
                 Count of samples where the acceptance flag is ``True``.
         """
-        return self.features_labeled.size(0)
+        return self.features_labeled.size(-2)
     
     @property
     def count_rejects(self) -> int:
@@ -735,7 +703,7 @@ class CreditDataSample(Dataset):
             int:
                 Count of samples where the acceptance flag is ``True``.
         """
-        return self.features_unlabeled.size(0)
+        return self.features_unlabeled.size(-2)
 
     # -------------------------------------------------------------------------
     # RNG utilities
@@ -778,7 +746,7 @@ class CreditDataSample(Dataset):
         Returns:
             CreditDataSample: The dataset instance with tensors moved to ``device``.
         """
-        for var in ["features_rejects", "features_accepts", "default_flag_accepts"]:
+        for var in ["features_rejects", "features_accepts", "default_flag_accepts", "_unlabeled_ids", "mask_inferred_rejs", "_inferred_ids"]:
             setattr(self, var, getattr(self, var).to(device))
 
         # Preserve reproducibility across device transfers
@@ -879,44 +847,78 @@ class CreditDataSample(Dataset):
             inferred_labels_with_vals_as_saved_labels = torch.isin(inferred_labels[mask_inferred_rej_lbls].unique(), self.labels).all()
             if not inferred_labels_with_vals_as_saved_labels:
                 raise ValueError("Tensor inferred_labels[mask_inferred_rej_lbls] should contain only values like in self.labels")
-        
-        with torch.no_grad():
-            inferred_feats_rej, precalcs_inferred = _padded_gather(self.features_unlabeled, mask_inferred_rej_lbls)
-            ids_inferred_feats_rej = _padded_gather_with_precalc(self._unlabeled_ids.unsqueeze(-1).to(float), 
-                                                                 mask_inferred_rej_lbls, 
-                                                                 **precalcs_inferred).squeeze(-1)
-            inferred_labels = _padded_gather_with_precalc(
-                inferred_labels.unsqueeze(-1).to(self.labels.dtype), 
-                mask_inferred_rej_lbls,
-                nan_value=(torch.nan if torch.is_floating_point(self.labels) else -1),
-                **precalcs_inferred
-            ).squeeze(-1)
             
-            lbld_features = torch.cat([self.features_labeled, inferred_feats_rej], dim=-2)
-            lbls = torch.cat([self.labels, inferred_labels], dim=-1)
-            inferred_ids = torch.cat([self._inferred_ids, ids_inferred_feats_rej], dim=-1)
+        
+        *batch_shape, N_labels = self.labels.shape
+        B = torch.tensor(batch_shape).prod()
 
+        current_labels = self.labels.reshape(B, N_labels)
+        mask_nans_labels = current_labels.isnan()
 
-            non_inferred_feats_rej, precals_noninf = _padded_gather(self.features_unlabeled, ~mask_inferred_rej_lbls)
-            ids_non_inferred_feats_rej = _padded_gather_with_precalc(self._unlabeled_ids.unsqueeze(-1).to(float),
-                                                                    ~mask_inferred_rej_lbls, 
-                                                                    **precals_noninf).squeeze(-1)
+        N_unlabeled = mask_inferred_rej_lbls.size(-1)
+        mask_inf = mask_inferred_rej_lbls.reshape(B, N_unlabeled)
+        inf_lbls = inferred_labels.reshape(B, N_unlabeled)
+
+        slots_available = mask_nans_labels.sum(dim=-1)
+        slots_needed = mask_inf.sum(dim=-1)
+
+        needed_padding = torch.maximum(slots_needed - slots_available, torch.tensor(0))
+        max_needed_padding = needed_padding.max()
+
+        # specifics
+        pad_mode_val = {"mode" : 'constant', 'value':torch.nan}
+        mask_valid_lbls = ~mask_nans_labels
+        batch_idx_valid_lbls, N_idx_valid_lbls = _mask2d_to_int_idxs(mask_valid_lbls)
+        batch_idx_inf_lbls, N_idx_inf_lbls = _mask2d_to_int_idxs(mask_inf, N_labels - slots_available.unsqueeze(-1))
+
+        def _append_obs(append_to : torch.Tensor, to_append : torch.Tensor, pad_spec : tuple[int]):
+            appended = torch.nn.functional.pad(append_to, pad=pad_spec, **pad_mode_val)
+            appended[batch_idx_valid_lbls, N_idx_valid_lbls] = append_to[mask_valid_lbls].to(appended.dtype)
+            appended[batch_idx_inf_lbls, N_idx_inf_lbls] = to_append[mask_inf].to(appended.dtype)
+
+        new_labels = _append_obs(append_to=current_labels, to_append=inf_lbls, pad_spec=(0, max_needed_padding))
+        new_inferred_ids = _append_obs(
+            append_to=self._inferred_ids.reshape(B, N_labels), 
+            to_append=self._unlabeled_ids.reshape(B, N_unlabeled),
+            pad_spec=(0, max_needed_padding)
+        )
+        new_features_labeled = _append_obs(
+            append_to=self.features_labeled.reshape(B, N_labels, -1), 
+            to_append=self.features_unlabeled.reshape(B, N_unlabeled, -1),
+            pad_spec=(0, 0, 0, max_needed_padding)
+        )
+
+        new_N_unlabeled = N_unlabeled - slots_needed.max()
+        mask_non_inferred = ~mask_inferred_rej_lbls
+        batch_idx_resized_unlbld, N_idx_resized_unlbld = _mask2d_to_int_idxs(mask_non_inferred)
+        def _resize_obs(to_resize : torch.Tensor):
+            resized = to_resize.new_full(torch.Size([B, new_N_unlabeled]) + to_resize.shape[2:], fill_value=torch.nan)
+            resized[batch_idx_resized_unlbld, N_idx_resized_unlbld] = to_resize[mask_non_inferred]
+            return resized
+
+        features_unlabeled = _resize_obs(self.features_unlabeled)
+        unlabeled_ids = _resize_obs(self._unlabeled_ids)
+
+        new_labels, new_inferred_ids, new_features_labeled, features_unlabeled, unlabeled_ids = [
+            t.reshape(torch.Size(batch_shape) + t.shape[1:]) for t in 
+            [new_labels, new_inferred_ids, new_features_labeled, features_unlabeled, unlabeled_ids]
+        ]
             
         if inplace:
-            self.features_labeled = lbld_features
-            self.labels = lbls
-            self._inferred_ids = inferred_ids
+            self.features_labeled = new_features_labeled
+            self.labels = new_labels
+            self._inferred_ids = new_inferred_ids
 
-            self.features_unlabeled = non_inferred_feats_rej
-            self._unlabeled_ids = ids_non_inferred_feats_rej
+            self.features_unlabeled = features_unlabeled
+            self._unlabeled_ids = unlabeled_ids
             return
         new_instance = CreditDataSample(
-            features_rejects=non_inferred_feats_rej,
-            features_accepts=lbld_features,
-            default_flag_accepts=lbls,
-            ids_rejects=ids_non_inferred_feats_rej
+            features_rejects=features_unlabeled,
+            features_accepts=new_features_labeled,
+            default_flag_accepts=new_labels,
+            ids_rejects=unlabeled_ids
         )
-        new_instance._inferred_ids = inferred_ids
+        new_instance._inferred_ids = new_inferred_ids
         return new_instance
 
     # -------------------------------------------------------------------------
