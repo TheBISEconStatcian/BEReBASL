@@ -349,7 +349,7 @@ class BASLPartialUnbiaser:
             data.label_rejects(inferred_labels=confident_preds, mask_inferred_rej_lbls=mask_infered, inplace = True)
 
         for _ in range(self.max_iterations-1): # First iteration already done - ensure max iterations is kept
-            next_iteration_is_sensible = mask_infered.any() and data.count_accepts > 0
+            next_iteration_is_sensible = mask_infered.any() and data.count_labeled > 0
             if not next_iteration_is_sensible:
                 break
 
