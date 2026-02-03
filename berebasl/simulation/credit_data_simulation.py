@@ -796,7 +796,6 @@ class CreditDataSample(Dataset):
         self,
         shape_up_to_N_dim : Union[tuple[int], torch.Size],
         test_proportion: float,
-        device: torch.device,
     ) -> torch.Tensor:
         """
         Generate random train/test index splits along the sample dimension.
@@ -815,7 +814,7 @@ class CreditDataSample(Dataset):
                 (..., N_test), suitable for gather-based slicing.
         """
         test_count = round(test_proportion * shape_up_to_N_dim[-1])
-        scores = torch.randn(shape_up_to_N_dim, generator=self.rng, device=device).argsort(dim=-1)
+        scores = torch.randn(shape_up_to_N_dim, generator=self.rng, device=self.device).argsort(dim=-1)
         idx_N_dim_gather_test, idx_N_dim_gather_train = scores[..., :test_count], scores[..., test_count:]
 
         return idx_N_dim_gather_train, idx_N_dim_gather_test
@@ -839,14 +838,12 @@ class CreditDataSample(Dataset):
         if not (0.0 <= test_proportion <= 1.0):
             raise ValueError("test_proportion must be between 0 and 1")
 
-        device = self.features_unlabeled.device
-
         # Generate masks
         gather_idx_train_unlbld, gather_idx_test_unlbld = self._generate_random_train_test_idxs(
-            self.features_unlabeled.shape[:-1], test_proportion, device
+            self.features_unlabeled.shape[:-1], test_proportion
         )
         gather_idx_train_lbld, gather_idx_test_lbld = self._generate_random_train_test_idxs(
-            self.features_labeled.shape[:-1], test_proportion, device
+            self.features_labeled.shape[:-1], test_proportion
         )
 
         gather_features = lambda gather_from, idx_gather : gather_from.gather(
