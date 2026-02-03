@@ -673,6 +673,10 @@ class CreditDataSample(Dataset):
         features_accepts_and_def_flags_have_compatible_shapes = features_accepts.shape[:-1] == default_flag_accepts.shape
         if not features_accepts_and_def_flags_have_compatible_shapes:
             raise ValueError("features_accepts.shape[:-1] == default_flag_accepts.shape must hold")
+        all_on_same_device = features_accepts.device==features_accepts.device==default_flag_accepts.device
+        if not all_on_same_device:
+            raise ValueError("features and flags must be on same device")
+        
         self.features_unlabeled = features_rejects
         self.features_labeled = features_accepts
         self.labels = default_flag_accepts
@@ -692,6 +696,8 @@ class CreditDataSample(Dataset):
         else:
             if ids_rejects.shape != rej_batch_shape:
                 raise ValueError("ids_rejects has the wrong shape. Should be features_rejects.shape[:-1]")
+            if ids_rejects.device != features_rejects.device:
+                raise ValueError("ids_rejects is not on the same device as the other tensors")
             self._unlabeled_ids = ids_rejects
 
         self._inferred_ids = torch.tensor(torch.nan).expand(default_flag_accepts.shape)
@@ -961,8 +967,14 @@ class CreditDataSample(Dataset):
         mask_non_inferred = ~mask_inferred_rej_lbls
         batch_idx_resized_unlbld, N_idx_resized_unlbld = _mask2d_to_int_idxs(mask_non_inferred)
         def _resize_obs(to_resize : torch.Tensor):
+            resized = torch.full(
+                torch.Size([B, new_N_unlabeled]) + to_resize.shape[2:], 
+                fill_value=torch.nan,
+                dtype=to_resize.dtype if torch.is_floating_point(to_resize) else new_labels.dtype,
+                device=to_resize.device
+            )
             resized = to_resize.new_full(torch.Size([B, new_N_unlabeled]) + to_resize.shape[2:], fill_value=torch.nan)
-            resized[batch_idx_resized_unlbld, N_idx_resized_unlbld] = to_resize[mask_non_inferred]
+            resized[batch_idx_resized_unlbld, N_idx_resized_unlbld] = to_resize[mask_non_inferred].to(resized.dtype)
             return resized
 
         features_unlabeled = _resize_obs(self.features_unlabeled)
