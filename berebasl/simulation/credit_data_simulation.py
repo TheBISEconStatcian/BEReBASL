@@ -922,6 +922,10 @@ class CreditDataSample(Dataset):
             if not inferred_labels_with_vals_as_saved_labels:
                 raise ValueError("Tensor inferred_labels[mask_inferred_rej_lbls] should contain only values like in self.labels")
             
+            input_tensors_on_same_device_as_self = inferred_labels.device == mask_inferred_rej_lbls.device == self.device
+            if not input_tensors_on_same_device_as_self:
+                raise ValueError("inferred_labels and mask_inferred_rej_lbls must be on same device as self")
+            
         
         *batch_shape, N_labels = self.labels.shape
         B = torch.tensor(batch_shape).prod()
