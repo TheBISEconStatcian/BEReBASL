@@ -678,11 +678,28 @@ class CreditDataSample(Dataset):
                 If is a ``Tensor`` it must be a singleton.
 
         Notes:
-            - All leading dimensions must match across inputs.
-            - Rejected samples never expose repayment outcomes.
-            - The RNG controls all stochastic behavior (splits, permutations, etc.).
+        - Input requirements (enforced when ``safety_checks=True``):
+            - Leading dimensions must match:
+            ``features_rejects.shape[:-2] == features_accepts.shape[:-2]`` and
+            ``features_accepts.shape[:-1] == default_flag_accepts.shape``.
+            - ``features_rejects`` and ``features_accepts`` must have identical
+            ``dtype`` and be floating-point tensors and have the same final dimension.
+            - All input tensors must reside on the same device.
+            - ``features_rejects`` and ``features_accepts`` must be *compact*:
+            it means that it exists at least a superbatch (each super batch has a 
+            shape ``[N, F]``) for which all observations in the superbatch have at
+            least one non-NaN feature, i. e. they all of the observations are valid.
+            - ``default_flag_accepts`` and ``features_accepts`` must share the same
+            NaN pattern: positions where labels are missing must have all-NaN
+            features.
+            - If ``ids_rejects`` is provided, it must match the shape
+            ``features_rejects.shape[:-1]`` and use the same device.
+        - Rejected samples never expose repayment outcomes.
+        - The RNG controls all stochastic behavior (splits, permutations, etc.).
         """
-
+        # ---------------------------------------------------------
+        # 1. Safety checks on shapes, dtypes, devices
+        # ---------------------------------------------------------
         if safety_checks:
             features_shapes_compatible = (features_rejects.shape[:-2] + features_rejects.shape[-1:]) == (features_accepts.shape[:-2] + features_accepts.shape[-1:])
             if not features_shapes_compatible:
@@ -699,18 +716,22 @@ class CreditDataSample(Dataset):
             if not all([torch.is_floating_point(f) for f in (features_accepts, features_rejects)]):
                 raise ValueError("features rejects and accepts have to be floating points")
             
-        # Process default_flag_accepts in case it is bool
+        # ---------------------------------------------------------
+        # 2. Normalize labels and determine NaN encodings
+        # ---------------------------------------------------------
         if default_flag_accepts.dtype == torch.bool:
             warn("default_flag_accepts will be changed to torch.int8, bool is not supported")
             default_flag_accepts = default_flag_accepts.to(torch.int8)
 
-        # Set and process nan values
         if nan_value_labels is None:
             nan_value_labels = float('nan') if torch.is_floating_point(default_flag_accepts) else -1
 
-        ids_rejects_was_not_none = ids_rejects is not None
+        # ---------------------------------------------------------
+        # 3. Initialize reject IDs and inferred-ID structure
+        # ---------------------------------------------------------
         rej_batch_shape = features_rejects.shape[:-1]
-        if ids_rejects_was_not_none:
+
+        if ids_rejects is not None:
             count_rej_obs = torch.prod(torch.tensor(rej_batch_shape))
             self._unlabeled_ids = torch.arange(count_rej_obs).reshape(*rej_batch_shape)
         elif safety_checks:
@@ -722,34 +743,58 @@ class CreditDataSample(Dataset):
             self._unlabeled_ids = ids_rejects
 
         if nan_value_ids_rejects is None:
-            nan_value_ids_rejects = float('nan') if torch.is_floating_point(self._unlabeled_ids) else -1
+            nan_value_ids_rejects = (
+                float("nan") if torch.is_floating_point(self._unlabeled_ids) else -1
+            )
         
-        nan_value_ids_rejects_singleton = CreditDataSample._nan_value_to_singleton_tensor(nan_value_ids_rejects)
+        nan_value_ids_rejects_singleton = CreditDataSample._nan_value_to_singleton_tensor(
+            nan_value_ids_rejects,
+            dtype=self._unlabeled_ids.dtype,
+            device=self._unlabeled_ids.device
+        )
         self._inferred_ids = nan_value_ids_rejects_singleton.expand(default_flag_accepts.shape)
         
+        # Apply NaN encodings
         self.labels = default_flag_accepts
         self.set_nan_val_labels(nan_value_labels)
         self.set_nan_val_ids_rejects(nan_value_ids_rejects)       
         
+        # ---------------------------------------------------------
+        # 4. Additional structural checks (compactness, NaN alignment)
+        # ---------------------------------------------------------
         if safety_checks:
-            mask_rej_feats_ok = (~features_rejects.isnan()).any(dim=-1) # No observations without any nans
-            if ids_rejects_was_not_none:
+            # There has to be at least one not nan feature per (valid) observation
+            # if an observation is valid it also has an _unlabeled_id
+            mask_rej_feats_all_nan = features_rejects.isnan().all(dim=-1)
+            mask_rej_feats_with_compatible_nans = mask_rej_feats_all_nan # No observations without any nans
+            if ids_rejects is not None:
                 mask_ids_rejects_is_nan = self._ids_rejects_nan_checker(self._unlabeled_ids)
-                mask_rej_feats_ok = mask_rej_feats_ok | mask_ids_rejects_is_nan
+                mask_rej_feats_with_compatible_nans = mask_rej_feats_with_compatible_nans | mask_ids_rejects_is_nan
 
-            if not mask_rej_feats_ok.all():
+            if not mask_rej_feats_with_compatible_nans.all():
                 raise ValueError((
                     "features_rejects had observations where all features were nan and ids_rejects does not imply it being a "
                     "position with null observations"
                 ))
+            
+            at_least_one_batch_rej_has_complete_obs = (mask_rej_feats_all_nan.sum(dim=-1) == 0).any()
+            if not at_least_one_batch_rej_has_complete_obs:
+                raise ValueError("features_rejects is not compact!")
                 
+            # Accepts: NaN labels <-> NaN features
             mask_labels_is_nan = self._labels_nan_checker(self.labels)
             mask_acc_feats_all_nan = features_accepts.isnan().all(dim=-1)
             nan_in_labels_implies_nan_features = (mask_labels_is_nan == mask_acc_feats_all_nan).all()
             if not nan_in_labels_implies_nan_features:
-                raise ValueError("features_accepts should be nan in the same places where default_flags_accepts is nan")
-            
+                raise ValueError("NaN pattern mismatch between labels and features_accepts.")
+
+            at_least_one_batch_acc_has_complete_obs = (mask_acc_feats_all_nan.sum(dim=-1)==0).any()
+            if not at_least_one_batch_acc_has_complete_obs:
+                raise ValueError("default_flags_accepts and features_accepts are not compact!")
         
+        # ---------------------------------------------------------
+        # 5. Final assignments + RNG
+        # ---------------------------------------------------------
         self.features_unlabeled = features_rejects
         self.features_labeled = features_accepts
 
@@ -760,11 +805,10 @@ class CreditDataSample(Dataset):
         if seed is not None:
             self.rng.manual_seed(int(seed))
 
-        
-
     # -------------------------------------------------------------------------
     # Properties
     # -------------------------------------------------------------------------
+
     @property
     def device(self) -> torch.device:
         """Device on which the dataset tensors reside."""
