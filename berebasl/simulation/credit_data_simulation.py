@@ -974,7 +974,6 @@ class CreditDataSample(Dataset):
                 dtype=to_resize.dtype if torch.is_floating_point(to_resize) else new_labels.dtype,
                 device=to_resize.device
             )
-            resized = to_resize.new_full(torch.Size([B, new_N_unlabeled]) + to_resize.shape[2:], fill_value=torch.nan)
             resized[batch_idx_resized_unlbld, N_idx_resized_unlbld] = to_resize[mask_non_inferred].to(resized.dtype)
             return resized
 
