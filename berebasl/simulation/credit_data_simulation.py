@@ -671,7 +671,7 @@ class CreditDataSample(Dataset):
         if not features_shapes_compatible:
             raise ValueError("Features must have same leading dimensions (.shape[:-2]) and final dimension .size(-1)")
         features_accepts_and_def_flags_have_compatible_shapes = features_accepts.shape[:-1] == default_flag_accepts.shape
-        if features_accepts_and_def_flags_have_compatible_shapes:
+        if not features_accepts_and_def_flags_have_compatible_shapes:
             raise ValueError("features_accepts.shape[:-1] == default_flag_accepts.shape must hold")
         self.features_unlabeled = features_rejects
         self.features_labeled = features_accepts
