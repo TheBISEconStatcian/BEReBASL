@@ -1,3 +1,4 @@
+from math import isnan
 from torch.utils.data import Dataset
 import torch
 
@@ -632,8 +633,7 @@ class CreditDataSample(Dataset):
             IDs of rejected samples that have been inferred and appended into the
             labeled pool. NaN indicates “not inferred”.
     """
-
-
+    
     def __init__(
         self,
         features_rejects: torch.Tensor,
@@ -642,40 +642,76 @@ class CreditDataSample(Dataset):
         ids_rejects : Optional[torch.Tensor] = None,
         retrieve_only_labeled: bool = True,
         seed: Optional[int] = None,
+        safety_checks : bool = True,
+        nan_value_flags : Union[float, int] = float('nan'),
+        nan_value_ids_rejects : Union[float, int]  = float('nan')
     ):
         """
         Initialize a leakage-safe credit dataset sample.
 
         Args:
-            features_rejects (Tensor):
-                Feature matrix for rejected applications. Shape (..., N_unlabeled, F).
-            features_accepts (Tensor):
-                Feature matrix for accepted applications. Shape (..., N_labeled, F).
-            default_flag_accepts (Tensor):
-                Repayment outcomes for accepted applications. Shape (..., N_labeled).
-            ids_rejects (Tensor, optional):
-                Integer IDs for rejected samples. Must match features_rejects.shape[:-1].
+            features_rejects (torch.Tensor):
+                Feature matrix for rejected applications. Shape ``(..., N_unlabeled, F)``.
+            features_accepts (torch.Tensor):
+                Feature matrix for accepted applications. Shape ``(..., N_labeled, F)``.
+            default_flag_accepts (torch.Tensor):
+                Repayment outcomes for accepted applications. Shape ``(..., N_labeled)``.
+            ids_rejects (torch.Tensor, optional):
+                Integer IDs for rejected samples. Must match ``features_rejects.shape[:-1]``.
                 If None, IDs are assigned as a flattened arange over the super-batch.
             retrieve_only_labeled (bool):
                 If True, __getitem__ returns only labeled samples. Otherwise, only
-                unlabeled samples are returned.
+                unlabeled samples are returned. Defaults to ``True``
             seed (int, optional):
-                Seed for initializing the internal device-specific RNG.
+                Seed for initializing the internal device-specific RNG. Defaults to ``None``
+            safety_checks (bool, optional):
+                Whether to check inputs having expected characteristics, namely:
+                    - Dimensions compatibility between 
+                        - ``features_reject`` and ``features_accepts``,
+                        - ``features_accepts`` and ``default_flag_accepts``,
+                    - All input tensors being on the same device
+                    - No observation (in any [super-]batch) of ``features_reject`` nor 
+                      ``features_accepts`` having all covariates being nan.
 
         Notes:
             - All leading dimensions must match across inputs.
             - Rejected samples never expose repayment outcomes.
             - The RNG controls all stochastic behavior (splits, permutations, etc.).
         """
-        features_shapes_compatible = (features_rejects.shape[:-2] + features_rejects.shape[-1:]) == (features_accepts.shape[:-2] + features_accepts.shape[-1:])
-        if not features_shapes_compatible:
-            raise ValueError("Features must have same leading dimensions (.shape[:-2]) and final dimension .size(-1)")
-        features_accepts_and_def_flags_have_compatible_shapes = features_accepts.shape[:-1] == default_flag_accepts.shape
-        if not features_accepts_and_def_flags_have_compatible_shapes:
-            raise ValueError("features_accepts.shape[:-1] == default_flag_accepts.shape must hold")
-        all_on_same_device = features_accepts.device==features_accepts.device==default_flag_accepts.device
-        if not all_on_same_device:
-            raise ValueError("features and flags must be on same device")
+        if safety_checks:
+            features_shapes_compatible = (features_rejects.shape[:-2] + features_rejects.shape[-1:]) == (features_accepts.shape[:-2] + features_accepts.shape[-1:])
+            if not features_shapes_compatible:
+                raise ValueError("Features must have same leading dimensions (.shape[:-2]) and final dimension .size(-1)")
+            features_accepts_and_def_flags_have_compatible_shapes = features_accepts.shape[:-1] == default_flag_accepts.shape
+            if not features_accepts_and_def_flags_have_compatible_shapes:
+                raise ValueError("features_accepts.shape[:-1] == default_flag_accepts.shape must hold")
+            all_on_same_device = features_rejects.device==features_accepts.device==default_flag_accepts.device
+            if not all_on_same_device:
+                raise ValueError("features and flags must be on same device")
+                
+            if not all([torch.is_floating_point(f) for f in (features_accepts, features_rejects)]):
+                raise ValueError("features rejects and accepts have to be floating points")
+            
+            mask_rej_feats_ok = (~features_rejects.isnan()).any(dim=-1) # No observations without any nans
+
+            if ids_rejects is not None:
+                if ids_rejects.shape != rej_batch_shape:
+                    raise ValueError("ids_rejects has the wrong shape. Should be features_rejects.shape[:-1]")
+                if ids_rejects.device != features_rejects.device:
+                    raise ValueError("ids_rejects is not on the same device as the other tensors")
+                
+                mask_ids_rejects_is_nan = ids_rejects.isnan() if isnan(nan_value_flags) else ids_rejects == nan_value_ids_rejects
+                mask_rej_feats_ok = mask_rej_feats_ok | mask_ids_rejects_is_nan
+
+            if not mask_rej_feats_ok.all():
+                raise ValueError((
+                    "features_rejects had observations where all features were nan and ids_rejects does not imply it being a "
+                    "position with null observations"
+                ))
+                
+            features_having_at_least_one_valid_cov = all([(~f.isnan()).any(dim=-1).all() for f in (features_accepts, features_rejects)])
+            if not features_having_at_least_one_valid_cov:
+                raise ValueError("features_accepts and features_rejects ")
         
         self.features_unlabeled = features_rejects
         self.features_labeled = features_accepts
