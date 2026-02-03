@@ -1,10 +1,14 @@
+##### Base libraries
 from math import isnan
+from warnings import warn
+
+from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union
+
+##### Third Party libraries
 from torch.utils.data import Dataset
 import torch
 
-
-from typing import Any, Dict, Literal, Optional, Tuple, Union
-
+##### Internal imports
 from berebasl.simulation.gaussian_mixture import (
     eigen_decomp_proj_to_pd,
     GaussianMixture,
@@ -586,7 +590,7 @@ def _mask2d_to_int_idxs(mask : torch.Tensor, correction_last_idx : Optional[torc
     return batch_idx[mask], idx_last_axis[mask]
 
 class CreditDataSample(Dataset):
-    """
+    r"""
     Leakage-safe, super-batch-aware dataset for reject-inference experiments.
 
     This class represents credit application data split into *accepted* (labeled)
@@ -594,46 +598,39 @@ class CreditDataSample(Dataset):
     rejected applications never expose repayment outcomes. Accepted applications
     retain both features and labels.
 
-    The dataset supports arbitrary super-batch shapes. All tensors follow the
-    contract:
+    All tensors support arbitrary super-batch shapes. The final two dimensions
+    follow the contract:
 
-        features_unlabeled:  (..., N_unlabeled, F)
-        features_labeled:    (..., N_labeled,   F)
-        labels:              (..., N_labeled)
-        _unlabeled_ids:      (..., N_unlabeled)
-        _inferred_ids:       (..., N_labeled)
+        ``features_unlabeled``:  ``(..., N_unlabeled, F)``
+        ``features_labeled``:    ``(..., N_labeled,   F)``
+        ``labels``:              ``(..., N_labeled)``
+        ``_unlabeled_ids``:      ``(..., N_unlabeled)``
+        ``_inferred_ids``:       ``(..., N_labeled)``
 
     where the leading dimensions represent super-batches.
 
     Key features:
-    - leakage-safe retrieval of accepted or rejected samples
-    - super-batch-compatible train/test splits using gather-based indexing
-    - device-specific RNG with reproducible behavior across transfers
-    - deterministic reseeding via `manual_seed`
-    - shape-agnostic reject-labeling workflow that:
-        * appends inferred labels into the labeled pool
-        * compacts the unlabeled pool
-        * preserves ID alignment
-        * avoids Python loops entirely
+        - leakage-safe retrieval of accepted or rejected samples
+        - super-batch-compatible train/test splits using gather-based indexing
+        - device-specific RNG with reproducible behavior across transfers
+        - deterministic reseeding via :meth:`manual_seed`
+        - configurable NaN encodings for labels and IDs
+        - shape-agnostic reject-labeling workflow that:
+            * appends inferred labels into the labeled pool
+            * compacts the unlabeled pool
+            * preserves ID alignment
+            * avoids Python loops entirely
 
     Attributes:
-        features_unlabeled (Tensor):
-            Rejected application features, shape (..., N_unlabeled, F).
-        features_labeled (Tensor):
-            Accepted application features, shape (..., N_labeled, F).
-        labels (Tensor):
-            Repayment outcomes for accepted applications, shape (..., N_labeled).
-        retrieve_only_labeled (bool):
-            Controls whether __getitem__ returns labeled or unlabeled samples.
-        rng (torch.Generator):
-            Device-specific RNG used for all stochastic operations.
-        _unlabeled_ids (Tensor):
-            Integer IDs for rejected samples, shape (..., N_unlabeled).
-        _inferred_ids (Tensor):
-            IDs of rejected samples that have been inferred and appended into the
-            labeled pool. NaN indicates “not inferred”.
+        features_unlabeled (Tensor): Rejected application features.
+        features_labeled (Tensor): Accepted application features.
+        labels (Tensor): Repayment outcomes for accepted applications.
+        retrieve_only_labeled (bool): Whether ``__getitem__`` returns labeled samples.
+        rng (torch.Generator): Device-specific RNG for all stochastic operations.
+        _unlabeled_ids (Tensor): Integer IDs for rejected samples.
+        _inferred_ids (Tensor): IDs of inferred samples appended to the labeled pool.
     """
-    
+
     def __init__(
         self,
         features_rejects: torch.Tensor,
@@ -643,41 +640,49 @@ class CreditDataSample(Dataset):
         retrieve_only_labeled: bool = True,
         seed: Optional[int] = None,
         safety_checks : bool = True,
-        nan_value_flags : Union[float, int] = float('nan'),
-        nan_value_ids_rejects : Union[float, int]  = float('nan')
+        nan_value_labels : Optional[Union[float, int, torch.Tensor]] = None,
+        nan_value_ids_rejects : Optional[Union[float, int, torch.Tensor]]  = None
     ):
-        """
+        r"""
         Initialize a leakage-safe credit dataset sample.
 
         Args:
-            features_rejects (torch.Tensor):
-                Feature matrix for rejected applications. Shape ``(..., N_unlabeled, F)``.
-            features_accepts (torch.Tensor):
-                Feature matrix for accepted applications. Shape ``(..., N_labeled, F)``.
-            default_flag_accepts (torch.Tensor):
-                Repayment outcomes for accepted applications. Shape ``(..., N_labeled)``.
-            ids_rejects (torch.Tensor, optional):
-                Integer IDs for rejected samples. Must match ``features_rejects.shape[:-1]``.
-                If None, IDs are assigned as a flattened arange over the super-batch.
-            retrieve_only_labeled (bool):
-                If True, __getitem__ returns only labeled samples. Otherwise, only
-                unlabeled samples are returned. Defaults to ``True``
+            features_rejects (Tensor):
+                Feature matrix for rejected applications.
+                Shape ``(..., N_unlabeled, F)``.
+            features_accepts (Tensor):
+                Feature matrix for accepted applications.
+                Shape ``(..., N_labeled, F)``.
+            default_flag_accepts (Tensor):
+                Repayment outcomes for accepted applications.
+                Shape ``(..., N_labeled)``.
+            ids_rejects (Tensor, optional):
+                Integer IDs for rejected samples. Must match
+                ``features_rejects.shape[:-1]``.
+                If ``None`` (default), IDs are assigned as a flattened ``arange``.
+            retrieve_only_labeled (bool, optional):
+                Whether ``__getitem__`` returns only labeled samples.
+                Default: ``True``.
             seed (int, optional):
-                Seed for initializing the internal device-specific RNG. Defaults to ``None``
+                Seed for initializing the internal RNG. Default: ``None``.
             safety_checks (bool, optional):
-                Whether to check inputs having expected characteristics, namely:
-                    - Dimensions compatibility between 
-                        - ``features_reject`` and ``features_accepts``,
-                        - ``features_accepts`` and ``default_flag_accepts``,
-                    - All input tensors being on the same device
-                    - No observation (in any [super-]batch) of ``features_reject`` nor 
-                      ``features_accepts`` having all covariates being nan.
+                Whether to validate shapes, dtypes, devices, and NaN structure.
+                Default: ``True``.
+            nan_value_labels (float, int, Tensor, optional):
+                Value used to represent missing labels. If ``None`` (default),
+                floating labels use ``nan`` and integer labels use ``-1``.
+                If is a ``Tensor`` it must be a singleton.
+            nan_value_ids_rejects (float, int, Tensor, optional):
+                Value used to represent missing IDs. If ``None`` (default),
+                floating IDs use ``nan`` and integer IDs use ``-1``.
+                If is a ``Tensor`` it must be a singleton.
 
         Notes:
             - All leading dimensions must match across inputs.
             - Rejected samples never expose repayment outcomes.
             - The RNG controls all stochastic behavior (splits, permutations, etc.).
         """
+
         if safety_checks:
             features_shapes_compatible = (features_rejects.shape[:-2] + features_rejects.shape[-1:]) == (features_accepts.shape[:-2] + features_accepts.shape[-1:])
             if not features_shapes_compatible:
@@ -685,6 +690,8 @@ class CreditDataSample(Dataset):
             features_accepts_and_def_flags_have_compatible_shapes = features_accepts.shape[:-1] == default_flag_accepts.shape
             if not features_accepts_and_def_flags_have_compatible_shapes:
                 raise ValueError("features_accepts.shape[:-1] == default_flag_accepts.shape must hold")
+            if features_accepts.dtype != features_rejects.dtype:
+                raise ValueError("features must have the same dtype")
             all_on_same_device = features_rejects.device==features_accepts.device==default_flag_accepts.device
             if not all_on_same_device:
                 raise ValueError("features and flags must be on same device")
@@ -692,15 +699,42 @@ class CreditDataSample(Dataset):
             if not all([torch.is_floating_point(f) for f in (features_accepts, features_rejects)]):
                 raise ValueError("features rejects and accepts have to be floating points")
             
-            mask_rej_feats_ok = (~features_rejects.isnan()).any(dim=-1) # No observations without any nans
+        # Process default_flag_accepts in case it is bool
+        if default_flag_accepts.dtype == torch.bool:
+            warn("default_flag_accepts will be changed to torch.int8, bool is not supported")
+            default_flag_accepts = default_flag_accepts.to(torch.int8)
 
-            if ids_rejects is not None:
-                if ids_rejects.shape != rej_batch_shape:
-                    raise ValueError("ids_rejects has the wrong shape. Should be features_rejects.shape[:-1]")
-                if ids_rejects.device != features_rejects.device:
-                    raise ValueError("ids_rejects is not on the same device as the other tensors")
-                
-                mask_ids_rejects_is_nan = ids_rejects.isnan() if isnan(nan_value_flags) else ids_rejects == nan_value_ids_rejects
+        # Set and process nan values
+        if nan_value_labels is None:
+            nan_value_labels = float('nan') if torch.is_floating_point(default_flag_accepts) else -1
+
+        ids_rejects_was_not_none = ids_rejects is not None
+        rej_batch_shape = features_rejects.shape[:-1]
+        if ids_rejects_was_not_none:
+            count_rej_obs = torch.prod(torch.tensor(rej_batch_shape))
+            self._unlabeled_ids = torch.arange(count_rej_obs).reshape(*rej_batch_shape)
+        elif safety_checks:
+            if ids_rejects.shape != rej_batch_shape:
+                raise ValueError("ids_rejects has the wrong shape. Should be features_rejects.shape[:-1]")
+            if ids_rejects.device != features_rejects.device:
+                raise ValueError("ids_rejects is not on the same device as the other tensors")
+            
+            self._unlabeled_ids = ids_rejects
+
+        if nan_value_ids_rejects is None:
+            nan_value_ids_rejects = float('nan') if torch.is_floating_point(self._unlabeled_ids) else -1
+        
+        nan_value_ids_rejects_singleton = CreditDataSample._nan_value_to_singleton_tensor(nan_value_ids_rejects)
+        self._inferred_ids = nan_value_ids_rejects_singleton.expand(default_flag_accepts.shape)
+        
+        self.labels = default_flag_accepts
+        self.set_nan_val_labels(nan_value_labels)
+        self.set_nan_val_ids_rejects(nan_value_ids_rejects)       
+        
+        if safety_checks:
+            mask_rej_feats_ok = (~features_rejects.isnan()).any(dim=-1) # No observations without any nans
+            if ids_rejects_was_not_none:
+                mask_ids_rejects_is_nan = self._ids_rejects_nan_checker(self._unlabeled_ids)
                 mask_rej_feats_ok = mask_rej_feats_ok | mask_ids_rejects_is_nan
 
             if not mask_rej_feats_ok.all():
@@ -709,13 +743,15 @@ class CreditDataSample(Dataset):
                     "position with null observations"
                 ))
                 
-            features_having_at_least_one_valid_cov = all([(~f.isnan()).any(dim=-1).all() for f in (features_accepts, features_rejects)])
-            if not features_having_at_least_one_valid_cov:
-                raise ValueError("features_accepts and features_rejects ")
+            mask_labels_is_nan = self._labels_nan_checker(self.labels)
+            mask_acc_feats_all_nan = features_accepts.isnan().all(dim=-1)
+            nan_in_labels_implies_nan_features = (mask_labels_is_nan == mask_acc_feats_all_nan).all()
+            if not nan_in_labels_implies_nan_features:
+                raise ValueError("features_accepts should be nan in the same places where default_flags_accepts is nan")
+            
         
         self.features_unlabeled = features_rejects
         self.features_labeled = features_accepts
-        self.labels = default_flag_accepts
 
         self.retrieve_only_labeled = retrieve_only_labeled
 
@@ -724,19 +760,7 @@ class CreditDataSample(Dataset):
         if seed is not None:
             self.rng.manual_seed(int(seed))
 
-        # Logic to keep track of observations which were labeled
-        rej_batch_shape = features_rejects.shape[:-1]
-        if ids_rejects is None:
-            count_rej_obs = torch.prod(torch.tensor(rej_batch_shape))
-            self._unlabeled_ids = torch.arange(count_rej_obs).reshape(*rej_batch_shape)
-        else:
-            if ids_rejects.shape != rej_batch_shape:
-                raise ValueError("ids_rejects has the wrong shape. Should be features_rejects.shape[:-1]")
-            if ids_rejects.device != features_rejects.device:
-                raise ValueError("ids_rejects is not on the same device as the other tensors")
-            self._unlabeled_ids = ids_rejects
-
-        self._inferred_ids = torch.tensor(torch.nan).expand(default_flag_accepts.shape)
+        
 
     # -------------------------------------------------------------------------
     # Properties
@@ -750,23 +774,23 @@ class CreditDataSample(Dataset):
     def mask_inferred_lbls(self):
         """
         Boolean mask indicating which labeled samples originate from inferred
-        rejected applications. Shape (..., N_labeled).
+        rejected applications. Shape ``(..., N_labeled)``.
         """
-        return ~self._inferred_ids.isnan()
+        return ~self._ids_rejects_nan_checker(self._inferred_ids)
 
     @property
     def count_labeled(self):
-        """Number of labeled samples per super-batch (N_labeled)."""
+        """Number of labeled samples per super-batch (``N_labeled``)."""
         return self.features_labeled.size(-2)
     
     @property
     def count_unlabeled(self):
-        """Number of unlabeled samples per super-batch (N_unlabeled)."""
+        """Number of unlabeled samples per super-batch (``N_unlabeled``)."""
         return self.features_unlabeled.size(-2)
     
     @property
     def features_count(self):
-        """Number of features per sample (F)."""
+        """Number of features per sample (``F``)."""
         return self.features_unlabeled.size(-1)
 
     # -------------------------------------------------------------------------
@@ -781,7 +805,7 @@ class CreditDataSample(Dataset):
             seed (int): New seed value.
 
         Returns:
-            CreditDataSample: self.
+            ``CreditDataSample``: ``self``.
         """
         self.rng.manual_seed(seed)
         return self
@@ -796,20 +820,21 @@ class CreditDataSample(Dataset):
         seed: Optional[int] = None,
         set_same_initial_seed: bool = True,
     ):
-        """
+        r"""
         Move all dataset tensors and the RNG to a target device.
 
         Args:
             device (torch.device):
                 Target device.
             seed (int, optional):
-                Explicit seed for the new RNG. Overrides set_same_initial_seed.
-            set_same_initial_seed (bool):
-                If True and seed is None, the new RNG is initialized with the
-                previous RNG's initial seed.
+                Explicit seed for the new RNG. Overrides ``set_same_initial_seed``.
+                Default: ``None``.
+            set_same_initial_seed (bool, optional):
+                If ``True`` and ``seed`` is ``None``, the new RNG is initialized
+                with the previous RNG's initial seed. Default: ``True``.
 
         Returns:
-            CreditDataSample: self, moved to the new device.
+            ``CreditDataSample``: ``self`` moved to ``device``.
         """
         for var in ["features_rejects", "features_accepts", "default_flag_accepts", "_unlabeled_ids", "_inferred_ids"]:
             setattr(self, var, getattr(self, var).to(device))
@@ -825,6 +850,124 @@ class CreditDataSample(Dataset):
         return self
 
     # -------------------------------------------------------------------------
+    # NaN-value utilities
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _build_tensor_nan_checker(nan_value : Union[float, int, torch.Tensor]) -> Callable[[torch.Tensor], torch.Tensor]:
+        r"""
+        Build a function that checks whether elements of a tensor match the
+        configured NaN value.
+
+        Args:
+            nan_value (float, int, Tensor):
+                The value representing missingness. If torch.Tensor it must be a
+                singleton (``nan_value.dim()==0`` and ``nan_value.numel()==1``)
+
+        Returns:
+            Callable[[Tensor], Tensor]:
+                A function returning a boolean mask.
+        """
+        if isnan(nan_value):
+            return lambda ten : ten.isnan()
+        return lambda ten : ten == nan_value
+    
+    @staticmethod
+    def _nan_value_to_singleton_tensor(
+        nan_value : Union[float, int, torch.Tensor],
+        dtype : Optional[torch.dtype] = None,
+        device : Optional[torch.device] = None
+    ) -> torch.Tensor:
+        r"""
+        Convert a scalar or tensor ``nan_value`` into a single-element tensor
+        with the specified ``dtype`` and ``device``.
+
+        Args:
+            nan_value (float, int, Tensor):
+                Value representing missingness.
+            dtype (torch.dtype, optional): Desired dtype. Default: ``None``.
+            device (torch.device, optional): Desired device. Default: ``None``.
+
+        Returns:
+            Tensor: A single-element tensor containing ``nan_value``.
+        """
+        if isinstance(nan_value, torch.Tensor):
+            assert nan_value.numel() != 1, "nan_value has to have a single element"
+            
+            return nan_value.flatten().squeeze().to(dtype=dtype, device=device)
+        
+        return torch.tensor(nan_value, dtype=dtype, device=device)
+
+    def set_nan_val_ids_rejects(self, nan_value : Union[float, int, torch.Tensor]) -> None:
+        r"""
+        Update the NaN encoding used for ``_unlabeled_ids`` and ``_inferred_ids``.
+
+        All existing NaN positions (according to the previous checker) are rewritten
+        using the new ``nan_value``.
+
+        Args:
+            nan_value (float, int, Tensor):
+                New NaN encoding for reject IDs.
+        """
+        # Set to new nan value everywhere where it is value
+        ids_rejects_nan_checker = getattr(
+            self,
+            "_ids_rejects_nan_checker",
+            lambda t : torch.tensor(False, device=t.device).expand(t.shape)
+        )
+        nan_value_as_singleton = CreditDataSample._nan_value_to_singleton_tensor(
+            nan_value,
+            self._unlabeled_ids.dtype,
+            self._unlabeled_ids.device
+        )
+
+        self._unlabeled_ids = torch.where(
+            ids_rejects_nan_checker(self._unlabeled_ids), 
+            nan_value_as_singleton, # will generate error if nan_value not castable to _unlabeled_ids.dtype
+            self._unlabeled_ids
+        )
+        self._inferred_ids = torch.where(
+            ids_rejects_nan_checker(self._inferred_ids), 
+            nan_value_as_singleton, # will generate error if nan_value not castable to _unlabeled_ids.dtype
+            self._unlabeled_ids
+        )
+        
+        self._nan_val_ids_rejects = nan_value_as_singleton
+        self._ids_rejects_nan_checker = CreditDataSample._build_tensor_nan_checker(nan_value)
+
+    def set_nan_val_labels(self, nan_value : Union[float, int, torch.Tensor]):
+        r"""
+        Update the NaN encoding used for ``labels``.
+
+        All existing NaN positions (according to the previous checker) are rewritten
+        using the new ``nan_value``.
+
+        Args:
+            nan_value (float, int, Tensor):
+                New NaN encoding for labels.
+        """
+        # Set to new nan value everywhere where it is value
+        labels_nan_checker = getattr(
+            self,
+            "_labels_nan_checker",
+            lambda t : torch.tensor(False, device=t.device).expand(t.shape)
+        )
+        nan_value_as_singleton = CreditDataSample._nan_value_to_singleton_tensor(
+            nan_value,
+            self.labels.dtype,
+            self.labels.device
+        )
+
+        self.labels = torch.where(
+            labels_nan_checker(self.labels), 
+            nan_value_as_singleton, # will generate error if nan_value not castable to _unlabeled_ids.dtype
+            self.labels
+        )
+
+        self._nan_val_labels = nan_value_as_singleton
+        self._labels_nan_checker = CreditDataSample._build_tensor_nan_checker(nan_value)
+
+    # -------------------------------------------------------------------------
     # (Reject) Inference related
     # -------------------------------------------------------------------------
 
@@ -833,22 +976,19 @@ class CreditDataSample(Dataset):
         shape_up_to_N_dim : Union[tuple[int], torch.Size],
         test_proportion: float,
     ) -> torch.Tensor:
-        """
+        r"""
         Generate random train/test index splits along the sample dimension.
 
         Args:
             shape_up_to_N_dim (tuple or torch.Size):
-                Super-batch shape ending with N (number of samples).
+                Super-batch shape ending with ``N`` (number of samples).
             test_proportion (float):
                 Fraction of samples to assign to the test set.
-            device (torch.device):
-                Device for the generated index tensors.
 
         Returns:
-            Tuple[Tensor, Tensor]:
-                (train_indices, test_indices), each of shape (..., N_train) and
-                (..., N_test), suitable for gather-based slicing.
-        """
+            (Tensor, Tensor):
+                ``(train_indices, test_indices)``, each suitable for ``gather``.
+    """
         test_count = round(test_proportion * shape_up_to_N_dim[-1])
         scores = torch.randn(shape_up_to_N_dim, generator=self.rng, device=self.device).argsort(dim=-1)
         idx_N_dim_gather_test, idx_N_dim_gather_train = scores[..., :test_count], scores[..., test_count:]
@@ -868,7 +1008,7 @@ class CreditDataSample(Dataset):
 
         Returns:
             (CreditDataSample, CreditDataSample):
-                (train_sample, test_sample), each containing consistent subsets of
+                (``train_sample``, ``test_sample``), each containing consistent subsets of
                 features, labels, IDs, and inferred-ID tracking.
         """
         if not (0.0 <= test_proportion <= 1.0):
@@ -918,32 +1058,33 @@ class CreditDataSample(Dataset):
             inplace : bool = False,
             safety_checks : bool = True
     ) -> Union[None, "CreditDataSample"]:
-        """
+        r"""
         Append inferred labels from the unlabeled pool into the labeled pool and
         compact the remaining unlabeled pool.
 
         This operation:
-            - inserts inferred labels into available NaN slots in the labeled pool
-            - pads the labeled pool if more slots are needed
+            - inserts inferred labels into available NaN slots in ``labels``
+            - pads the labeled pool if more slots are required with corresponding
+              saved NaN value
             - appends corresponding features and IDs
             - removes inferred samples from the unlabeled pool
             - preserves super-batch structure
-            - performs all operations without Python loops
 
         Args:
             inferred_labels (Tensor):
-                Tensor of inferred labels, shape (..., N_unlabeled).
+                Inferred labels for rejected samples. Shape ``(..., N_unlabeled)``.
             mask_inferred_rej_lbls (Tensor):
                 Boolean mask selecting which unlabeled samples receive inferred labels.
-                Same shape as inferred_labels.
-            inplace (bool):
-                If True, modify the dataset in place. Otherwise, return a new instance.
-            safety_checks (bool):
-                If True, validate shapes and label consistency.
+                Same shape as ``inferred_labels``.
+            inplace (bool, optional):
+                If ``True``, modify the dataset in place. Default: ``False``.
+            safety_checks (bool, optional):
+                Whether to validate shapes, devices, and label consistency.
+                Default: ``True``.
 
         Returns:
             CreditDataSample or None:
-                New dataset instance if inplace=False, otherwise None.
+                New dataset instance if ``inplace=False``, otherwise ``None``.
         """
         if safety_checks:
             if mask_inferred_rej_lbls.dtype != torch.bool:
@@ -964,7 +1105,7 @@ class CreditDataSample(Dataset):
         B = torch.tensor(batch_shape).prod()
 
         current_labels = self.labels.reshape(B, N_labels)
-        mask_nans_labels = current_labels.isnan()
+        mask_nans_labels = self._labels_nan_checker(current_labels)
 
         N_unlabeled = mask_inferred_rej_lbls.size(-1)
         mask_inf = mask_inferred_rej_lbls.reshape(B, N_unlabeled)
@@ -976,45 +1117,51 @@ class CreditDataSample(Dataset):
         needed_padding = torch.maximum(slots_needed - slots_available, torch.tensor(0, device=self.device))
         max_needed_padding = needed_padding.max()
 
-        # specifics
-        pad_mode_val = {"mode" : 'constant', 'value':torch.nan}
+        
         mask_valid_lbls = ~mask_nans_labels
         batch_idx_valid_lbls, N_idx_valid_lbls = _mask2d_to_int_idxs(mask_valid_lbls)
         batch_idx_inf_lbls, N_idx_inf_lbls = _mask2d_to_int_idxs(mask_inf, N_labels - slots_available.unsqueeze(-1))
 
-        def _append_obs(append_to : torch.Tensor, to_append : torch.Tensor, pad_spec : tuple[int]):
-            appended = torch.nn.functional.pad(append_to, pad=pad_spec, **pad_mode_val)
+        def _append_obs(append_to : torch.Tensor, to_append : torch.Tensor, pad_spec : tuple[int], pad_val):
+            appended = torch.nn.functional.pad(
+                append_to, 
+                pad=pad_spec, 
+                mode='constant',
+                value=pad_val
+            )
             appended[batch_idx_valid_lbls, N_idx_valid_lbls] = append_to[mask_valid_lbls].to(appended.dtype)
             appended[batch_idx_inf_lbls, N_idx_inf_lbls] = to_append[mask_inf].to(appended.dtype)
             return appended
 
-        new_labels = _append_obs(append_to=current_labels, to_append=inf_lbls, pad_spec=(0, max_needed_padding))
+        new_labels = _append_obs(
+            append_to=current_labels, 
+            to_append=inf_lbls, 
+            pad_spec=(0, max_needed_padding),
+            pad_val = self._nan_val_labels
+        )
         new_inferred_ids = _append_obs(
             append_to=self._inferred_ids.reshape(B, N_labels), 
             to_append=self._unlabeled_ids.reshape(B, N_unlabeled),
-            pad_spec=(0, max_needed_padding)
+            pad_spec=(0, max_needed_padding),
+            pad_val = self._nan_val_ids_rejects
         )
         new_features_labeled = _append_obs(
             append_to=self.features_labeled.reshape(B, N_labels, -1), 
             to_append=self.features_unlabeled.reshape(B, N_unlabeled, -1),
-            pad_spec=(0, 0, 0, max_needed_padding)
+            pad_spec=(0, 0, 0, max_needed_padding),
+            pad_val=torch.nan
         )
 
         new_N_unlabeled = N_unlabeled - slots_needed.min()
-        mask_non_inferred = ~mask_inferred_rej_lbls
+        mask_non_inferred = ~mask_inf
         batch_idx_resized_unlbld, N_idx_resized_unlbld = _mask2d_to_int_idxs(mask_non_inferred)
-        def _resize_obs(to_resize : torch.Tensor):
-            resized = torch.full(
-                torch.Size([B, new_N_unlabeled]) + to_resize.shape[2:], 
-                fill_value=torch.nan,
-                dtype=to_resize.dtype if torch.is_floating_point(to_resize) else new_labels.dtype,
-                device=to_resize.device
-            )
-            resized[batch_idx_resized_unlbld, N_idx_resized_unlbld] = to_resize[mask_non_inferred].to(resized.dtype)
+        def _resize_obs(to_resize : torch.Tensor, nan_value):
+            resized = to_resize.new_full(torch.Size([B, new_N_unlabeled]) + to_resize.shape[2:], nan_value)
+            resized[batch_idx_resized_unlbld, N_idx_resized_unlbld] = to_resize[mask_non_inferred]
             return resized
 
-        features_unlabeled = _resize_obs(self.features_unlabeled)
-        unlabeled_ids = _resize_obs(self._unlabeled_ids)
+        features_unlabeled = _resize_obs(self.features_unlabeled, nan_value=torch.nan)
+        unlabeled_ids = _resize_obs(self._unlabeled_ids, nan_value=self._nan_val_ids_rejects)
 
         new_labels, new_inferred_ids, new_features_labeled, features_unlabeled, unlabeled_ids = [
             t.reshape(torch.Size(batch_shape) + t.shape[1:]) for t in 
@@ -1048,7 +1195,7 @@ class CreditDataSample(Dataset):
         Number of samples returned by __getitem__, depending on retrieval mode.
 
         Returns:
-            int: N_labeled if retrieve_only_labeled=True, else N_unlabeled.
+            int: ``N_labeled`` if ``retrieve_only_labeled=True``, else ``N_unlabeled``.
         """
         return self.count_labeled if self.retrieve_only_labeled else self.count_unlabeled
 
