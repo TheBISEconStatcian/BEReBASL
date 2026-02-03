@@ -667,8 +667,12 @@ class CreditDataSample(Dataset):
             - Rejected samples never expose repayment outcomes.
             - The RNG controls all stochastic behavior (splits, permutations, etc.).
         """
-        if not (features_rejects.shape[:-1] == features_accepts.shape[:-1] == default_flag_accepts.shape):
-            raise ValueError("Shapes are not compatible")
+        features_shapes_compatible = (features_rejects.shape[:-2] + features_rejects.shape[-1:]) == (features_accepts.shape[:-2] + features_accepts.shape[-1:])
+        if not features_shapes_compatible:
+            raise ValueError("Features must have same leading dimensions (.shape[:-2]) and final dimension .size(-1)")
+        features_accepts_and_def_flags_have_compatible_shapes = features_accepts.shape[:-1] == default_flag_accepts.shape
+        if features_accepts_and_def_flags_have_compatible_shapes:
+            raise ValueError("features_accepts.shape[:-1] == default_flag_accepts.shape must hold")
         self.features_unlabeled = features_rejects
         self.features_labeled = features_accepts
         self.labels = default_flag_accepts
@@ -678,7 +682,7 @@ class CreditDataSample(Dataset):
         # RNG is device-specific, so we create it on the same device as the data
         self.rng = torch.Generator(device=features_rejects.device)
         if seed is not None:
-            self.rng.manual_seed(seed)
+            self.rng.manual_seed(int(seed))
 
         # Logic to keep track of observations which were labeled
         rej_batch_shape = features_rejects.shape[:-1]
@@ -686,7 +690,8 @@ class CreditDataSample(Dataset):
             count_rej_obs = torch.prod(torch.tensor(rej_batch_shape))
             self._unlabeled_ids = torch.arange(count_rej_obs).reshape(*rej_batch_shape)
         else:
-            assert ids_rejects.shape == rej_batch_shape, "ids_rejects has the wrong shape. Should be features_rejects.shape[:-1]"
+            if ids_rejects.shape != rej_batch_shape:
+                raise ValueError("ids_rejects has the wrong shape. Should be features_rejects.shape[:-1]")
             self._unlabeled_ids = ids_rejects
 
         self._inferred_ids = torch.tensor(torch.nan).expand(default_flag_accepts.shape)
