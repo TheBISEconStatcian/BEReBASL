@@ -1181,7 +1181,10 @@ class CreditDataSample(Dataset):
             features_accepts=new_features_labeled,
             default_flag_accepts=new_labels,
             ids_rejects=unlabeled_ids,
-            retrieve_only_labeled=self.retrieve_only_labeled
+            retrieve_only_labeled=self.retrieve_only_labeled,
+            safety_checks=safety_checks,
+            nan_value_labels=self._nan_val_labels,
+            nan_value_ids_rejects=self._nan_val_ids_rejects
         )
         new_instance._inferred_ids = new_inferred_ids
         return new_instance
