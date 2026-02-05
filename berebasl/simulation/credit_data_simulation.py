@@ -1028,6 +1028,153 @@ class CreditDataSample(Dataset):
 
         self._nan_val_labels = nan_value_as_singleton
         self._labels_nan_checker = CreditDataSample._build_tensor_nan_checker(nan_value)
+        
+    # -------------------------------------------------------------------------
+    # Clone class related
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def new_instance_with_full_info(
+            features_unlabeled : torch.Tensor,
+            unlabeled_ids : torch.Tensor,
+            features_labeled : torch.Tensor,
+            labels : torch.tensor,
+            ids_inferred : torch.Tensor,
+            nan_val_ids_rejects : torch.Tensor,
+            nan_val_labels : torch.Tensor,
+            retrieve_only_labeled : bool = True,
+            seed : Optional[int] = None,
+            rng_state : Optional[torch.Tensor] = None,
+            safety_checks = True
+    ) -> "CreditDataSample":
+        new_instance = CreditDataSample(
+            features_rejects=features_unlabeled,
+            features_accepts=features_labeled,
+            default_flag_accepts=labels,
+            ids_rejects=unlabeled_ids,
+            retrieve_only_labeled=retrieve_only_labeled,
+            seed=seed,
+            safety_checks=safety_checks,
+            nan_value_labels=nan_val_labels,
+            nan_value_ids_rejects=nan_val_ids_rejects
+        )
+        if safety_checks:
+            if ids_inferred.shape != new_instance.labels.shape:
+                raise ValueError("ids_inferred should have the same shape as labels (after init)")
+            mask_id_rej_is_nan = new_instance._ids_rejects_nan_checker(ids_inferred)
+            mask_labels_is_nan = new_instance._labels_nan_checker(new_instance.labels)
+
+            any_label_is_nan_and_id_is_not = torch.any(mask_id_rej_is_nan < mask_labels_is_nan)
+            if any_label_is_nan_and_id_is_not:
+                raise ValueError("NaNs pattern in ids_inferred not compatible with labels NaN pattern")
+            
+        new_instance._ids_inferred = ids_inferred
+
+        if rng_state is not None:
+            new_instance.rng.set_state(rng_state)
+
+        return new_instance
+    
+    def is_valid_clone(self, clone : "CreditDataSample") -> Tuple[bool, str]:
+
+        types_match = lambda obj1, obj2 : type(obj1) is type(obj2)
+        tensors_have_same_data = lambda ten1, ten2 : ten1.shape == ten2.shape and torch.all((ten1 == ten2) | (ten1.isnan() & ten2.isnan()))
+
+        if not types_match(self, clone):
+            return False, "self and clone type mismatch"
+        
+        cls = self.__class__
+        
+        
+        for container_name in cls._class_members_containing_what_to_deepcopy:
+            names_to_be_copied = getattr(cls, container_name)
+
+            warn_for_not_knowing_how_to_check_equal_data = False
+            for obj_name in names_to_be_copied:
+                orig_obj = getattr(self, obj_name)
+                cloned_obj = getattr(clone, obj_name)
+
+                if not types_match(orig_obj, cloned_obj):
+                    return False, f"Member {obj_name} did not have the same type in clone and in self"
+
+                objs_share_reference = orig_obj is cloned_obj
+                if objs_share_reference:
+                    return False, f"clone.{obj_name} is a reference to self.{obj_name}"
+
+                if container_name == '_tensor_attr_after_init':
+                    if not tensors_have_same_data(orig_obj, cloned_obj):
+                        return False, f"Copying {obj_name} did not retrieve tensors with the same data"
+                elif container_name == '_lambdas_after_init':
+                    # minimal lambda equivalence check 
+                    if orig_obj.__name__ != "<lambda>" or cloned_obj.__name__ != "<lambda>": 
+                        return False, f"{obj_name}: expected lambda but got non-lambda" 
+                    if orig_obj.__code__.co_freevars != cloned_obj.__code__.co_freevars:
+                        return False, f"{obj_name}: lambda closure mismatch" 
+                    
+                elif container_name == '_to_copy_with_separate_logic':
+                    if obj_name == 'rng':
+                        if self.rng.get_state().tolist() != clone.rng.get_state().tolist():
+                            return False, "States of self.rng and dummy_clone.rng are not the same"
+                    else:
+                        warn_for_not_knowing_how_to_check_equal_data = True
+                else:
+                    warn(f"{container_name} not recognized - no logic or white listing for equal data possible")
+                    warn_for_not_knowing_how_to_check_equal_data = True
+
+            if warn_for_not_knowing_how_to_check_equal_data:
+                warn(f"The attributes in {container_name} = [{','.join(names_to_be_copied)}] did not share adress but cannot be checked on equality of data")
+
+        for obj_name in cls._members_not_to_deepcopy:
+            orig_obj = getattr(self, obj_name)
+            cloned_obj = getattr(clone, obj_name)
+            if not types_match(orig_obj, cloned_obj):
+                return False, f"Member {obj_name} did not have the same type in clone and in self"
+            
+            if orig_obj is cloned_obj:
+                continue
+                
+            if isinstance(orig_obj, torch.Tensor) and not tensors_have_same_data(orig_obj, cloned_obj): 
+                return False, f"{obj_name}: tensor mismatch"
+
+        checked = ( 
+            cls._tensor_attr_after_init 
+            + cls._lambdas_after_init 
+            + cls._to_copy_with_separate_logic 
+            + cls._members_not_to_deepcopy
+        )
+        basic_types_comparable_with_equality = (int, float, dict, list, set, frozenset)
+        members_not_checked = set(self.__dict__.keys()) - set(checked)
+        
+        for obj_name in members_not_checked:
+            orig_obj = getattr(self, obj_name)
+            cloned_obj = getattr(clone, obj_name)
+            if not types_match(orig_obj, cloned_obj):
+                return False, f"Member {obj_name} did not have the same type in clone and in self"
+            
+            if isinstance(orig_obj, basic_types_comparable_with_equality) and orig_obj != cloned_obj:
+                return False, f"Member {obj_name} did not contain the same data in clone and in self"
+            
+            warn(f"Do not know how to check if cloning was ok with member {obj_name}")
+
+        return True, ""
+    
+    def clone(self, safety_data_integrety_tests : bool = False):
+        if safety_data_integrety_tests:
+            for ten_name in CreditDataSample._tensor_attr_after_init:
+                if not isinstance(getattr(self, ten_name, None), torch.Tensor):
+                    raise ValueError(f"Member {ten_name} was non existent or not a torch.Tensor")
+                
+        kwargs_new_instance_with_full_info = {
+            (k[1:] if k[0]=='_' else k) : getattr(self, k).clone() for k in CreditDataSample._tensor_attr_after_init
+        }
+        
+        return CreditDataSample.new_instance_with_full_info(
+            retrieve_only_labeled = self.retrieve_only_labeled,
+            rng_state = self.rng.get_state(),
+            safety_checks=safety_data_integrety_tests,
+            **kwargs_new_instance_with_full_info
+        )
+
 
     # -------------------------------------------------------------------------
     # (Reject) Inference related
