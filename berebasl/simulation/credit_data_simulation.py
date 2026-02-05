@@ -1028,7 +1028,7 @@ class CreditDataSample(Dataset):
 
         self._nan_val_labels = nan_value_as_singleton
         self._labels_nan_checker = CreditDataSample._build_tensor_nan_checker(nan_value)
-        
+
     # -------------------------------------------------------------------------
     # Clone class related
     # -------------------------------------------------------------------------
@@ -1204,7 +1204,7 @@ class CreditDataSample(Dataset):
 
         return idx_N_dim_gather_train, idx_N_dim_gather_test
 
-    def train_test_split(self, test_proportion: float):
+    def train_test_split(self, test_proportion: float, check_data_integrity_before_returning : bool = False):
         """
         Split the dataset into train and test subsets without leakage.
 
@@ -1214,6 +1214,11 @@ class CreditDataSample(Dataset):
         Args:
             test_proportion (float):
                 Fraction of samples to assign to the test set.
+            check_data_integrity_before_returning (bool):
+                Whether to check if all data in the class fullfills the expected
+                characteristics. Only necessary/sensible if the tensors in the class
+                have been changed manually, like adding more data - which is not the
+                intentede purpose of the clase. Defaults to ``False``.
 
         Returns:
             (CreditDataSample, CreditDataSample):
@@ -1236,13 +1241,25 @@ class CreditDataSample(Dataset):
             index=idx_gather.unsqueeze(-1).expand(*idx_gather.shape, self.features_count)
         )
 
+        shared_args_for_new_instances = lambda _ : {
+            "retrieve_only_labeled" : self.retrieve_only_labeled,
+            "nan_val_ids_rejects" : self._nan_val_ids_rejects.clone(),
+            "nan_val_labels" : self._nan_val_labels.clone()
+        }
 
         # Slice data
+        train_sample = CreditDataSample.new_instance_with_full_info(
+            features_unlabeled =    gather_features(self.features_unlabeled, gather_idx_train_unlbld),
+            unlabeled_ids =         self._unlabeled_ids.gather(dim=-1, index=gather_idx_train_unlbld),
+            features_labeled =      gather_features(self.features_labeled, gather_idx_train_lbld),
+            labels =                gather_features(self.features_labeled, gather_idx_train_lbld),
+            retrieve_only_labeled = self.retrieve_only_labeled
+        )
         train_sample = CreditDataSample(
             features_rejects= gather_features(self.features_unlabeled, gather_idx_train_unlbld),
             ids_rejects=self._unlabeled_ids.gather(dim=-1, index=gather_idx_train_unlbld),
             features_accepts=gather_features(self.features_labeled, gather_idx_train_lbld),
-            default_flag_accepts=self.labels.gather(dim=-1, index=gather_idx_train_lbld),
+            default_flag_accepts=gather_features(self.features_labeled, gather_idx_train_lbld),
             retrieve_only_labeled=self.retrieve_only_labeled,
             seed=self.rng.initial_seed(),
         )
@@ -1260,136 +1277,6 @@ class CreditDataSample(Dataset):
 
         return train_sample, test_sample
     
-    def is_valid_clone(self, clone) -> Tuple[bool, str]:
-        types_match = lambda obj1, obj2 : type(obj1) is type(obj2)
-        tensors_have_same_data = lambda ten1, ten2 : ten1.shape == ten2.shape and torch.all((ten1 == ten2) | (ten1.isnan() & ten2.isnan()))
-
-        if not types_match(self, clone):
-            return False, "self and clone type mismatch"
-        
-        cls = self.__class__
-        
-        
-        for container_name in cls._class_members_containing_what_to_deepcopy:
-            names_to_be_copied = getattr(cls, container_name)
-
-            warn_for_not_knowing_how_to_check_equal_data = False
-            for obj_name in names_to_be_copied:
-                orig_obj = getattr(self, obj_name)
-                cloned_obj = getattr(clone, obj_name)
-
-                if not types_match(orig_obj, cloned_obj):
-                    return False, f"Member {obj_name} did not have the same type in clone and in self"
-
-                objs_share_reference = orig_obj is cloned_obj
-                if objs_share_reference:
-                    return False, f"clone.{obj_name} is a reference to self.{obj_name}"
-
-                if container_name == '_tensor_attr_after_init':
-                    if not tensors_have_same_data(orig_obj, cloned_obj):
-                        return False, f"Copying {obj_name} did not retrieve tensors with the same data"
-                elif container_name == '_lambdas_after_init':
-                    # minimal lambda equivalence check 
-                    if orig_obj.__name__ != "<lambda>" or cloned_obj.__name__ != "<lambda>": 
-                        return False, f"{obj_name}: expected lambda but got non-lambda" 
-                    if orig_obj.__code__.co_freevars != cloned_obj.__code__.co_freevars:
-                        return False, f"{obj_name}: lambda closure mismatch" 
-                    
-                elif container_name == '_to_copy_with_separate_logic':
-                    if obj_name == 'rng':
-                        if self.rng.get_state().tolist() != clone.rng.get_state().tolist():
-                            return False, "States of self.rng and dummy_clone.rng are not the same"
-                    else:
-                        warn_for_not_knowing_how_to_check_equal_data = True
-                else:
-                    warn(f"{container_name} not recognized - no logic or white listing for equal data possible")
-                    warn_for_not_knowing_how_to_check_equal_data = True
-
-            if warn_for_not_knowing_how_to_check_equal_data:
-                warn(f"The attributes in {container_name} = [{','.join(names_to_be_copied)}] did not share adress but cannot be checked on equality of data")
-
-        for obj_name in cls._members_not_to_deepcopy:
-            orig_obj = getattr(self, obj_name)
-            cloned_obj = getattr(clone, obj_name)
-            if not types_match(orig_obj, cloned_obj):
-                return False, f"Member {obj_name} did not have the same type in clone and in self"
-            
-            if orig_obj is cloned_obj:
-                continue
-                
-            if isinstance(orig_obj, torch.Tensor) and not tensors_have_same_data(orig_obj, cloned_obj): 
-                return False, f"{obj_name}: tensor mismatch"
-
-        checked = ( 
-            cls._tensor_attr_after_init 
-            + cls._lambdas_after_init 
-            + cls._to_copy_with_separate_logic 
-            + cls._members_not_to_deepcopy
-        )
-        basic_types_comparable_with_equality = (int, float, dict, list, set, frozenset)
-        members_not_checked = set(self.__dict__.keys()) - set(checked)
-        
-        for obj_name in members_not_checked:
-            orig_obj = getattr(self, obj_name)
-            cloned_obj = getattr(clone, obj_name)
-            if not types_match(orig_obj, cloned_obj):
-                return False, f"Member {obj_name} did not have the same type in clone and in self"
-            
-            if isinstance(orig_obj, basic_types_comparable_with_equality) and orig_obj != cloned_obj:
-                return False, f"Member {obj_name} did not contain the same data in clone and in self"
-            
-            warn(f"Do not know how to check if cloning was ok with member {obj_name}")
-
-        return True, ""
-
-    def clone(self):
-        """
-        Create a clone of this object without calling __init__.
-
-        - Tensors listed in `tensor_attrs` are cloned.
-        - torch.Generator is copied with identical state and device.
-        - Lambdas (nan checkers) are deepcopied for correct closure handling.
-        - All other attributes are shallow-copied.
-        """
-
-        # 1. Create empty instance without calling __init__
-        clone = object.__new__(self.__class__)
-
-        # 2. Shallow-copy all attributes first
-        clone.__dict__.update(self.__dict__)
-
-        # 3. Clone all tensor attributes
-        for ten_name in CreditDataSample._tensor_attr_after_init:
-            ten = getattr(self, ten_name, None)
-            if not isinstance(ten, torch.Tensor):
-                raise ValueError((
-                    "The attribute "+ten_name+" was expected "
-                    "and not found or was not a torch.Tensor. Class corrupted"
-                ))
-            setattr(clone, ten_name, ten.clone())
-        
-
-        # 4. Copy torch.Generator safely
-        if not (hasattr(self, "rng") and isinstance(self.rng, torch.Generator)):
-            raise ValueError(
-                "self.rng did not exist or it's value changed. Class corrupted"
-            )
-        
-        new_gen = torch.Generator(device=self.rng.device)
-        new_gen.set_state(self.rng.get_state())
-        clone.rng = new_gen
-
-        # 5. Deepcopy the nan-checker lambdas (cleanest solution)
-        is_lambda = lambda obj : isinstance(obj, FunctionType) and getattr(obj, "__name__", None) == "<lambda>"
-        for lambda_name in CreditDataSample._lambdas_after_init:
-            lambda_obj = getattr(self, lambda_name, None)
-            if not is_lambda(lambda_obj):
-                raise ValueError("self."+lambda_name+" was either non-existent or not a lambda. Class corrupted")
-            
-            setattr(clone, lambda_name, deepcopy(lambda_obj))
-
-        return clone
-
     def label_rejects(
             self, 
             inferred_labels : torch.Tensor, 
