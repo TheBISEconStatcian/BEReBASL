@@ -607,7 +607,7 @@ class CreditDataSample(Dataset):
         ``features_labeled``:    ``(..., N_labeled,   F)``
         ``labels``:              ``(..., N_labeled)``
         ``_unlabeled_ids``:      ``(..., N_unlabeled)``
-        ``_inferred_ids``:       ``(..., N_labeled)``
+        ``_ids_inferred``:       ``(..., N_labeled)``
 
     where the leading dimensions represent super-batches.
 
@@ -630,11 +630,11 @@ class CreditDataSample(Dataset):
         retrieve_only_labeled (bool): Whether ``__getitem__`` returns labeled samples.
         rng (torch.Generator): Device-specific RNG for all stochastic operations.
         _unlabeled_ids (Tensor): Integer IDs for rejected samples.
-        _inferred_ids (Tensor): IDs of inferred samples appended to the labeled pool.
+        _ids_inferred (Tensor): IDs of inferred samples appended to the labeled pool.
     """
     _tensor_attr_after_init: List[str] = [
         "features_unlabeled", "features_labeled", "labels", 
-        "_unlabeled_ids", "_inferred_ids", "_nan_val_ids_rejects", "_nan_val_labels"
+        "_unlabeled_ids", "_ids_inferred", "_nan_val_ids_rejects", "_nan_val_labels"
     ]
     _lambdas_after_init : List[str] = ["_labels_nan_checker", "_ids_rejects_nan_checker"]
     _to_copy_with_separate_logic: List[str] = ["rng"]
@@ -764,7 +764,7 @@ class CreditDataSample(Dataset):
             dtype=self._unlabeled_ids.dtype,
             device=self._unlabeled_ids.device
         )
-        self._inferred_ids = nan_value_ids_rejects_singleton.expand(default_flag_accepts.shape)
+        self._ids_inferred = nan_value_ids_rejects_singleton.expand(default_flag_accepts.shape)
         
         # Apply NaN encodings
         self.labels = default_flag_accepts
@@ -837,7 +837,7 @@ class CreditDataSample(Dataset):
         Boolean mask indicating which labeled samples originate from inferred
         rejected applications. Shape ``(..., N_labeled)``.
         """
-        return ~self._ids_rejects_nan_checker(self._inferred_ids)
+        return ~self._ids_rejects_nan_checker(self._ids_inferred)
 
     @property
     def count_labeled(self):
@@ -962,7 +962,7 @@ class CreditDataSample(Dataset):
 
     def set_nan_val_ids_rejects(self, nan_value : Union[float, int, torch.Tensor]) -> None:
         r"""
-        Update the NaN encoding used for ``_unlabeled_ids`` and ``_inferred_ids``.
+        Update the NaN encoding used for ``_unlabeled_ids`` and ``_ids_inferred``.
 
         All existing NaN positions (according to the previous checker) are rewritten
         using the new ``nan_value``.
@@ -988,10 +988,10 @@ class CreditDataSample(Dataset):
             nan_value_as_singleton, # will generate error if nan_value not castable to _unlabeled_ids.dtype
             self._unlabeled_ids
         )
-        self._inferred_ids = torch.where(
-            ids_rejects_nan_checker(self._inferred_ids), 
+        self._ids_inferred = torch.where(
+            ids_rejects_nan_checker(self._ids_inferred), 
             nan_value_as_singleton, # will generate error if nan_value not castable to _unlabeled_ids.dtype
-            self._inferred_ids
+            self._ids_inferred
         )
         
         self._nan_val_ids_rejects = nan_value_as_singleton
@@ -1099,7 +1099,7 @@ class CreditDataSample(Dataset):
             retrieve_only_labeled=self.retrieve_only_labeled,
             seed=self.rng.initial_seed(),
         )
-        train_sample._inferred_ids = self._inferred_ids.gather(dim=-1, index=gather_idx_train_lbld)
+        train_sample._ids_inferred = self._ids_inferred.gather(dim=-1, index=gather_idx_train_lbld)
 
         test_sample = CreditDataSample(
             features_rejects= gather_features(self.features_unlabeled, gather_idx_test_unlbld),
@@ -1109,13 +1109,13 @@ class CreditDataSample(Dataset):
             retrieve_only_labeled=self.retrieve_only_labeled,
             seed=self.rng.initial_seed(),
         )
-        test_sample._inferred_ids = self._inferred_ids.gather(dim=-1, index=gather_idx_test_lbld)
+        test_sample._ids_inferred = self._ids_inferred.gather(dim=-1, index=gather_idx_test_lbld)
 
         return train_sample, test_sample
     
-    def clone_is_valid_clone(self, clone) -> Tuple[bool, str]:
+    def is_valid_clone(self, clone) -> Tuple[bool, str]:
         types_match = lambda obj1, obj2 : type(obj1) is type(obj2)
-        tensors_have_same_data = lambda ten1, ten2 : torch.all((ten1 == ten2) | (ten1.isnan() & ten2.isnan()))
+        tensors_have_same_data = lambda ten1, ten2 : ten1.shape == ten2.shape and torch.all((ten1 == ten2) | (ten1.isnan() & ten2.isnan()))
 
         if not types_match(self, clone):
             return False, "self and clone type mismatch"
@@ -1131,7 +1131,7 @@ class CreditDataSample(Dataset):
                 orig_obj = getattr(self, obj_name)
                 cloned_obj = getattr(clone, obj_name)
 
-                if types_match(orig_obj, cloned_obj):
+                if not types_match(orig_obj, cloned_obj):
                     return False, f"Member {obj_name} did not have the same type in clone and in self"
 
                 objs_share_reference = orig_obj is cloned_obj
@@ -1152,8 +1152,8 @@ class CreditDataSample(Dataset):
                     if obj_name == 'rng':
                         if self.rng.get_state().tolist() != clone.rng.get_state().tolist():
                             return False, "States of self.rng and dummy_clone.rng are not the same"
-                        else:
-                            warn_for_not_knowing_how_to_check_equal_data = True
+                    else:
+                        warn_for_not_knowing_how_to_check_equal_data = True
                 else:
                     warn(f"{container_name} not recognized - no logic or white listing for equal data possible")
                     warn_for_not_knowing_how_to_check_equal_data = True
@@ -1164,13 +1164,13 @@ class CreditDataSample(Dataset):
         for obj_name in cls._members_not_to_deepcopy:
             orig_obj = getattr(self, obj_name)
             cloned_obj = getattr(clone, obj_name)
-            if types_match(orig_obj, cloned_obj):
+            if not types_match(orig_obj, cloned_obj):
                 return False, f"Member {obj_name} did not have the same type in clone and in self"
             
             if orig_obj is cloned_obj:
                 continue
                 
-            if isinstance(orig_obj, torch.Tensor) and not tensors_same(orig_obj, cloned_obj): 
+            if isinstance(orig_obj, torch.Tensor) and not tensors_have_same_data(orig_obj, cloned_obj): 
                 return False, f"{obj_name}: tensor mismatch"
 
         checked = ( 
@@ -1185,7 +1185,7 @@ class CreditDataSample(Dataset):
         for obj_name in members_not_checked:
             orig_obj = getattr(self, obj_name)
             cloned_obj = getattr(clone, obj_name)
-            if types_match(orig_obj, cloned_obj):
+            if not types_match(orig_obj, cloned_obj):
                 return False, f"Member {obj_name} did not have the same type in clone and in self"
             
             if isinstance(orig_obj, basic_types_comparable_with_equality) and orig_obj != cloned_obj:
@@ -1239,7 +1239,7 @@ class CreditDataSample(Dataset):
             if not is_lambda(lambda_obj):
                 raise ValueError("self."+lambda_name+" was either non-existent or not a lambda. Class corrupted")
             
-            setattr(clone, 'lambda_name', deepcopy(self._nan_checker))
+            setattr(clone, lambda_name, deepcopy(lambda_obj))
 
         return clone
 
@@ -1337,8 +1337,8 @@ class CreditDataSample(Dataset):
             pad_spec=(0, max_needed_padding),
             pad_val = self._nan_val_labels
         )
-        new_inferred_ids = _append_obs(
-            append_to=self._inferred_ids.reshape(B, N_labels), 
+        new_ids_inferred = _append_obs(
+            append_to=self._ids_inferred.reshape(B, N_labels), 
             to_append=self._unlabeled_ids.reshape(B, N_unlabeled),
             pad_spec=(0, max_needed_padding),
             pad_val = self._nan_val_ids_rejects
@@ -1361,15 +1361,15 @@ class CreditDataSample(Dataset):
         features_unlabeled = _resize_obs(self.features_unlabeled, nan_value=torch.nan)
         unlabeled_ids = _resize_obs(self._unlabeled_ids, nan_value=self._nan_val_ids_rejects)
 
-        new_labels, new_inferred_ids, new_features_labeled, features_unlabeled, unlabeled_ids = [
+        new_labels, new_ids_inferred, new_features_labeled, features_unlabeled, unlabeled_ids = [
             t.reshape(torch.Size(batch_shape) + t.shape[1:]) for t in 
-            [new_labels, new_inferred_ids, new_features_labeled, features_unlabeled, unlabeled_ids]
+            [new_labels, new_ids_inferred, new_features_labeled, features_unlabeled, unlabeled_ids]
         ]
             
         if inplace:
             self.features_labeled = new_features_labeled
             self.labels = new_labels
-            self._inferred_ids = new_inferred_ids
+            self._ids_inferred = new_ids_inferred
 
             self.features_unlabeled = features_unlabeled
             self._unlabeled_ids = unlabeled_ids
@@ -1384,7 +1384,7 @@ class CreditDataSample(Dataset):
             nan_value_labels=self._nan_val_labels,
             nan_value_ids_rejects=self._nan_val_ids_rejects
         )
-        new_instance._inferred_ids = new_inferred_ids
+        new_instance._ids_inferred = new_ids_inferred
         return new_instance
 
     # -------------------------------------------------------------------------
