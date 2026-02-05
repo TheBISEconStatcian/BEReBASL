@@ -25,6 +25,9 @@ For each used chat a link is provided to be called if wished. I always add a sma
     - The purpose was to ensure a torch based option to match R's GLM behaviour
 - [How to set up repo to look profesional and be an importable package](https://copilot.microsoft.com/shares/oWZVD4bAURP55UEFk2p92)
 - [Expanding labeling reject of basl for n-dimensioned batch shapes](https://copilot.microsoft.com/shares/52rQiyM8NVkCNWAg59AGV)
+- [Vectorized way for "compact" appending and resizing after labeling in `CreditDataSample`](https://copilot.microsoft.com/shares/V8TcEqDX58X18DBmRiunc)
+- [Documentation updating after batch handling and custom nan value](https://copilot.microsoft.com/shares/V8TcEqDX58X18DBmRiunc)
+- [Vectorized labeling for BASL](https://copilot.microsoft.com/shares/V8TcEqDX58X18DBmRiunc)
 
 ## Link to `perplexity` usage
 
