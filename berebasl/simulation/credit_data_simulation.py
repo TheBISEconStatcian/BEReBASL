@@ -746,12 +746,13 @@ class CreditDataSample(Dataset):
         if ids_rejects is None:
             count_rej_obs = torch.prod(torch.tensor(rej_batch_shape))
             self._unlabeled_ids = torch.arange(count_rej_obs).reshape(*rej_batch_shape)
-        elif safety_checks:
-            if ids_rejects.shape != rej_batch_shape:
-                raise ValueError("ids_rejects has the wrong shape. Should be features_rejects.shape[:-1]")
-            if ids_rejects.device != features_rejects.device:
-                raise ValueError("ids_rejects is not on the same device as the other tensors")
-            
+        else:
+            if safety_checks:
+                if ids_rejects.shape != rej_batch_shape:
+                    raise ValueError("ids_rejects has the wrong shape. Should be features_rejects.shape[:-1]")
+                if ids_rejects.device != features_rejects.device:
+                    raise ValueError("ids_rejects is not on the same device as the other tensors")
+                
             self._unlabeled_ids = ids_rejects
 
         if nan_value_ids_rejects is None:
@@ -1244,7 +1245,8 @@ class CreditDataSample(Dataset):
         shared_args_for_new_instances = lambda _ : {
             "retrieve_only_labeled" : self.retrieve_only_labeled,
             "nan_val_ids_rejects" : self._nan_val_ids_rejects.clone(),
-            "nan_val_labels" : self._nan_val_labels.clone()
+            "nan_val_labels" : self._nan_val_labels.clone(),
+            "rng_state" : self.rng.get_state()
         }
 
         # Slice data
@@ -1253,27 +1255,20 @@ class CreditDataSample(Dataset):
             unlabeled_ids =         self._unlabeled_ids.gather(dim=-1, index=gather_idx_train_unlbld),
             features_labeled =      gather_features(self.features_labeled, gather_idx_train_lbld),
             labels =                gather_features(self.features_labeled, gather_idx_train_lbld),
-            retrieve_only_labeled = self.retrieve_only_labeled
+            ids_inferred =          self._ids_inferred.gather(dim=-1, index=gather_idx_train_lbld),
+            safety_checks =         check_data_integrity_before_returning
+            **shared_args_for_new_instances()
         )
-        train_sample = CreditDataSample(
-            features_rejects= gather_features(self.features_unlabeled, gather_idx_train_unlbld),
-            ids_rejects=self._unlabeled_ids.gather(dim=-1, index=gather_idx_train_unlbld),
-            features_accepts=gather_features(self.features_labeled, gather_idx_train_lbld),
-            default_flag_accepts=gather_features(self.features_labeled, gather_idx_train_lbld),
-            retrieve_only_labeled=self.retrieve_only_labeled,
-            seed=self.rng.initial_seed(),
-        )
-        train_sample._ids_inferred = self._ids_inferred.gather(dim=-1, index=gather_idx_train_lbld)
 
-        test_sample = CreditDataSample(
-            features_rejects= gather_features(self.features_unlabeled, gather_idx_test_unlbld),
-            ids_rejects=self._unlabeled_ids.gather(dim=-1, index=gather_idx_test_unlbld),
-            features_accepts=gather_features(self.features_labeled, gather_idx_test_lbld),
-            default_flag_accepts=self.labels.gather(dim=-1, index=gather_idx_test_lbld),
-            retrieve_only_labeled=self.retrieve_only_labeled,
-            seed=self.rng.initial_seed(),
+        test_sample = CreditDataSample.new_instance_with_full_info(
+            features_unlabeled =    gather_features(self.features_unlabeled, gather_idx_test_unlbld),
+            unlabeled_ids =         self._unlabeled_ids.gather(dim=-1, index=gather_idx_test_unlbld),
+            features_labeled =      gather_features(self.features_labeled, gather_idx_test_lbld),
+            labels =                gather_features(self.features_labeled, gather_idx_test_lbld),
+            ids_inferred =          self._ids_inferred.gather(dim=-1, index=gather_idx_test_lbld),
+            safety_checks =         check_data_integrity_before_returning
+            **shared_args_for_new_instances()
         )
-        test_sample._ids_inferred = self._ids_inferred.gather(dim=-1, index=gather_idx_test_lbld)
 
         return train_sample, test_sample
     
