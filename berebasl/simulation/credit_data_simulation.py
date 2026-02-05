@@ -1036,18 +1036,59 @@ class CreditDataSample(Dataset):
 
     @staticmethod
     def new_instance_with_full_info(
-            features_unlabeled : torch.Tensor,
-            unlabeled_ids : torch.Tensor,
-            features_labeled : torch.Tensor,
-            labels : torch.tensor,
-            ids_inferred : torch.Tensor,
-            nan_val_ids_rejects : torch.Tensor,
-            nan_val_labels : torch.Tensor,
-            retrieve_only_labeled : bool = True,
-            seed : Optional[int] = None,
-            rng_state : Optional[torch.Tensor] = None,
-            safety_checks = True
+            features_unlabeled: torch.Tensor,
+            unlabeled_ids: torch.Tensor,
+            features_labeled: torch.Tensor,
+            labels: torch.Tensor,
+            ids_inferred: torch.Tensor,
+            nan_val_ids_rejects: torch.Tensor,
+            nan_val_labels: torch.Tensor,
+            retrieve_only_labeled: bool = True,
+            seed: Optional[int] = None,
+            rng_state: Optional[torch.Tensor] = None,
+            safety_checks: bool = True
     ) -> "CreditDataSample":
+        r"""
+        Construct a new :class:`CreditDataSample` instance using fully specified
+        tensors and optional RNG state.
+
+        This method bypasses the usual data ingestion logic and directly injects
+        all internal tensors required after initialization. It is primarily used
+        for cloning and reconstruction, where the caller already holds validated
+        tensors in the correct shapes.
+
+        Args:
+            features_unlabeled (Tensor):
+                Feature matrix for the unlabeled (reject) population.
+            unlabeled_ids (Tensor):
+                Identifier tensor for the unlabeled population.
+            features_labeled (Tensor):
+                Feature matrix for the labeled (accept) population.
+            labels (Tensor):
+                Label tensor for the labeled population.
+            ids_inferred (Tensor):
+                Tensor containing inferred IDs. Must satisfy
+                ``ids_inferred.shape == labels.shape``.
+            nan_val_ids_rejects (Tensor):
+                Scalar tensor representing the NaN value for reject IDs.
+            nan_val_labels (Tensor):
+                Scalar tensor representing the NaN value for labels.
+            retrieve_only_labeled (bool, optional):
+                Whether the instance should expose only labeled samples when
+                retrieving data. Default: ``True``.
+            seed (int, optional):
+                Seed used to initialize the internal :class:`torch.Generator`.
+            rng_state (Tensor, optional):
+                Serialized RNG state to restore via ``Generator.set_state``.
+                Defaults to ``None``
+            safety_checks (bool, optional):
+                If ``True``, perform consistency checks on NaN patterns and shapes.
+                Defaults to ``True``
+
+        Returns:
+            CreditDataSample:
+                A fully constructed instance with all internal members populated.
+        """
         new_instance = CreditDataSample(
             features_rejects=features_unlabeled,
             features_accepts=features_labeled,
@@ -1077,7 +1118,30 @@ class CreditDataSample(Dataset):
         return new_instance
     
     def is_valid_clone(self, clone : "CreditDataSample") -> Tuple[bool, str]:
+        r"""
+        Validate that ``clone`` is a correct structural and semantic clone of ``self``.
 
+        The method checks:
+        - type equality of corresponding attributes,
+        - absence of shared references for members that must be deep-copied,
+        - equality of tensor data (including matching ``NaN`` patterns),
+        - equivalence of lambda-based NaN checkers,
+        - equality of RNG state for the internal :class:`torch.Generator`,
+        - correct handling of members that must not be deep-copied.
+
+        Attributes are grouped according to class-level lists such as
+        ``_tensor_attr_after_init`` and ``_lambdas_after_init`` to determine the
+        expected cloning semantics.
+
+        Args:
+            clone (CreditDataSample):
+                The candidate clone to validate.
+
+        Returns:
+            (bool, str):
+                ``(True, "")`` if the clone is valid. Otherwise ``(False, msg)``,
+                where ``msg`` describes the first detected inconsistency.
+        """
         types_match = lambda obj1, obj2 : type(obj1) is type(obj2)
         tensors_have_same_data = lambda ten1, ten2 : ten1.shape == ten2.shape and torch.all((ten1 == ten2) | (ten1.isnan() & ten2.isnan()))
 
