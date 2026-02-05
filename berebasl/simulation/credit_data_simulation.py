@@ -731,7 +731,7 @@ class CreditDataSample(Dataset):
         # ---------------------------------------------------------
         rej_batch_shape = features_rejects.shape[:-1]
 
-        if ids_rejects is not None:
+        if ids_rejects is None:
             count_rej_obs = torch.prod(torch.tensor(rej_batch_shape))
             self._unlabeled_ids = torch.arange(count_rej_obs).reshape(*rej_batch_shape)
         elif safety_checks:
@@ -766,10 +766,15 @@ class CreditDataSample(Dataset):
             # There has to be at least one not nan feature per (valid) observation
             # if an observation is valid it also has an _unlabeled_id
             mask_rej_feats_all_nan = features_rejects.isnan().all(dim=-1)
-            mask_rej_feats_with_compatible_nans = mask_rej_feats_all_nan # No observations without any nans
+            mask_rej_feats_with_compatible_nans = ~mask_rej_feats_all_nan # No observations without any nans
             if ids_rejects is not None:
                 mask_ids_rejects_is_nan = self._ids_rejects_nan_checker(self._unlabeled_ids)
-                mask_rej_feats_with_compatible_nans = mask_rej_feats_with_compatible_nans | mask_ids_rejects_is_nan
+                # Has to be XOR. mask_rej_feats_with_compatible_nans contains now False in every
+                # place where an observation had all features as nan. It may not happen that where
+                # not all observations have all nan features, the ids_rejects implies the observation
+                # being unvalid. Opposite is True for the places where mask_ids_rejects_is_nan implies
+                # an observation being valid
+                mask_rej_feats_with_compatible_nans = mask_rej_feats_with_compatible_nans ^ mask_ids_rejects_is_nan
 
             if not mask_rej_feats_with_compatible_nans.all():
                 raise ValueError((
@@ -936,7 +941,7 @@ class CreditDataSample(Dataset):
             Tensor: A single-element tensor containing ``nan_value``.
         """
         if isinstance(nan_value, torch.Tensor):
-            assert nan_value.numel() != 1, "nan_value has to have a single element"
+            assert nan_value.numel() == 1, "nan_value has to have a single element"
             
             return nan_value.flatten().squeeze().to(dtype=dtype, device=device)
         
@@ -973,7 +978,7 @@ class CreditDataSample(Dataset):
         self._inferred_ids = torch.where(
             ids_rejects_nan_checker(self._inferred_ids), 
             nan_value_as_singleton, # will generate error if nan_value not castable to _unlabeled_ids.dtype
-            self._unlabeled_ids
+            self._inferred_ids
         )
         
         self._nan_val_ids_rejects = nan_value_as_singleton
@@ -1169,7 +1174,7 @@ class CreditDataSample(Dataset):
         def _append_obs(append_to : torch.Tensor, to_append : torch.Tensor, pad_spec : tuple[int], pad_val):
             appended = torch.nn.functional.pad(
                 append_to, 
-                pad=pad_spec, 
+                pad=pad_spec,
                 mode='constant',
                 value=pad_val
             )
