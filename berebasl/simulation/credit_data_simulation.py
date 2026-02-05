@@ -1278,6 +1278,12 @@ class CreditDataSample(Dataset):
             CreditDataSample or None:
                 New dataset instance if ``inplace=False``, otherwise ``None``.
         """
+        # Early scape if no inferred rej lables
+        if not mask_inferred_rej_lbls.any():
+            if inplace:
+                return
+            return self.clone()
+            
         if safety_checks:
             if mask_inferred_rej_lbls.dtype != torch.bool:
                 raise ValueError("mask_infered_rej_lbls should be of type bool")
