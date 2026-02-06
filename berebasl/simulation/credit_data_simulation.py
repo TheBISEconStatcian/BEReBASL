@@ -1223,7 +1223,30 @@ class CreditDataSample(Dataset):
 
         return True, ""
     
-    def clone(self, safety_data_integrety_tests : bool = False):
+    def clone(self, safety_data_integrety_tests: bool = False):
+        r"""
+        Create a new :class:`CreditDataSample` instance that is a structural and
+        semantic clone of ``self``.
+
+        The cloning procedure:
+        - clones all tensor attributes listed in ``_tensor_attr_after_init``,
+        - reconstructs the instance via :meth:`new_instance_with_full_info`,
+        - restores the internal RNG state,
+        - optionally performs integrity checks on tensor members before cloning.
+
+        This method does **not** perform a shallow copy of the object. Instead,
+        it reconstructs a fresh instance with newly cloned tensors and identical
+        configuration values.
+
+        Args:
+            safety_data_integrety_tests (bool, optional):
+                If ``True``, verify that all tensor attributes expected after
+                initialization exist and are valid ``torch.Tensor`` objects.
+
+        Returns:
+            CreditDataSample:
+                A clone of the current instance with no shared mutable state.
+        """
         if safety_data_integrety_tests:
             for ten_name in CreditDataSample._tensor_attr_after_init:
                 if not isinstance(getattr(self, ten_name, None), torch.Tensor):
@@ -1467,6 +1490,19 @@ class CreditDataSample(Dataset):
             self.features_unlabeled = features_unlabeled
             self._unlabeled_ids = unlabeled_ids
             return
+        
+        return CreditDataSample.new_instance_with_full_info(
+            features_unlabeled=features_unlabeled,
+            unlabeled_ids=unlabeled_ids,
+            features_labeled=new_features_labeled,
+            labels=new_labels,
+            ids_inferred=new_ids_inferred,
+            nan_val_ids_rejects=self._nan_val_ids_rejects.copy(),
+            nan_val_labels=self._nan_val_labels.copy(),
+            retrieve_only_labeled=self.retrieve_only_labeled,
+            rng_state=self.rng.get_state(),
+            safety_checks=safety_checks
+        )
         new_instance = CreditDataSample(
             features_rejects=features_unlabeled,
             features_accepts=new_features_labeled,
