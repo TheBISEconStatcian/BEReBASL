@@ -1453,29 +1453,41 @@ class CreditDataSample(Dataset):
             pad_spec=(0, max_needed_padding),
             pad_val = self._nan_val_labels
         )
+
+        current_unlbld_ids = self._unlabeled_ids.reshape(B, N_unlabeled)
+
         new_ids_inferred = _append_obs(
             append_to=self._ids_inferred.reshape(B, N_labels), 
-            to_append=self._unlabeled_ids.reshape(B, N_unlabeled),
+            to_append=current_unlbld_ids,
             pad_spec=(0, max_needed_padding),
             pad_val = self._nan_val_ids_rejects
         )
+
+        current_feats_unlbld = self.features_unlabeled.reshape(B, N_unlabeled, -1)
         new_features_labeled = _append_obs(
             append_to=self.features_labeled.reshape(B, N_labels, -1), 
-            to_append=self.features_unlabeled.reshape(B, N_unlabeled, -1),
+            to_append=current_feats_unlbld,
             pad_spec=(0, 0, 0, max_needed_padding),
             pad_val=torch.nan
         )
+        # Keep only the observations that were rejected and also were not nan
+        mask_non_inferred_to_keep = ~self._ids_rejects_nan_checker(current_unlbld_ids) & ~mask_inf
+        new_N_unlabeled = mask_non_inferred_to_keep.sum(dim=-1).max()
+        batch_idx_resized_unlbld, N_idx_resized_unlbld = _mask2d_to_int_idxs(mask_non_inferred_to_keep)
 
-        new_N_unlabeled = N_unlabeled - slots_needed.min()
-        mask_non_inferred = ~mask_inf
-        batch_idx_resized_unlbld, N_idx_resized_unlbld = _mask2d_to_int_idxs(mask_non_inferred)
         def _resize_obs(to_resize : torch.Tensor, nan_value):
             resized = to_resize.new_full(torch.Size([B, new_N_unlabeled]) + to_resize.shape[2:], nan_value)
-            resized[batch_idx_resized_unlbld, N_idx_resized_unlbld] = to_resize[mask_non_inferred]
+            resized[batch_idx_resized_unlbld, N_idx_resized_unlbld] = to_resize[mask_non_inferred_to_keep]
             return resized
 
-        features_unlabeled = _resize_obs(self.features_unlabeled, nan_value=torch.nan)
-        unlabeled_ids = _resize_obs(self._unlabeled_ids, nan_value=self._nan_val_ids_rejects)
+        features_unlabeled = _resize_obs(
+            current_feats_unlbld, 
+            nan_value=torch.nan
+        )
+        unlabeled_ids = _resize_obs(
+            current_unlbld_ids, 
+            nan_value=self._nan_val_ids_rejects
+        )
 
         new_labels, new_ids_inferred, new_features_labeled, features_unlabeled, unlabeled_ids = [
             t.reshape(torch.Size(batch_shape) + t.shape[1:]) for t in 
@@ -1497,8 +1509,8 @@ class CreditDataSample(Dataset):
             features_labeled=new_features_labeled,
             labels=new_labels,
             ids_inferred=new_ids_inferred,
-            nan_val_ids_rejects=self._nan_val_ids_rejects.copy(),
-            nan_val_labels=self._nan_val_labels.copy(),
+            nan_val_ids_rejects=self._nan_val_ids_rejects.clone(),
+            nan_val_labels=self._nan_val_labels.clone(),
             retrieve_only_labeled=self.retrieve_only_labeled,
             rng_state=self.rng.get_state(),
             safety_checks=safety_checks
