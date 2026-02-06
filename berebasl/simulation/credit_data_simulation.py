@@ -1503,18 +1503,6 @@ class CreditDataSample(Dataset):
             rng_state=self.rng.get_state(),
             safety_checks=safety_checks
         )
-        new_instance = CreditDataSample(
-            features_rejects=features_unlabeled,
-            features_accepts=new_features_labeled,
-            default_flag_accepts=new_labels,
-            ids_rejects=unlabeled_ids,
-            retrieve_only_labeled=self.retrieve_only_labeled,
-            safety_checks=safety_checks,
-            nan_value_labels=self._nan_val_labels,
-            nan_value_ids_rejects=self._nan_val_ids_rejects
-        )
-        new_instance._ids_inferred = new_ids_inferred
-        return new_instance
 
     # -------------------------------------------------------------------------
     # Dataset interface
