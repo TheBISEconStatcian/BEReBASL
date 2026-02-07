@@ -1270,29 +1270,125 @@ class CreditDataSample(Dataset):
 
     def _generate_random_train_test_idxs(
         self,
-        shape_up_to_N_dim : Union[tuple[int], torch.Size],
+        shape_up_to_N_dim: Union[tuple[int], torch.Size],
         test_proportion: float,
-    ) -> torch.Tensor:
+        nan_mask: torch.Tensor,  # [..., N]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         r"""
-        Generate random train/test index splits along the sample dimension.
+        Generate random train/test index splits along the sample dimension,
+        selecting only from valid (non-NaN) positions, while ensuring that the
+        resulting index tensors have *normalized shapes* across all super-batch
+        slices.
+
+        This method supports super-batch inputs of shape ``[..., N]`` where each
+        slice may contain a different number of valid (non-NaN) positions. The
+        split is performed **per slice**, based only on the number of valid
+        positions in that slice.
+
+        The key property of this method is that the returned index tensors have
+        shapes::
+
+            train_indices: [..., max_train_count]
+            test_indices:  [..., max_test_count]
+
+        where ``max_train_count`` and ``max_test_count`` are the maximum numbers
+        of train/test samples required by any slice in the super-batch.
+
+        To achieve this *normalized* shape, the method proceeds in two stages:
+
+        1. **Valid selection**  
+        For each slice, the valid positions are randomly permuted and the
+        first ``test_count[b]`` (resp. ``train_count[b]``) positions are
+        selected as the true test/train indices.
+
+        2. **NaN-based padding**  
+        If a slice has fewer valid positions than the global maximum
+        ``max_test_count`` (resp. ``max_train_count``), the remaining slots
+        are filled by selecting indices corresponding to invalid (NaN)
+        positions. These NaN positions are taken from the end of the sorted
+        index list, ensuring that:
+        
+        - valid positions are always chosen first,
+        - NaN positions are only used as padding,
+        - the final shapes are rectangular and suitable for ``gather``.
+
+        This guarantees that all returned index tensors are gather-compatible
+        and have consistent shapes across the entire super-batch, even when the
+        number of valid samples varies per slice.
 
         Args:
             shape_up_to_N_dim (tuple or torch.Size):
-                Super-batch shape ending with ``N`` (number of samples).
+                Super-batch shape ending with ``N``.
             test_proportion (float):
-                Fraction of samples to assign to the test set.
+                Fraction of *valid* samples to assign to the test set.
+            nan_mask (Tensor):
+                Boolean mask of invalid positions, shape ``[..., N]``.
 
         Returns:
             (Tensor, Tensor):
-                ``(train_indices, test_indices)``, each suitable for ``gather``.
-    """
-        test_count = round(test_proportion * shape_up_to_N_dim[-1])
-        scores = torch.randn(shape_up_to_N_dim, generator=self.rng, device=self.device).argsort(dim=-1)
-        idx_N_dim_gather_test, idx_N_dim_gather_train = scores[..., :test_count], scores[..., test_count:]
+                ``(train_indices, test_indices)``, each of shape
+                ``[..., max_train_count]`` and ``[..., max_test_count]``,
+                containing valid indices first and NaN-padding indices last.
+        """
+        # Mask of valid positions
+        valid_mask = ~nan_mask  # [..., N]
 
-        return idx_N_dim_gather_train, idx_N_dim_gather_test
+        # Count valid positions per super-batch slice
+        valid_counts = valid_mask.sum(dim=-1, keepdim=True)  # [..., 1]
 
-    def train_test_split(self, test_proportion: float, check_data_integrity_before_returning : bool = False):
+        # Compute per-slice test counts (rounding per slice)
+        test_counts = (valid_counts * test_proportion).round().to(torch.long)  # [..., 1]
+
+        # Random scores only for valid positions
+        scores = torch.where(
+            valid_mask,
+            torch.rand(shape_up_to_N_dim, generator=self.rng, device=self.device),
+            float('inf')
+        )
+
+        # Sort so valid positions come first
+        scores_idx = scores.argsort(dim=-1)  # [..., N]
+
+        # N_arange mask to get valid scores_ids
+        N = shape_up_to_N_dim[-1]
+        arange_N = torch.arange(N).view( # [1,...,1, N]
+            *([1]*(scores_idx.ndim-1)), N
+        )
+
+        # Mask for selecting test indices
+        ## Get indices among valid positions corresponding exactly
+        ## to the amount of needed tests
+        mask_needed_tests = arange_N < test_counts # [..., N]
+        ## Get indices for appending unvalid positions to allow
+        ## for normalized shapes (see proof to check that it is assured
+        ## there are still enough)
+        max_test_count = test_counts.max()
+        counts_to_append_test = max_test_count - test_counts # [..., N]
+        mask_unvalids_to_append_to_tests = arange_N >= (N-counts_to_append_test) # [..., N]
+        ## Get the mask through both
+        test_mask = mask_needed_tests | mask_unvalids_to_append_to_tests # [..., N]
+
+        # Mask for selecting train_indices (same logic as test)
+        ## Positions k with test_count[b] <= pos[b] < valid_counts[b]
+        mask_needed_trains = ~test_mask & (arange_N < valid_counts)
+        ## For appending
+        train_counts = valid_counts - test_counts # [..., 1]
+        max_train_count = train_counts.max()
+        counts_to_append_train = max_train_count - train_counts
+        mask_unvalids_to_append_to_trains =  arange_N >= (N-counts_to_append_train) # [..., N]
+        ## mask
+        train_mask = mask_needed_trains | mask_unvalids_to_append_to_trains # [..., N]
+
+
+        # Gather the indices
+        batch_dims = shape_up_to_N_dim[:-1]
+        test_indices = scores_idx.masked_select(test_mask).reshape(*batch_dims, max_test_count)
+        train_indices = scores_idx.masked_select(train_mask).reshape(*batch_dims, max_train_count)
+
+        return train_indices, test_indices
+
+
+      def train_test_split(self, test_proportion: float, check_data_integrity_before_returning : bool = False):
         """
         Split the dataset into train and test subsets without leakage.
 
@@ -1318,10 +1414,14 @@ class CreditDataSample(Dataset):
 
         # Generate masks
         gather_idx_train_unlbld, gather_idx_test_unlbld = self._generate_random_train_test_idxs(
-            self.features_unlabeled.shape[:-1], test_proportion
+            shape_up_to_N_dim=self._unlabeled_ids.shape,
+            test_proportion=test_proportion,
+            nan_mask=self._ids_rejects_nan_checker(self._unlabeled_ids)
         )
         gather_idx_train_lbld, gather_idx_test_lbld = self._generate_random_train_test_idxs(
-            self.features_labeled.shape[:-1], test_proportion
+            shape_up_to_N_dim=self.labels.shape, 
+            test_proportion=test_proportion,
+            nan_mask=self._labels_nan_checker(self.labels)
         )
 
         gather_features = lambda gather_from, idx_gather : gather_from.gather(
@@ -1329,7 +1429,7 @@ class CreditDataSample(Dataset):
             index=idx_gather.unsqueeze(-1).expand(*idx_gather.shape, self.features_count)
         )
 
-        shared_args_for_new_instances = lambda _ : {
+        shared_args_for_new_instances = lambda : {
             "retrieve_only_labeled" : self.retrieve_only_labeled,
             "nan_val_ids_rejects" : self._nan_val_ids_rejects.clone(),
             "nan_val_labels" : self._nan_val_labels.clone(),
@@ -1341,9 +1441,9 @@ class CreditDataSample(Dataset):
             features_unlabeled =    gather_features(self.features_unlabeled, gather_idx_train_unlbld),
             unlabeled_ids =         self._unlabeled_ids.gather(dim=-1, index=gather_idx_train_unlbld),
             features_labeled =      gather_features(self.features_labeled, gather_idx_train_lbld),
-            labels =                gather_features(self.features_labeled, gather_idx_train_lbld),
+            labels =                self.labels.gather(dim=-1, index=gather_idx_train_lbld),
             ids_inferred =          self._ids_inferred.gather(dim=-1, index=gather_idx_train_lbld),
-            safety_checks =         check_data_integrity_before_returning
+            safety_checks =         check_data_integrity_before_returning,
             **shared_args_for_new_instances()
         )
 
@@ -1351,9 +1451,9 @@ class CreditDataSample(Dataset):
             features_unlabeled =    gather_features(self.features_unlabeled, gather_idx_test_unlbld),
             unlabeled_ids =         self._unlabeled_ids.gather(dim=-1, index=gather_idx_test_unlbld),
             features_labeled =      gather_features(self.features_labeled, gather_idx_test_lbld),
-            labels =                gather_features(self.features_labeled, gather_idx_test_lbld),
+            labels =                self.labels.gather(dim=-1, index=gather_idx_test_lbld),
             ids_inferred =          self._ids_inferred.gather(dim=-1, index=gather_idx_test_lbld),
-            safety_checks =         check_data_integrity_before_returning
+            safety_checks =         check_data_integrity_before_returning,
             **shared_args_for_new_instances()
         )
 
