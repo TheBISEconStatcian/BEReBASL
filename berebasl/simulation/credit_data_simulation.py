@@ -1516,7 +1516,7 @@ class CreditDataSample(Dataset):
             
         
         *batch_shape, N_labels = self.labels.shape
-        B = max(torch.tensor(batch_shape).prod(), 1)
+        B = int(torch.tensor(batch_shape).prod()) # If batch_shape = [], torch.tensor(batch_shape).prod()==1.0
 
         current_labels = self.labels.reshape(B, N_labels)
         mask_nans_labels = self._labels_nan_checker(current_labels)
