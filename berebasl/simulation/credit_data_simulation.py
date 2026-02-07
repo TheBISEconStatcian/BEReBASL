@@ -1388,7 +1388,7 @@ class CreditDataSample(Dataset):
         return train_indices, test_indices
 
 
-      def train_test_split(self, test_proportion: float, check_data_integrity_before_returning : bool = False):
+    def train_test_split(self, test_proportion: float, check_data_integrity_before_returning : bool = False):
         """
         Split the dataset into train and test subsets without leakage.
 
@@ -1516,7 +1516,7 @@ class CreditDataSample(Dataset):
             
         
         *batch_shape, N_labels = self.labels.shape
-        B = torch.tensor(batch_shape).prod()
+        B = max(torch.tensor(batch_shape).prod(), 1)
 
         current_labels = self.labels.reshape(B, N_labels)
         mask_nans_labels = self._labels_nan_checker(current_labels)
