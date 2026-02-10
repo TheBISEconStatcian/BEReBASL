@@ -1000,13 +1000,22 @@ class CreditDataSample(Dataset):
             self._unlabeled_ids.device
         )
 
+        mask_nan_unlabeled_ids = ids_rejects_nan_checker(self._unlabeled_ids)
+        mask_nan_ids_inferred = ids_rejects_nan_checker(self._ids_inferred)
+        nan_value_exists_among_valid = (
+            torch.any(nan_value_as_singleton == self._unlabeled_ids[~mask_nan_unlabeled_ids]) or
+            torch.any(nan_value_as_singleton == self._ids_inferred[~mask_nan_ids_inferred])
+        )
+        if nan_value_exists_among_valid:
+            raise ValueError("The new nan value exists among the reject-ids")
+
         self._unlabeled_ids = torch.where(
-            ids_rejects_nan_checker(self._unlabeled_ids), 
+            mask_nan_unlabeled_ids, 
             nan_value_as_singleton, # will generate error if nan_value not castable to _unlabeled_ids.dtype
             self._unlabeled_ids
         )
         self._ids_inferred = torch.where(
-            ids_rejects_nan_checker(self._ids_inferred), 
+            mask_nan_ids_inferred, 
             nan_value_as_singleton, # will generate error if nan_value not castable to _unlabeled_ids.dtype
             self._ids_inferred
         )
@@ -1037,8 +1046,13 @@ class CreditDataSample(Dataset):
             self.labels.device
         )
 
+        mask_nan_labels = labels_nan_checker(self.labels)
+        nan_value_exists_among_valid = torch.any(nan_value_as_singleton == self.labels[~mask_nan_labels])
+        if nan_value_exists_among_valid:
+            raise ValueError("The new nan value exists among the labels")
+
         self.labels = torch.where(
-            labels_nan_checker(self.labels), 
+            mask_nan_labels, 
             nan_value_as_singleton, # will generate error if nan_value not castable to _unlabeled_ids.dtype
             self.labels
         )
