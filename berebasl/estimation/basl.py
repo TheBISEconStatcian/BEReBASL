@@ -67,7 +67,7 @@ class BASLPartialUnbiaser:
     def check_filtering_quantiles(filtering_quantiles) -> None:
         if not 0.0 <= filtering_quantiles['lower'] <= 1.0:
             raise ValueError("filtering_quantiles['lower'] must be in the interval [0, 1].")
-        if not 0.0 <= filtering_quantiles['lower'] <= 1.0:
+        if not 0.0 <= filtering_quantiles['upper'] <= 1.0:
             raise ValueError("filtering_quantiles['upper'] must be in the interval [0, 1].")
         if filtering_quantiles['lower'] >= filtering_quantiles['upper']:
             raise ValueError(
