@@ -85,6 +85,7 @@ class BASLPartialUnbiaser:
             labels : torch.Tensor
     ) -> None:
         model = getattr(self, which_one + "_learner")
+        model.reset_parameters_to_initial()
         model.fit(features, labels)
 
     def predict_proba_model(
@@ -364,8 +365,6 @@ class BASLPartialUnbiaser:
             # Next labeling stage
             confident_preds, mask_infered = self.confident_reject_labels(data)
             data.label_rejects(inferred_labels=confident_preds, mask_inferred_rej_lbls=mask_infered, inplace = True)
-            # still need to find a way to keep track of which observations where labeled
-            # and also a way to ensure that the percentage of obs to label is kept in hard way as in the r implementation
 
         return data
 
