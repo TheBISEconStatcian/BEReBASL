@@ -253,12 +253,17 @@ class BASLPartialUnbiaser:
             idx_candidate_rej_to_label = torch.arange(N, device=device).expand(*normalized_shape) # [..., M]
         else:
             M = round(self.sampling_percent * N)
-            idx_shape = normalized_shape[:-1] + torch.Size([M])
-            idx_candidate_rej_to_label = torch.rand(idx_shape, device=device).argsort()[..., :M] # [..., M]
+            # Little abuse but ensures sampling the right percent
+            # per batch
+            idx_candidate_rej_to_label, _ = data.generate_random_train_test_idxs(
+                data.features_unlabeled.shape[:-1], 
+                test_proportion=self.sampling_percent, 
+                nan_mask = data.mask_nans_unlabeled
+            )
 
         selected_unlabeled_features = data.features_unlabeled.gather(
             dim=-2, 
-            index=idx_candidate_rej_to_label.unsqueeze(-1).expand( # # [..., M, K]
+            index=idx_candidate_rej_to_label.unsqueeze(-1).expand( # [..., M, K]
                 *idx_candidate_rej_to_label.shape, K
             )
         )
