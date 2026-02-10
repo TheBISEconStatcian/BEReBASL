@@ -359,12 +359,6 @@ class BASLPartialUnbiaser:
             data.label_rejects(inferred_labels=confident_preds, mask_inferred_rej_lbls=mask_infered, inplace = True)
 
         return data
-    
-    def predict_proba_augmented_sample(
-            self,
-            data : CreditDataSample
-    ) -> torch.Tensor:
-        pass
 
 def fit_and_predict_classic_logistic(X : np.array, y : np.array, add_intercept : bool = True):
     if add_intercept:
