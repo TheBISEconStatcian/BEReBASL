@@ -866,6 +866,10 @@ class CreditDataSample(Dataset):
     @property
     def super_batch_shape(self):
         return self.labels.shape[:-1]
+    
+    @property
+    def labels_nan_value(self):
+        return self._nan_val_labels.detach().clone()
 
     # -------------------------------------------------------------------------
     # RNG utilities
