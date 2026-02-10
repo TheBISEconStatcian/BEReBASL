@@ -1,4 +1,5 @@
 import inspect
+from math import sqrt
 
 import torch
 import torch.nn as nn
@@ -56,48 +57,50 @@ class Classifier:
 
 class TorchLogistic(nn.Module):
     r"""
-    Multinomial or binary logistic regression implemented in PyTorch using full-batch
-    L-BFGS optimization. This class is designed to mimic the behavior of classical
-    GLM-style maximum likelihood estimation (MLE), including the binary Logit model
-    and the multinomial softmax model.
+    Shallow logistic regression model with a single linear estimator and
+    probability mapping for binary or multiclass classification.
+
+    The class allows to mimic the behavior of classical GLM-style maximum
+    likelihood estimation, including the binary logit model and the multinomial
+    softmax model by using full-batch L-BFGS optimization in the ``fit`` method.
 
     The model supports inputs of arbitrary leading shape ``[...]`` as long as the
     final dimension corresponds to ``n_features``. All leading dimensions are treated
-    as part of a single flattened batch during optimization.
+    as part of a single flattened batch during optimization through the ``fit`` method..
 
-    .. warning::
-        The ``fit`` method uses PyTorch's :class:`torch.optim.LBFGS`, which performs
-        **multiple internal optimization steps** inside a single call to
-        ``optimizer.step``. This is *not* equivalent to a single gradient update as in
-        SGD/Adam. Instead, L-BFGS repeatedly evaluates the closure, performs line
-        searches, and updates curvature estimates until convergence criteria are met.
-        Users should not assume epoch-like behavior.
-
-    .. warning::
-        Because L-BFGS requires full-batch gradients, all leading dimensions of ``X``
-        and ``y`` are flattened into one effective batch. For example, inputs of shape
-        ``[B, T, n_features]`` are treated as a batch of size ``B*T``. This is correct
-        for MLE but may be surprising if the user expects per-group optimization.
-
-    Parameters
+    Attributes
     ----------
-    n_features : int
-        Number of input features (size of the last dimension of ``X``).
+    lin_estimator : nn.Linear
+        Linear predictor mapping ``n_features`` to ``n_classes``.
+    n_classes : int
+        Number of target classes. ``2`` selects the binary formulation.
+    lbfgs_kwargs : dict
+        Keyword arguments passed to the L-BFGS optimizer.
+    logit_to_probs : Callable[[torch.Tensor], torch.Tensor]
+        Function converting logits to class probabilities. Set at
+        initialization based on ``n_classes``.
+    W_init : torch.Tensor
+        buffer of shape ``[n_classes , n_features]`` if multiclass otherwise
+        ``[1 , n_features]`` containing the weights after initialization as
+        done in ``__init__``
+    b_init: torch.Tensor
+        buffer of shape ``[n_classes]`` if multiclass otherwise
+        ``[1]`` after initialization as done in ``__init__``
 
-    n_classes : int, default=2
-        Number of classes. If ``n_classes == 2``, the model uses a single-logit
-        Bernoulli formulation with a sigmoid link. If ``n_classes > 2``, the model
-        uses a ``n_classes``-logit softmax formulation.
-
-    lbfgs_kwargs : dict, optional
-        Keyword arguments forwarded directly to :class:`torch.optim.LBFGS`. If
-        ``None``, a set of defaults approximating scikit-learn's behavior is used.
-        Keys are validated against the actual L-BFGS constructor when
-        ``secure_init=True``.
-
-    secure_init : bool, default=True
-        If ``True``, performs argument validation and safety checks. Set to ``False``
-        only if you know exactly what you are doing.
+    Methods
+    -------
+    fit(X, y, reduction="sum")
+        Fit the model using full-batch L-BFGS.
+    predict_proba(X)
+        Compute class probabilities.
+    predict(X)
+        Return class predictions via ``argmax`` over probabilities.
+    reset_parameters()
+        Restore the linear layer to its stored initial parameters.
+    _binary_probs(logits)
+        Convert binary logits to probabilities.
+    _multiclass_probs(logits)
+        Convert multiclass logits to probabilities.
     """
 
     def __init__(
@@ -105,6 +108,9 @@ class TorchLogistic(nn.Module):
             n_features : int, 
             n_classes : int = 2,
             lbfgs_kwargs : Optional[dict] = None,
+            seed_for_weight_init : Optional[int] = None,
+            device: Optional[torch.device] = None,
+            dtype : Optional[torch.dtype] = None,
             secure_init : bool = True
         ):
         r"""
@@ -143,11 +149,85 @@ class TorchLogistic(nn.Module):
         n_logits_output = 1 if self.n_classes == 2 else self.n_classes
 
         self.lin_estimator = nn.Linear(
-            in_features=n_features, 
-            out_features=n_logits_output, 
+            in_features=n_features,
+            out_features=n_logits_output,
             bias=True,
-            dtype=torch.get_default_dtype()
+            dtype=dtype,
+            device=device
         )
+
+        rng = torch.Generator(device=device)
+        if seed_for_weight_init is not None:
+            rng = rng.manual_seed(seed_for_weight_init)
+
+        self.reset_parameters(rng)
+
+        self.register_buffer("W_init", self.lin_estimator.weight.detach().clone()) 
+        self.register_buffer("b_init", self.lin_estimator.bias.detach().clone())
+
+        if n_classes == 2: 
+            self.logit_to_probs = self._binary_probs 
+        else: 
+            self.logit_to_probs = self._multiclass_probs
+
+    @staticmethod
+    def _binary_probs(logits: torch.Tensor) -> torch.Tensor:
+        r"""
+        Convert binary logits to probabilities.
+
+        Parameters
+        ----------
+        logits : torch.Tensor
+            Logits of shape ``[...]`` representing the score for
+            the positive class.
+
+        Returns
+        -------
+        torch.Tensor
+            Probabilities of shape ``[..., 2]`` with columns
+            ``[p(y=0), p(y=1)]``.
+
+        Notes
+        -----
+        Probabilities are computed via the sigmoid function:
+
+        .. math::
+
+            p(y=1 \mid x) = \sigma(z), \qquad
+            p(y=0 \mid x) = 1 - \sigma(z)
+        """
+        p1 = torch.sigmoid(logits).unsqueeze(-1)
+        p0 = 1 - p1
+        return torch.cat([p0, p1], dim=-1)
+
+
+    @staticmethod
+    def _multiclass_probs(logits: torch.Tensor) -> torch.Tensor:
+        r"""
+        Convert multiclass logits to probabilities.
+
+        Parameters
+        ----------
+        logits : torch.Tensor
+            Logits of shape ``[..., n_classes]``.
+
+        Returns
+        -------
+        torch.Tensor
+            Probabilities of shape ``[..., n_classes]`` obtained via softmax.
+
+        Notes
+        -----
+        The softmax function normalizes logits into a valid categorical
+        distribution:
+
+        .. math::
+
+            p(y=k \mid x) =
+            \frac{\exp(z_k)}{\sum_j \exp(z_j)}
+        """
+        return torch.softmax(logits, dim=-1)
+
 
     def forward(self, X : torch.Tensor) -> torch.Tensor:
         r"""
@@ -167,9 +247,8 @@ class TorchLogistic(nn.Module):
         """
         # X has shape [..., n_features]
         logits = self.lin_estimator(X) # [..., n_logits_output]
-        if self.n_classes == 2:
-            return logits.flatten(-2,-1)
-        return logits
+
+        return logits.squeeze(-1) # [...] if self.n_classes == 2 else [..., n_features]
     
     def predict_proba(self, X : torch.Tensor) -> torch.Tensor:
         r"""
@@ -198,14 +277,7 @@ class TorchLogistic(nn.Module):
         """
         # X has shape [..., n_features]
         logits = self.forward(X) # [..., n_logits_output]
-        if self.n_classes == 2:
-            p1 = torch.sigmoid(logits).unsqueeze(-1) # [..., 1]
-            p0 = 1 - p1 # [..., 1]
-            probs = torch.cat([p0, p1], dim=-1) # [..., 2]
-        else:
-            probs = torch.softmax(logits, dim=-1) # [..., n_classes]
-
-        return probs # [..., n_classes]
+        return self.logit_to_probs(logits) # [..., n_classes]
     
     def predict(self, X) -> torch.Tensor:
         r"""
@@ -263,6 +335,28 @@ class TorchLogistic(nn.Module):
           it exposes the model's unnormalized decision scores.
         """
         return self.forward(X)
+    
+    def reset_parameters_to_initial(self):
+        with torch.no_grad():
+            self.lin_estimator.weight.copy_(self.W_init)
+            self.lin_estimator.bias.copy_(self.b_init)
+
+    def reset_parameters(self, rng : torch.Generator):
+        r"""
+        Reinitialize the model parameters.
+
+        This resets the weights and bias of ``self.lin_estimator`` using
+        PyTorch's default initialization for ``nn.Linear`` (Kaiming-uniform
+        for weights and uniform bias based on fan-in). It copies the implementation
+        of ``nn.Linear.reset_parameters`` while using a specific rng
+        """
+        # Weight resetting
+        nn.init.kaiming_uniform_(self.lin_estimator.weight, a=sqrt(5), generator=rng)
+
+        # Bias resetting
+        fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.lin_estimator.weight)
+        bound = 1 / sqrt(fan_in) if fan_in > 0 else 0
+        nn.init.uniform_(self.bias, -bound, bound, generator=rng)
 
     
     def fit(self, X : torch.Tensor, y : torch.Tensor, reduction : str = "sum"):
@@ -299,8 +393,6 @@ class TorchLogistic(nn.Module):
           ``optimizer.step``. This is not equivalent to a single gradient update.
         - All leading dimensions of ``X`` and ``y`` are treated as a single batch.
           There is no notion of per-group or per-sequence optimization.
-        - The optimization is deterministic only if the user controls PyTorch's
-          random seeds and uses deterministic linear algebra kernels.
         """
         if self.n_classes==2:
             loss_fn = nn.BCEWithLogitsLoss(reduction=reduction)
@@ -320,3 +412,4 @@ class TorchLogistic(nn.Module):
         optimizer.step(train_step)
 
         return self
+    
