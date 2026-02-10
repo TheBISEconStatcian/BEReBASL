@@ -32,6 +32,7 @@ For each used chat a link is provided to be called if wished. I always add a sma
 - [Documentation updating after batch handling and custom nan value](https://copilot.microsoft.com/shares/V8TcEqDX58X18DBmRiunc)
 - [Vectorized labeling for BASL](https://copilot.microsoft.com/shares/V8TcEqDX58X18DBmRiunc)
 - [Generalize train test splitting to new batched logic](https://copilot.microsoft.com/shares/oipQ7Yv7ddGRUyULHtVZA)
+- [List available torch devices and docstring of `CreditDataSample.inspect_data`](https://copilot.microsoft.com/shares/JZD2AY81aEyaaSYnpstyq)
 
 ## Link to `perplexity` usage
 
