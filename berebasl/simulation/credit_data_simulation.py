@@ -993,15 +993,17 @@ class CreditDataSample(Dataset):
                 New NaN encoding for reject IDs.
         """
         # Set to new nan value everywhere where it is value
-        ids_rejects_nan_checker = getattr(
-            self,
-            "_ids_rejects_nan_checker",
-            lambda t : torch.tensor(False, device=t.device).expand(t.shape)
-        )
         nan_value_as_singleton = CreditDataSample._nan_value_to_singleton_tensor(
             nan_value,
             self._unlabeled_ids.dtype,
             self._unlabeled_ids.device
+        )
+        new_nan_checker = CreditDataSample._build_tensor_nan_checker(nan_value_as_singleton)
+
+        ids_rejects_nan_checker = getattr(
+            self,
+            "_ids_rejects_nan_checker",
+            new_nan_checker
         )
 
         mask_nan_unlabeled_ids = ids_rejects_nan_checker(self._unlabeled_ids)
@@ -1025,7 +1027,7 @@ class CreditDataSample(Dataset):
         )
         
         self._nan_val_ids_rejects = nan_value_as_singleton
-        self._ids_rejects_nan_checker = CreditDataSample._build_tensor_nan_checker(nan_value)
+        self._ids_rejects_nan_checker = new_nan_checker
 
     def set_nan_val_labels(self, nan_value : Union[float, int, torch.Tensor]):
         r"""
@@ -1039,15 +1041,17 @@ class CreditDataSample(Dataset):
                 New NaN encoding for labels.
         """
         # Set to new nan value everywhere where it is value
-        labels_nan_checker = getattr(
-            self,
-            "_labels_nan_checker",
-            lambda t : torch.tensor(False, device=t.device).expand(t.shape)
-        )
         nan_value_as_singleton = CreditDataSample._nan_value_to_singleton_tensor(
             nan_value,
             self.labels.dtype,
             self.labels.device
+        )
+        new_nan_checker = CreditDataSample._build_tensor_nan_checker(nan_value_as_singleton)
+
+        labels_nan_checker = getattr(
+            self,
+            "_labels_nan_checker",
+            new_nan_checker
         )
 
         mask_nan_labels = labels_nan_checker(self.labels)
@@ -1062,7 +1066,7 @@ class CreditDataSample(Dataset):
         )
 
         self._nan_val_labels = nan_value_as_singleton
-        self._labels_nan_checker = CreditDataSample._build_tensor_nan_checker(nan_value)
+        self._labels_nan_checker = new_nan_checker
 
     # -------------------------------------------------------------------------
     # Clone class related
