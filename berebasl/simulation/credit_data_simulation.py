@@ -1683,6 +1683,116 @@ class CreditDataSample(Dataset):
             "accepted": False,
         }
 
+    # -------------------------------------------------------------------------
+    # Further utilities
+    # -------------------------------------------------------------------------
+    
+    def inspect_data(self, as_pd_ready_dicts: bool = False):
+        r"""
+        Inspect labeled and unlabeled data after applying validity masks for IDs, labels,
+        and features. The method returns two dictionaries containing the surviving
+        observations in either tensor-structured form or pandas-ready columnar form.
+
+        Args:
+            as_pd_ready_dicts (bool, optional):
+                If ``True``, the returned dictionaries map column names to 1-D tensors,
+                suitable for direct construction of a ``pandas.DataFrame``.
+                If ``False``, the returned dictionaries group tensors by semantic role
+                (``"batch_iders"``, ``"features"``, ``"label"``, etc.).
+                Defaults to ``False``.
+
+        Returns:
+            tuple[dict, dict]:
+                A pair ``(unlabeled_data, labeled_data)`` where each element is a dictionary
+                describing the valid observations after masking. Let ``N_vu`` be the amount
+                of valid unlabeled observations and ``N_vl`` the amount of valid labeled
+                observations. Further ``B=len(self.super_batch_shape)`` and 
+                ``F=self.features_count``
+
+                **Unlabeled data fields (``as_pd_ready_dicts=False``):**
+                - ``"batch_iders"`` — integer tensor of shape ``(N_vu, B)`` giving the
+                super-batch coordinates of each valid unlabeled observation.
+                - ``"ids"`` — tensor of shape ``(N_vu,)`` containing valid observation IDs.
+                - ``"features"`` — tensor of shape ``(N_vu, F)`` containing feature vectors.
+
+                **Labeled data fields (``as_pd_ready_dicts=False``):**
+                - ``"batch_iders"`` — integer tensor of shape ``(N_vl, B)`` giving the
+                super-batch coordinates of each valid labeled observation.
+                - ``"features"`` — tensor of shape ``(N_vl, F)`` containing feature vectors.
+                - ``"label"`` — tensor of shape ``(N_vl,)`` with valid labels.
+                - ``"label_is_inferred"`` — boolean mask of shape ``(N_vl,)`` indicating
+                whether each label was inferred rather than observed.
+                - ``"inferred_obs_id"`` — tensor of shape ``(N_vl,)`` containing the inferred
+                observation IDs used for reject-inference logic.
+
+                **Pandas-ready mode (``as_pd_ready_dicts=True``):**
+                Each batch dimension ``b`` is exported as a separate column
+                ``"super_batch_dim:{b}"`` with shape ``(N,)``.
+                Each feature dimension ``f`` is exported as ``"F{f}"``.
+                All other fields (IDs, labels, inferred IDs) are exported as 1-D tensors.
+
+        Notes:
+            The validity masks are computed using the class-specific ID and label
+            NaN-checkers. 
+
+            Super-batch coordinates are obtained via ``torch.where`` and stacked along the
+            last dimension, yielding a tensor of shape ``(N, B)`` where ``B`` is the number
+            of super-batch dimensions.
+
+        """
+        mask_valid_unlabeled = ~self._ids_rejects_nan_checker(self._unlabeled_ids)
+        batch_iders_unlabeled = torch.stack(
+            torch.where(mask_valid_unlabeled),
+            dim=-1
+        )
+        valid_features_unlabeled = self.features_unlabeled[mask_valid_unlabeled]
+        valid_ids_unlabeled = self._unlabeled_ids[mask_valid_unlabeled]
+
+        mask_valid_labeled =  ~self._labels_nan_checker(self.labels)
+        batch_iders_labeled = torch.stack(
+            torch.where(mask_valid_labeled),
+            dim=-1
+        )
+        valid_features_labeled = self.features_labeled[mask_valid_labeled]
+        valid_labels = self.labels[mask_valid_labeled]
+        valid_inferred_ids = self._ids_inferred[mask_valid_labeled]
+        valid_label_is_inferred = ~self._ids_rejects_nan_checker(valid_inferred_ids)
+
+        if as_pd_ready_dicts:
+            batch_id_dict_maker = lambda iders : {f"super_batch_dim:{b_idx}" : iders[:,b_idx] for b_idx in range(len(self.super_batch_shape))}
+            feats_dict_maker = lambda feats : {f"F{f_idx}" : feats[:, f_idx] for f_idx in range(self.features_count)}
+
+            batch_iders_unlbld_dict = batch_id_dict_maker(batch_iders_unlabeled)
+            feats_unlbld_dict = feats_dict_maker(valid_features_unlabeled)
+            ids_unlbld_dict = {"obs_id" : valid_ids_unlabeled}
+
+            unlabeled_data = batch_iders_unlbld_dict | ids_unlbld_dict | feats_unlbld_dict
+
+            batch_iders_lbld_dict = batch_id_dict_maker(batch_iders_labeled)
+            feats_lbld_dict = feats_dict_maker(valid_features_labeled)
+            other_lbld_attr = {
+                "label" : valid_labels,
+                "label_is_inferred" : valid_label_is_inferred,
+                "inferred_obs_id" : valid_inferred_ids
+            }
+            labeled_data = batch_iders_lbld_dict | feats_lbld_dict | other_lbld_attr
+
+        else: 
+            unlabeled_data = {
+                "batch_iders" : batch_iders_unlabeled,
+                "ids" : valid_ids_unlabeled,
+                "features" : valid_features_unlabeled
+            }
+            labeled_data = {
+                "batch_iders" : batch_iders_labeled,
+                "features" : valid_features_labeled,
+                "label" : valid_labels,
+                "label_is_inferred" : valid_label_is_inferred,
+                "inferred_obs_id" : valid_inferred_ids
+            }
+            
+        return unlabeled_data, labeled_data
+
 
 
 
