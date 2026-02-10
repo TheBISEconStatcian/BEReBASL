@@ -26,12 +26,17 @@ class Classifier:
             model,
             predict_model_probs : Callable[["model", torch.Tensor], torch.Tensor],
             train_model : Callable[["model", torch.Tensor, torch.Tensor], None],
-            reset_parameters_to_initial_state : Callable[["model"], None]
+            reset_parameters_to_initial_state : Callable[["model"], None],
+            copy_current_state_dict : Callable[["model"], dict],
+            state_dict_loader : Callable[[dict], None]
     ):
         self.model = model
         self.predict_model_probs = predict_model_probs
         self.train_model = train_model
         self.reset_parameters_to_initial_state = reset_parameters_to_initial_state
+        self.copy_current_state_dict = copy_current_state_dict
+        self.state_dict_loader = state_dict_loader
+        
 
     def fit(self, features : torch.Tensor, labels : torch.Tensor) -> None:
         self.train_model(self.model, features, labels)
@@ -45,11 +50,20 @@ class Classifier:
     def reset_parameters_to_initial(self):
         self.reset_parameters_to_initial_state(self.model)
 
+    def load_saved_params(self, state_dict : dict):
+        self.state_dict_loader(state_dict)
+
+    def copied_state_dict(self):
+        return self.copy_current_state_dict(self.model)
+
     @staticmethod
     def obj_has_needed_funs(obj):
         expected_funs_with_param_count = [
             ("fit", 2),
-            ("predict_proba", 1)
+            ("predict_proba", 1),
+            ("reset_parameters_to_initial", 0),
+            ("load_saved_params", 1),
+            ("copied_state_dict", 0)
         ]
         for fun_name, param_count in expected_funs_with_param_count:
             if not hasattr(obj, fun_name):
@@ -447,4 +461,23 @@ class TorchLogistic(nn.Module):
         optimizer.step(train_step)
 
         return self
+    
+    def copied_state_dict(self):
+        return {
+            "weight" : self.lin_estimator.weight.copy(),
+            "bias" : self.lin_estimator.bias.copy()
+        }
+    
+    def load_saved_params(self, state_dict : dict):
+        bias_to_load = state_dict.get("bias", None)
+        weight_to_load = state_dict.get("weight", None)
+        if bias_to_load is None or weight_to_load is None:
+            raise ValueError("state_dict does not contain bias and weight")
+        if len(state_dict)>2:
+            raise ValueError("state_dict contains more than only 'bias' and 'weight' als keys")
+        
+        with torch.no_grad():
+            self.lin_estimator.weight.copy_(weight_to_load)
+            self.lin_estimator.bias.copy_(bias_to_load)
+
     
