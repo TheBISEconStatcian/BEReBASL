@@ -847,6 +847,10 @@ class CreditDataSample(Dataset):
         rejected applications. Shape ``(..., N_labeled)``.
         """
         return ~self._ids_rejects_nan_checker(self._ids_inferred)
+    
+    @property
+    def mask_nans_unlabeled(self):
+        return self._ids_rejects_nan_checker(self._unlabeled_ids)
 
     @property
     def count_labeled(self):
@@ -1298,7 +1302,7 @@ class CreditDataSample(Dataset):
     # (Reject) Inference related
     # -------------------------------------------------------------------------
 
-    def _generate_random_train_test_idxs(
+    def generate_random_train_test_idxs(
         self,
         shape_up_to_N_dim: Union[tuple[int], torch.Size],
         test_proportion: float,
@@ -1443,12 +1447,12 @@ class CreditDataSample(Dataset):
             raise ValueError("test_proportion must be between 0 and 1")
 
         # Generate masks
-        gather_idx_train_unlbld, gather_idx_test_unlbld = self._generate_random_train_test_idxs(
+        gather_idx_train_unlbld, gather_idx_test_unlbld = self.generate_random_train_test_idxs(
             shape_up_to_N_dim=self._unlabeled_ids.shape,
             test_proportion=test_proportion,
             nan_mask=self._ids_rejects_nan_checker(self._unlabeled_ids)
         )
-        gather_idx_train_lbld, gather_idx_test_lbld = self._generate_random_train_test_idxs(
+        gather_idx_train_lbld, gather_idx_test_lbld = self.generate_random_train_test_idxs(
             shape_up_to_N_dim=self.labels.shape, 
             test_proportion=test_proportion,
             nan_mask=self._labels_nan_checker(self.labels)
