@@ -823,6 +823,10 @@ class CreditDataSample(Dataset):
         if seed is not None:
             self.rng.manual_seed(int(seed))
 
+        # Generator here is not used explicitly
+        self._random_perm_idx_labeled = torch.rand_like(self.labels, dtype=torch.float32).argsort(dim=-1)
+        self._random_perm_idx_unlabeled = torch.rand_like(self._unlabeled_ids, dtype=torch.float32).argsort(dim=-1)
+
     # -------------------------------------------------------------------------
     # Properties
     # -------------------------------------------------------------------------
@@ -854,6 +858,10 @@ class CreditDataSample(Dataset):
     def features_count(self):
         """Number of features per sample (``F``)."""
         return self.features_unlabeled.size(-1)
+    
+    @property
+    def super_batch_shape(self):
+        return self.labels.shape[:-1]
 
     # -------------------------------------------------------------------------
     # RNG utilities
@@ -1631,36 +1639,45 @@ class CreditDataSample(Dataset):
 
     def __getitem__(self, idx: int) -> Tuple[Any, Optional[torch.Tensor]]:
         """
-        Retrieve a single sample from either the labeled or unlabeled pool.
+        Retrieve a single sample from either the labeled or unlabeled pool depending
+        on ``self.retrieve_only_labeled``. Each tensor contains exactly one observation
+        of per super batch.
 
         Returns:
             dict:
                 If retrieving labeled samples:
                     {
-                        "features": Tensor (..., F),
-                        "default_flag": Tensor (...,),
-                        "is_inferred": Tensor (...,),
+                        "features": Tensor (``*self.super_batch_shape``, ``self.features_count``),
+                        "default_flag": Tensor (``*self.super_batch_shape``),
+                        "is_inferred": Tensor (``*self.super_batch_shape``),
                         "accepted": True
                     }
 
                 If retrieving unlabeled samples:
                     {
-                        "features": Tensor (..., F),
+                        "features": Tensor (``*self.super_batch_shape``, ``self.features_count``),
                         "default_flag": None,
                         "is_inferred" : None,
                         "accepted": False
                     }
         """
         if self.retrieve_only_labeled:
+            random_idxs = self._random_perm_idx_labeled[..., idx].unsqueeze(-1)
             return {
-                "features": self.features_labeled[..., idx, :],
-                "default_flag": self.labels[..., idx],
-                "is_inferred" : self.mask_inferred_lbls[..., idx],
+                "features": self.features_labeled.gather(
+                    dim=-2,
+                    index=random_idxs.unsqueeze(-1).expand(*random_idxs.shape, self.features_count)
+                ).squeeze(-2),
+                "default_flag": self.labels.gather(dim=-1, index=random_idxs).squeeze(-1),
+                "is_inferred" : self.mask_inferred_lbls.gather(dim=-1, index=random_idxs).squeeze(-1),
                 "accepted": True,
             }
-
+        random_idxs = self._random_perm_idx_unlabeled[..., idx].unsqueeze(-1)
         return {
-            "features": self.features_unlabeled[..., idx, :],
+            "features": self.features_unlabeled.gather(
+                dim=-2,
+                index=random_idxs.unsqueeze(-1).expand(*random_idxs.shape, self.features_count)
+            ).squeeze(-2),
             "default_flag": None,
             "is_inferred" : None,
             "accepted": False,
