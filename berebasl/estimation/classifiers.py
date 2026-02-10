@@ -25,11 +25,13 @@ class Classifier:
             self,
             model,
             predict_model_probs : Callable[["model", torch.Tensor], torch.Tensor],
-            train_model : Callable[["model", torch.Tensor, torch.Tensor], None]
+            train_model : Callable[["model", torch.Tensor, torch.Tensor], None],
+            reset_parameters_to_initial_state : Callable[["model"], None]
     ):
         self.model = model
         self.predict_model_probs = predict_model_probs
         self.train_model = train_model
+        self.reset_parameters_to_initial_state = reset_parameters_to_initial_state
 
     def fit(self, features : torch.Tensor, labels : torch.Tensor) -> None:
         self.train_model(self.model, features, labels)
@@ -39,6 +41,9 @@ class Classifier:
         # return a tensor of shape [..., 2] containing the predicted
         # probabilities of label = 0, 1 respectively along the last axis
         return self.predict_model_probs(self.model, features)
+    
+    def reset_parameters_to_initial(self):
+        self.reset_parameters_to_initial_state(self.model)
 
     @staticmethod
     def obj_has_needed_funs(obj):
