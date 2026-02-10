@@ -298,6 +298,10 @@ class CreditDataGenerator:
     def rng(self) -> torch.Generator:
         return self.bad_mixture.rng
     
+    @property
+    def features_count(self):
+        return self.bad_mixture.mean.size(-1)
+    
     def manual_seed(self, seed : int) -> torch.Generator:
         self.rng.manual_seed(seed)
     
@@ -1940,6 +1944,10 @@ class CreditData(Dataset):
                 Count of samples where the acceptance flag is ``False``.
         """
         return self.count_all - self.count_accepts
+    
+    @property
+    def features_count(self) -> int:
+        return self.features.size(-1)
 
     # -------------------------------------------------------------------------
     # Mutation
