@@ -99,15 +99,6 @@ class BASLPartialUnbiaser:
             model.eval()
         return model.predict_proba(features)[..., 1]
 
-    def self_learn(
-            self,
-            features_accept : torch.Tensor,
-            default_flags_accept : torch.Tensor,
-            features_reject : torch.Tensor,
-            silent : bool = True
-    ) -> torch.Tensor:
-        pass
-
     def filter_rejects(
         self,
         features_rejects: torch.Tensor,
@@ -283,48 +274,44 @@ class BASLPartialUnbiaser:
         conf_threshold_good = 1-weak_prob_bad_rejects.quantile(self.label_goods_percent, dim=-1, keepdim=True).item() # [..., 1]
 
         # 5. Identify bad and good confident predictions
-        lidx_conf_preds_bad = torch.zeros(normalized_shape, dtype=torch.bool, device=device) # [..., N]
-        lidx_conf_preds_bad = lidx_conf_preds_bad.scatter( # [..., N]
+        mask_conf_preds_bad = torch.zeros(normalized_shape, dtype=torch.bool, device=device) # [..., N]
+        mask_conf_preds_bad = mask_conf_preds_bad.scatter( # [..., N]
             dim=-1,
             index=idx_candidate_rej_to_label,
             src= weak_prob_bad_rejects >= conf_threshold_bad # [..., M]
         )
-        lidxs_conf_preds_good = torch.zeros_like(lidx_conf_preds_bad) # [..., N]
-        lidxs_conf_preds_good = lidxs_conf_preds_good.scatter( # [..., N]
+        mask_conf_preds_good = torch.zeros_like(mask_conf_preds_bad) # [..., N]
+        mask_conf_preds_good = mask_conf_preds_good.scatter( # [..., N]
             dim=-1,
             index=idx_candidate_rej_to_label,
             src=weak_prob_bad_rejects <= (1-conf_threshold_good) # [..., M]
         )
         ## if wished enforce upper bound of labeling percent
         if hard_upper_bound_label_percent:
-            lidxs_conf_preds_bad = self.__class__.modify_conf_preds_to_keep_max_labeling_bound(
-                lidxs_conf_preds_bad, 
+            mask_conf_preds_bad = self.__class__.modify_conf_preds_to_keep_max_labeling_bound(
+                mask_conf_preds_bad, 
                 upper_bound= round(M * self.label_bads_percent)
             ) # [..., N]
-            lidxs_conf_preds_good = self.__class__.modify_conf_preds_to_keep_max_labeling_bound(
-                lidxs_conf_preds_good, 
+            mask_conf_preds_good = self.__class__.modify_conf_preds_to_keep_max_labeling_bound(
+                mask_conf_preds_good, 
                 upper_bound= round(M * self.label_goods_percent)
             ) # [..., N]
 
-        lidx_conf_preds = lidxs_conf_preds_bad | lidxs_conf_preds_good # [..., N]
+        mask_conf_preds = mask_conf_preds_bad | mask_conf_preds_good # [..., N]
 
         # 6. Generate labels with dummy encoding in the dtype of the default_flag
         #    and filter the corresponding indices
-        nan_val = torch.tensor(
-            -1, 
-            dtype=torch.int if data.labels.dtype == torch.bool else data.labels.dtype, 
-            device=device
-        )
+        nan_val = data.labels_nan_value
         bad_val = torch.ones_like(nan_val)
         good_val = torch.zeros_like(nan_val)
 
         confident_preds = torch.where(
-            lidxs_conf_preds_bad, 
+            mask_conf_preds_bad, 
             bad_val,
-            torch.where(lidxs_conf_preds_good, good_val, nan_val)
+            torch.where(mask_conf_preds_good, good_val, nan_val)
         )
 
-        mask_labeled_rejects = lidx_conf_preds
+        mask_labeled_rejects = mask_conf_preds
 
         return confident_preds, mask_labeled_rejects
     
@@ -367,6 +354,12 @@ class BASLPartialUnbiaser:
             data.label_rejects(inferred_labels=confident_preds, mask_inferred_rej_lbls=mask_infered, inplace = True)
 
         return data
+    
+    def predict_proba_augmented_sample(
+            self,
+            data : CreditDataSample
+    ) -> torch.Tensor:
+        pass
 
 def fit_and_predict_classic_logistic(X : np.array, y : np.array, add_intercept : bool = True):
     if add_intercept:
