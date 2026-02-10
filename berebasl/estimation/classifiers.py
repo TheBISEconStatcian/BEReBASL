@@ -104,30 +104,50 @@ class TorchLogistic(nn.Module):
     """
 
     def __init__(
-            self, 
-            n_features : int, 
-            n_classes : int = 2,
-            lbfgs_kwargs : Optional[dict] = None,
-            seed_for_weight_init : Optional[int] = None,
-            device: Optional[torch.device] = None,
-            dtype : Optional[torch.dtype] = None,
-            secure_init : bool = True
-        ):
+        self,
+        n_features: int,
+        n_classes: int = 2,
+        lbfgs_kwargs: Optional[dict] = None,
+        seed_for_weight_init: Optional[int] = None,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
+        secure_init: bool = True,
+    ):
         r"""
         Initialize the logistic regression model.
 
+        Parameters
+        ----------
+        n_features : int
+            Number of input features.
+        n_classes : int, default=2
+            Number of output classes. If ``2``, the model uses the binary logistic
+            formulation with a single logit :math:`z = \log \frac{p(y=1 \mid x)}{p(y=0 \mid x)}`.
+            For ``n_classes > 2``, the model outputs ``n_classes`` logits.
+        lbfgs_kwargs : dict, optional
+            Keyword arguments forwarded to ``torch.optim.LBFGS``. If ``None``,
+            a default configuration is used. When ``secure_init=True``, the keys
+            are validated against the optimizer's constructor.
+        seed_for_weight_init : int, optional
+            Seed used to initialize a dedicated ``torch.Generator`` for deterministic
+            parameter initialization. If ``None``, initialization remains deterministic
+            with respect to the created generator inside the method but does not fix a seed.
+        device : torch.device, optional
+            Device on which parameters and buffers are allocated.
+        dtype : torch.dtype, optional
+            Data type for model parameters.
+        secure_init : bool, default=True
+            If ``True``, validates ``lbfgs_kwargs`` and enforces ``n_classes >= 2``.
+
         Notes
         -----
-        For ``n_classes == 2``, the model outputs a single logit ``z`` corresponding
-        to the log-odds:
-
-        .. math::
-
-            z = \log \frac{p(y=1 \mid x)}{p(y=0 \mid x)}
-
-        For ``n_classes > 2``, the model outputs ``n_classes`` logits and applies a
-        softmax during probability prediction.
+        The initial parameters of the linear estimator are created using the provided
+        generator and stored as buffers (``W_init`` and ``b_init``). They can be
+        restored exactly via ``reset_parameters_to_initial``. The mapping from logits
+        to probabilities is selected once at initialization and stored in
+        ``self.logit_to_probs`` to avoid branching during inference.
         """
+
         super().__init__()
         self.n_classes = int(n_classes)
         if lbfgs_kwargs is None:
@@ -337,9 +357,19 @@ class TorchLogistic(nn.Module):
         return self.forward(X)
     
     def reset_parameters_to_initial(self):
+        r"""
+        Restore the linear estimator to its stored initial parameters.
+
+        Notes
+        -----
+        Copies ``W_init`` and ``b_init`` back into ``lin_estimator``. This provides
+        deterministic restarts independent of global random seeds or PyTorch's
+        initialization routines.
+        """
         with torch.no_grad():
             self.lin_estimator.weight.copy_(self.W_init)
             self.lin_estimator.bias.copy_(self.b_init)
+
 
     def reset_parameters(self, rng : torch.Generator):
         r"""
@@ -356,7 +386,7 @@ class TorchLogistic(nn.Module):
         # Bias resetting
         fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.lin_estimator.weight)
         bound = 1 / sqrt(fan_in) if fan_in > 0 else 0
-        nn.init.uniform_(self.bias, -bound, bound, generator=rng)
+        nn.init.uniform_(self.lin_estimator.bias, -bound, bound, generator=rng)
 
     
     def fit(self, X : torch.Tensor, y : torch.Tensor, reduction : str = "sum"):
