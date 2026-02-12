@@ -487,8 +487,8 @@ class TorchLogistic(nn.Module):
         """
 
         return {
-            "weight" : self.lin_estimator.weight.cpu().numpy(),
-            "bias" : self.lin_estimator.bias.cpu().numpy()
+            "weight" : self.lin_estimator.weight.detach().cpu().numpy(),
+            "bias" : self.lin_estimator.bias.detach().cpu().numpy()
         }
     
     def load_saved_params(self, state_dict : Dict[str, Union[ndarray, torch.Tensor]]):
