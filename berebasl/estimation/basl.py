@@ -202,7 +202,7 @@ class BASLPartialUnbiaser:
 
             keep_masks.append(full_current_keep_mask)
 
-        keep_mask = torch.stack(keep_masks, dim=0).to(features_rejects.device)
+        keep_mask = torch.stack(keep_masks, dim=0).to(features_rejects.device).reshape(mask_valid_feats.shape)
 
         return keep_mask
 
@@ -385,7 +385,7 @@ class BASLPartialUnbiaser:
         if self.should_filter:
             keep_mask = self.filter_rejects(
                 features_rejects=data.features_unlabeled, 
-                mask_valid_feats=data.mask_nans_unlabeled
+                mask_valid_feats=~data.mask_nans_unlabeled
             )
             data.filter_unlabeled(keep_mask, inplace=True)
 
