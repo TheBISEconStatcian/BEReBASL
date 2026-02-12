@@ -29,7 +29,6 @@ class BASLPartialUnbiaser:
             label_bads_percent : float, # labeling_percent in R implementation
             label_goods_percent : float, # labeling_percent / multiplier in R implementation
             max_iterations :int,
-            early_stop : bool,
             isolation_forest : IsolationForest,
             bayesian_metric : BayesianMetric
     ):
@@ -56,8 +55,7 @@ class BASLPartialUnbiaser:
         self.max_iterations = int(max_iterations)
         if self.max_iterations < 1:
             raise ValueError("max_iterations needs to be at least 1")
-        
-        self.early_stop = bool(early_stop)
+
         self.isolation_forest = isolation_forest
         self.bayesian_metric = bayesian_metric
 
@@ -305,7 +303,7 @@ class BASLPartialUnbiaser:
         else:
             M = round(self.sampling_percent * N)
             # Little abuse but ensures sampling the right percent
-            # per batch
+            # per batch and rng usage
             idx_candidate_rej_to_label, _ = data.generate_random_train_test_idxs(
                 data.features_unlabeled.shape[:-1], 
                 test_proportion=self.sampling_percent, 
