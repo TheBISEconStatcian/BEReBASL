@@ -1706,9 +1706,9 @@ class CreditDataSample(Dataset):
         # ------------------------------------------------------------
         # FAST PATH: all batches keep the same number of samples
         # ------------------------------------------------------------
-        no_padding_needed = torch.all(counts == counts[0,0])
+        no_padding_needed = torch.all(counts == counts[0])
         if no_padding_needed:
-            new_N = int(counts[0,0].item())
+            new_N = int(counts[0].item())
             self.features_unlabeled = (
                 self.features_unlabeled[keep_mask]
                 .reshape(*batch_shape, new_N, F)
