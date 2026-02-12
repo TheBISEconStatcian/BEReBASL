@@ -379,21 +379,24 @@ class BASLPartialUnbiaser:
         ) -> CreditDataSample:
         if early_stop:
             data, holdout_data = data.train_test_split(self.holdout_percent)
+        elif leave_orig_sample_untouched:
+            data = data.clone()
         
         if self.should_filter:
-            keep_mask = self.filter_rejects(data.features_unlabeled, return_index=False)
+            keep_mask = self.filter_rejects(
+                features_rejects=data.features_unlabeled, 
+                mask_valid_feats=data.mask_nans_unlabeled
+            )
+            data.filter_unlabeled(keep_mask, inplace=True)
 
         if early_stop:
             b_metric_last_iter = self.evaluate_labeled_performance(data, holdout_data)
 
-        confident_preds, mask_infered = self.confident_reject_labels(data)
-        if leave_orig_sample_untouched:
-            data = data.label_rejects(inferred_labels=confident_preds, mask_inferred_rej_lbls=mask_infered, inplace = False)
-        else:
-            data.label_rejects(inferred_labels=confident_preds, mask_inferred_rej_lbls=mask_infered, inplace = True)
+        confident_preds, mask_inferred = self.confident_reject_labels(data)
+        data.label_rejects(inferred_labels=confident_preds, mask_inferred_rej_lbls=mask_inferred, inplace = True)
 
         for _ in range(self.max_iterations-1): # First iteration already done - ensure max iterations is kept
-            next_iteration_is_sensible = mask_infered.any() and data.count_labeled > 0
+            next_iteration_is_sensible = mask_inferred.any() and data.count_labeled > 0
             if not next_iteration_is_sensible:
                 break
 
@@ -406,8 +409,8 @@ class BASLPartialUnbiaser:
                 b_metric_last_iter = b_metric_current_iter
 
             # Next labeling stage
-            confident_preds, mask_infered = self.confident_reject_labels(data)
-            data.label_rejects(inferred_labels=confident_preds, mask_inferred_rej_lbls=mask_infered, inplace = True)
+            confident_preds, mask_inferred = self.confident_reject_labels(data)
+            data.label_rejects(inferred_labels=confident_preds, mask_inferred_rej_lbls=mask_inferred, inplace = True)
 
         return data
 
