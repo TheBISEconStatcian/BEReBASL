@@ -2,7 +2,7 @@ from sklearn.ensemble import IsolationForest
 import numpy as np
 import torch
 
-from typing import Literal, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
 from berebasl.estimation.bayesian_evaluation import BayesianMetric
 from berebasl.estimation.classifiers import Classifier
@@ -98,11 +98,53 @@ class BASLPartialUnbiaser:
         if in_eval_if_possible and hasattr(model, "eval"):
             model.eval()
         return model.predict_proba(features)[..., 1]
+    
+    def _filter_single_batch_rejects(
+            self,
+            features : np.array
+    ) -> np.ndarray:
+        """
+        Compute a two-sided Isolation Forest trimming mask for a single batch.
+
+        This method fits the internal ``IsolationForest`` estimator on the
+        provided feature matrix and computes normality scores via
+        ``score_samples``. Observations are retained if their score lies within
+        the central quantile interval defined by
+        ``filtering_quantiles['lower']`` and ``filtering_quantiles['upper']``.
+        Both highly anomalous and overly typical observations are removed.
+
+        Parameters
+        ----------
+        features : np.ndarray
+            A 2D NumPy array of shape ``(n_samples, n_features)`` containing
+            the valid (non-padded) feature rows for a single batch.
+
+        Returns
+        -------
+        np.ndarray
+            A boolean array of shape ``(n_samples,)`` where ``True`` indicates
+            that the observation is retained according to the two-sided
+            trimming rule.
+        """
+        self.isolation_forest.fit(features)
+        normality_scores = self.isolation_forest.score_samples(features) # [N]
+
+        lower_score_bound, upper_score_bound = np.quantile(
+            normality_scores,
+            [self.filtering_quantiles["lower"], self.filtering_quantiles["upper"]],
+        )
+
+        keep_mask = (
+                (lower_score_bound <= normality_scores)
+                & (normality_scores <= upper_score_bound)
+        )
+
+        return keep_mask # [N]
 
     def filter_rejects(
         self,
         features_rejects: torch.Tensor,
-        return_index: bool = True,
+        mask_valid_feats: torch.Tensor
     ) -> Union[np.ndarray, np.ndarray]:
         """
         Filters observations using a two-sided trimming strategy based on
@@ -124,36 +166,45 @@ class BASLPartialUnbiaser:
 
         Args:
             features_rejects (torch.Tensor):
-                Feature matrix of shape ``(n_samples, n_features)``.
-            return_index (bool, optional):
+                Tensor of shape ``(..., n_samples, n_features)`` containing
+                matrices of shape ``(n_samples, n_features)``.
+            mask_valid_feats (torch.Tensor):
                 If ``True``, return a boolean mask indicating retained
                 observations. If ``False``, return the filtered feature
                 matrix. Defaults to ``True``.
 
         Returns:
             torch.Tensor:
-                If ``return_index`` is ``True``, a boolean array of shape
-                ``(n_samples,)`` indicating which observations are retained.
-                Otherwise, a feature matrix containing only the retained
-                observations.
+                Boolean tensor of shape ``(..., n_samples)`` indicating which 
+                observations are to be retained.
+
+        Notes:
+            The ``IsolationForest`` is a ``numpy`` implementation meaning that for each
+            "super-batch" of the ``features_rejects`` is done sequentially and a cpu version
+            of the ``mask_valid_feats`` and ``features_rejects`` is shortly created. The re-
+            turn tensor gets transfered back to ``features_rejects.device`` at the end.
         """
-        
-        features = features_rejects.detach().numpy()
-        self.isolation_forest.fit(features)
-        normality_scores = self.isolation_forest.score_samples(features)
+        batch_shape = features_rejects.shape[:-2] 
+        B = int(torch.prod(torch.tensor(batch_shape)))
+        N = features_rejects.size(-2) 
+        F = features_rejects.size(-1)
+        features = features_rejects.reshape(B, N, F).detach().cpu()#.numpy()
+        mask_valid = mask_valid_feats.reshape(B, N).detach().cpu()
 
-        lower_score_bound, upper_score_bound = np.quantile(
-            normality_scores,
-            [self.filtering_quantiles["lower"], self.filtering_quantiles["upper"]],
-        )
+        keep_masks = []
 
-        keep_mask = (
-                (lower_score_bound <= normality_scores)
-                & (normality_scores <= upper_score_bound)
-        )
-        keep_mask = torch.from_numpy(keep_mask)
+        for b in range(B):
+            current_mask_valid = mask_valid[b]
+            current_keep_mask = self._filter_single_batch_rejects(features[b][current_mask_valid].numpy()) # [B]
+            current_keep_mask = torch.from_numpy(current_keep_mask)
+            full_current_keep_mask = torch.zeros_like(current_mask_valid)
+            full_current_keep_mask[current_mask_valid] = current_keep_mask
 
-        return keep_mask if return_index else features_rejects[keep_mask]
+            keep_masks.append(full_current_keep_mask)
+
+        keep_mask = torch.stack(keep_masks, dim=0).to(features_rejects.device)
+
+        return keep_mask
 
     def bayesian_evaluation( #Next step to implement
             self,
@@ -330,7 +381,7 @@ class BASLPartialUnbiaser:
             data, holdout_data = data.train_test_split(self.holdout_percent)
         
         if self.should_filter:
-            data.features_unlabeled = self.filter_rejects(data.features_unlabeled, return_index=False)
+            keep_mask = self.filter_rejects(data.features_unlabeled, return_index=False)
 
         if early_stop:
             b_metric_last_iter = self.evaluate_labeled_performance(data, holdout_data)
