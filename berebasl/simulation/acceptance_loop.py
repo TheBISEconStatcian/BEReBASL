@@ -23,7 +23,7 @@ def accept_based_on_top_percentent_of_arbitrary_var(
         if defaults_still_selectable == 0:
             return accepts
         
-        count_bads_to_still_achieve = min_count_bads -count_defaults_within_accepts
+        count_bads_to_still_achieve = min_count_bads - count_defaults_within_accepts
         var_for_rule_vals_of_rejected_defaults = features[lidx_defaults_non_accepted][:, var_for_rule]
         
         if defaults_still_selectable <= count_bads_to_still_achieve:
@@ -31,7 +31,6 @@ def accept_based_on_top_percentent_of_arbitrary_var(
             accept_rule_to_include_all_defaults = features[:, var_for_rule] >=  var_for_rule_vals_of_rejected_defaults.min()
             return accept_rule_to_include_all_defaults
         
-
         new_cutoff = torch.topk(var_for_rule_vals_of_rejected_defaults,k=count_bads_to_still_achieve, largest=True).values[-1]
 
         return features[:, var_for_rule] >= new_cutoff
