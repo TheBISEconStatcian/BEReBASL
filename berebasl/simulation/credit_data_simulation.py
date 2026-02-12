@@ -1653,6 +1653,72 @@ class CreditDataSample(Dataset):
             rng_state=self.rng.get_state(),
             safety_checks=safety_checks
         )
+    
+    def filter_unlabeled(self, keep_mask : torch.Tensor, inplace: bool = True):
+        if keep_mask.shape != self._unlabeled_ids.shape:
+            raise AssertionError(f"keep_mask does not have the expected shape. Expected: {keep_mask.shape}")
+        elif keep_mask.numel() == 0:
+            # Case no unlabeled data, the logic does not make sense, so return
+            return
+        
+        if not inplace:
+            self = self.clone()
+        
+        batch_shape = self.super_batch_shape
+
+        filter_mask = ~keep_mask
+        count_to_filter = filter_mask.sum(dim=-1)
+
+        nan_logic_not_necessary = torch.all(count_to_filter.reshape(-1)[0] == count_to_filter)
+        if nan_logic_not_necessary:
+            self.features_unlabeled = self.features_unlabeled[keep_mask].reshape(*batch_shape, -1, self.features_count)
+            self._unlabeled_ids = self._unlabeled_ids[keep_mask].reshape(*batch_shape, -1)
+            return self
+                
+        B = torch.prod(torch.tensor(batch_shape))
+        N = self._unlabeled_ids.size(-1)
+        F = self.features_count
+
+        feats_unlbld_with_nan_in_filter_pos = self.features_unlabeled.masked_scatter(
+            filter_mask.unsqueeze(-1).expand(*keep_mask.shape, F),
+            source=torch.full_like(self.features_unlabeled, fill_value=torch.nan)
+        )
+        unlbld_ids_with_nan_in_filter_pos = self._unlabeled_ids.masked_scatter(
+            filter_mask,
+            source=torch.full_like(self._unlabeled_ids, fill_value=self._nan_val_ids_rejects)
+        )
+
+        filtered_feats_unlbld = feats_unlbld_with_nan_in_filter_pos.reshape(B, N, F)
+        filtered_unlbld_ids = unlbld_ids_with_nan_in_filter_pos.reshape(B, N)
+
+        min_to_filter, max_to_filter = torch.aminmax(count_to_filter)
+        # The difference between max to filter and min to filter is the maximal amount
+        # of needed filtering to 
+        count_to_set_to_true_in_keep_mask = (max_to_filter - min_to_filter).item() # Range
+
+        reshaped_keep_mask = keep_mask.reshape(B, N)
+
+        needed_nans = count_to_filter.flatten() - min_to_filter # [B]
+        arange_count = torch.arange(count_to_set_to_true_in_keep_mask).unsqueeze(0).expand(B, count_to_set_to_true_in_keep_mask)
+        mask_get_nans = needed_nans.unsqueeze(-1) > arange_count
+
+        sorting_keep_mask = reshaped_keep_mask.argsort(dim=-1)
+        idxs_set_to_true_keep_mask = torch.where(
+            mask_get_nans,
+            sorting_keep_mask[:, :count_to_set_to_true_in_keep_mask], #Contains the nan indices at the beginning
+            sorting_keep_mask[:, -count_to_set_to_true_in_keep_mask:]
+        )
+        
+        keep_mask_with_necessary_nan_entries = reshaped_keep_mask.scatter(
+            dim=-1,
+            index = idxs_set_to_true_keep_mask,
+            src = torch.tensor(True, device=self.device).expand(B, N)
+        )
+
+        self.features_unlabeled = filtered_feats_unlbld[keep_mask_with_necessary_nan_entries].reshape(*batch_shape, -1, F)
+        self._unlabeled_ids = filtered_unlbld_ids[keep_mask_with_necessary_nan_entries].reshape(*batch_shape, -1)
+
+        return self
 
     # -------------------------------------------------------------------------
     # Dataset interface
