@@ -1,11 +1,12 @@
 import inspect
 from math import sqrt
 
+from numpy import ndarray
 import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional, Union
 
 def function_has_expected_signature(fun : Callable, count_params : int):
     sig = inspect.signature(fun)
@@ -462,13 +463,63 @@ class TorchLogistic(nn.Module):
 
         return self
     
-    def copied_state_dict(self):
+    def copied_state_dict(self) -> Dict[str, ndarray]:
+        r"""
+        Return a lightweight, device-agnostic snapshot of the model parameters.
+
+        This method extracts the weight and bias of the internal linear estimator,
+        moves them to CPU, and converts them to NumPy arrays. The resulting dictionary
+        is fully pickle-safe and independent of the device on which the model currently
+        resides.
+
+        Returns
+        -------
+        Dict[str, numpy.ndarray]
+            A dictionary with keys ``"weight"`` and ``"bias"``, each containing a
+            CPU-resident NumPy array representing the corresponding parameter.
+
+        Notes
+        -----
+        - The returned arrays are detached copies; modifying them does not affect
+        the model.
+        - This method is intended for fast snapshotting in hot paths where full
+        ``state_dict`` serialization would be unnecessarily heavy.
+        """
+
         return {
-            "weight" : self.lin_estimator.weight.copy(),
-            "bias" : self.lin_estimator.bias.copy()
+            "weight" : self.lin_estimator.weight.cpu().numpy(),
+            "bias" : self.lin_estimator.bias.cpu().numpy()
         }
     
-    def load_saved_params(self, state_dict : dict):
+    def load_saved_params(self, state_dict : Dict[str, Union[ndarray, torch.Tensor]]):
+        r"""
+        Load model parameters from a lightweight state dictionary.
+
+        This method restores the weight and bias of the internal linear estimator
+        from a dictionary produced by :meth:`copied_state_dict`. The input may contain
+        either NumPy arrays or PyTorch tensors. All data is converted to the correct
+        dtype and moved to the device of the existing parameters.
+
+        Parameters
+        ----------
+        state_dict : Dict[str, Union[numpy.ndarray, torch.Tensor]]
+            A dictionary containing exactly the keys ``"weight"`` and ``"bias"``.
+            Each entry must be either a NumPy array or a PyTorch tensor with a shape
+            matching the corresponding parameter.
+
+        Raises
+        ------
+        ValueError
+            If required keys are missing, if unexpected keys are present, or if the
+            provided data is not a NumPy array or tensor.
+
+        Notes
+        -----
+        - This method does not rely on PyTorch's ``load_state_dict`` and is intended
+        for fast restoration of small models in performance-sensitive code paths.
+        - Parameter shapes are expected to match exactly; no broadcasting or reshaping
+        is performed.
+        """
         bias_to_load = state_dict.get("bias", None)
         weight_to_load = state_dict.get("weight", None)
         if bias_to_load is None or weight_to_load is None:
@@ -477,7 +528,16 @@ class TorchLogistic(nn.Module):
             raise ValueError("state_dict contains more than only 'bias' and 'weight' als keys")
         
         with torch.no_grad():
-            self.lin_estimator.weight.copy_(weight_to_load)
-            self.lin_estimator.bias.copy_(bias_to_load)
+            for param_name in ["bias", "weight"]:
+                saved_param_data = state_dict.get(param_name)
+                if isinstance(saved_param_data, ndarray):
+                    saved_param_data = torch.from_numpy(saved_param_data)
+                elif not isinstance(saved_param_data, torch.Tensor):
+                    raise ValueError("Data type not recognized")
+                
+                param = getattr(self.lin_estimator, param_name)
+                if saved_param_data.shape != param.shape:
+                    raise ValueError(f"Shape mismatch for {param_name}: expected {param.shape}, got {saved_param_data.shape}")
 
+                param.copy_(saved_param_data.to(param.dtype).to(param.device))
     
