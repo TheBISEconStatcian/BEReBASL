@@ -288,47 +288,65 @@ def acceptance_loop(
         state_of_classifier_accepts = _get_state_method(classifier_accepts, "classifier_accepts")
         state_of_classifier_oracle = _get_state_method(classifier_oracle, "classifier_oracle")
 
-        init_objs_path = os.path.join(sim_dir_path, "initial_simulation_objects.pt")
-        init_objs_path_exists = os.path.exists(init_objs_path)
+    init_objs_path = os.path.join(sim_dir_path, "initial_simulation_objects.pt")
+    init_objs_path_exists = os.path.exists(init_objs_path)
 
-        if init_objs_path_exists and current_gen==0:
-            raise AssertionError(f"current_gen = 0 but {os.path.basename(init_objs_path)} already exists in {sim_dir_path}")
-        
-        if not init_objs_path_exists:
-            torch.save(
-                {
-                    "data_generator" : data_generator,
-                    "initial_sample" : credit_data,
-                    "holdout_data" : holdout_data,
-                    "classifier_accepts" : classifier_accepts,
-                    "classifier_oracle": classifier_oracle,
-                    "basl_unbiaser" : basl_unbiaser,
-                    "configs" : {
-                        "base_seed" : base_seed,
-                        "sample_size" : sample_size,
-                        "num_gens" : num_gens,
-                        "top_percent" : top_percent,
-                        "report_every" : report_every,
-                        "save_to_disc_every" : save_to_disc_every,
-                        "current_gen" : current_gen,
-                        "persist_classifiers" : persist_classifiers
-                    },
-                    "simulation_state_control_objs" : {
-                        "current_gen" : current_gen,
-                        "stats" : stats,
-                        "models_state_dicts" : classifiers_state_dicts
-                    }
+    if init_objs_path_exists and current_gen==0:
+        raise AssertionError(f"current_gen = 0 but {os.path.basename(init_objs_path)} already exists in {sim_dir_path}")
+    
+    if not init_objs_path_exists:
+        torch.save(
+            {
+                "data_generator" : data_generator,
+                "initial_sample" : credit_data,
+                "holdout_data" : holdout_data,
+                "classifier_accepts" : classifier_accepts,
+                "classifier_oracle": classifier_oracle,
+                "basl_unbiaser" : basl_unbiaser,
+                "configs" : {
+                    "base_seed" : base_seed,
+                    "sample_size" : sample_size,
+                    "num_gens" : num_gens,
+                    "top_percent" : top_percent,
+                    "report_every" : report_every,
+                    "save_to_disc_every" : save_to_disc_every,
+                    "current_gen" : current_gen,
+                    "persist_classifiers" : persist_classifiers
                 },
-                f=init_objs_path
-            )
+                "simulation_state_control_objs" : {
+                    "current_gen" : current_gen,
+                    "stats" : stats,
+                    "models_state_dicts" : classifiers_state_dicts
+                }
+            },
+            f=init_objs_path
+        )
 
 
     results_path = os.path.join(sim_dir_path, "simulation_results.pt")
 
-    for gen_round_nr in range(1, num_gens + 1):
+    simulation_begin = time.time()
+    times_needed = []
+    print("Checks passed in acceptance_loop, beginning now")
+
+    for gen_round_nr in range(current_gen, num_gens + 1):
         if gen_round_nr % report_every == 0:
             print("-- Iteration", f"{gen_round_nr}/{num_gens}:", credit_data.accepted_count, 
                 "accepts and", credit_data.rejected_count, " rejects")
+            
+            if gen_round_nr > current_gen+1:
+                times_needed_tensor = torch.rand(times_needed, dtype=torch.float32)
+                T = times_needed_tensor.size(0)
+                X_time_to_go = torch.nn.functional.pad(torch.arange(T, dtype=torch.float32).unsqueeze(-1), pad=(1,0), value=1.0)
+
+                betas = torch.linalg.inv(X_time_to_go.T @ X_time_to_go)@(X_time_to_go.T @ times_needed_tensor)
+                gen_rounds_left = num_gens-gen_round_nr+1
+                expected_time_left = betas.dot(torch.tensor([1, gen_rounds_left], dtype=torch.float32)).item()
+
+                print("\tRoughly expected time left: ", round(expected_time_left/60, 2), "min")
+            
+            
+        begin_round = time.time()
             
         ## Gather current statistics
         current_stats : dict = credit_data.data_stats()
@@ -406,6 +424,10 @@ def acceptance_loop(
             )
 
             torch.save(checkpoint_to_save_to_disc, results_path)
+
+        times_needed.append(time.time() - begin_round)
+
+    print("-- Simulation ended. Time needed:", round((time.time()-simulation_begin)/60, 2), "min")
     
     return credit_data, stats, classifiers_state_dicts
 
@@ -599,5 +621,3 @@ if __name__ == "__main__":
         basl_unbiaser=basl_unbiaser,
         **params
     )
-
-
