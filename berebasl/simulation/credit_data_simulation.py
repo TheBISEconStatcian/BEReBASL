@@ -267,7 +267,7 @@ class CreditDataGenerator:
             noise_var : float,
             bad_ratio : float,
             seed : Optional[int] = None,
-            determinstic_weight_sampling: bool = False
+            deterministic_weight_sampling: bool = False
     ):
         if not isinstance(bad_mixture, GaussianMixture) and not isinstance(good_mixture, GaussianMixture):
             raise ValueError("Mixtures need to be GaussianMixture classes")
@@ -283,7 +283,7 @@ class CreditDataGenerator:
             self.bad_mixture.manual_seed(seed)
 
         self.good_mixture.rng = self.bad_mixture.rng
-        self.determinstic_mixture_weights = bool(determinstic_weight_sampling)
+        self.determinstic_mixture_weights = bool(deterministic_weight_sampling)
 
     @property
     def device(self) -> torch.device:
