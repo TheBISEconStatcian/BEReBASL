@@ -333,19 +333,10 @@ def acceptance_loop(
         if gen_round_nr % report_every == 0:
             print("-- Iteration", f"{gen_round_nr}/{num_gens}:", credit_data.count_accepts, 
                 "accepts and", credit_data.count_rejects, " rejects")
-            
-            if gen_round_nr > current_gen+1: # needs at least two data points
-                times_needed_tensor = torch.tensor(times_needed, dtype=torch.float32)
-                T = times_needed_tensor.size(0)
-                X_time_to_go = torch.nn.functional.pad(torch.arange(T, dtype=torch.float32).unsqueeze(-1), pad=(1,0), value=1.0)
+            times_needed_tensor = torch.tensor(times_needed, dtype=torch.float32)
+            expected_time_left=times_needed_tensor.mean().item() * gen_rounds_left
 
-                betas = torch.linalg.inv(X_time_to_go.T @ X_time_to_go)@(X_time_to_go.T @ times_needed_tensor)
-                gen_rounds_left = num_gens-gen_round_nr+1
-                expected_time_left = betas.dot(torch.tensor([1, gen_rounds_left], dtype=torch.float32)).item()
-                if expected_time_left <= 0:
-                    expected_time_left=times_needed_tensor.mean().item() * gen_rounds_left
-
-                print("\tRoughly expected time left: ", round(expected_time_left/60, 2), "min")
+            print("\tRoughly expected time left: ", round(expected_time_left/60, 2), "min")
             
             
         begin_round = time.time()
@@ -552,6 +543,9 @@ if __name__ == "__main__":
         "mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available() else 
         "cpu"
     )
+
+    torch.set_num_threads(16)
+    torch.set_num_interop_threads(8)
 
     print("Simulation to be run on device", device)
 
