@@ -400,6 +400,122 @@ def acceptance_loop(
     
     return credit_data, stats, classifiers_state_dicts
 
+import os
+import torch
+from warnings import warn
+
+def resume_simulation_from_dir(sim_dir_path: str, new_gen_count: int = None):
+    """
+    Resume a Kozdoi-style acceptance simulation from a saved directory.
+
+    Parameters
+    ----------
+    sim_dir_path : str
+        Path to the simulation directory containing:
+        - initial_simulation_objects.pt
+        - simulation_results.pt
+
+    new_gen_count : int, optional
+        If provided, overwrite the 'num_gens' value in the initial
+        simulation objects before resuming.
+    """
+
+    print(f"\n[INFO] Attempting to resume simulation in: {sim_dir_path}")
+
+    if not os.path.isdir(sim_dir_path):
+        raise NotADirectoryError(f"Simulation directory does not exist: {sim_dir_path}")
+
+    init_path = os.path.join(sim_dir_path, "initial_simulation_objects.pt")
+    results_path = os.path.join(sim_dir_path, "simulation_results.pt")
+
+    if not os.path.exists(init_path):
+        raise FileNotFoundError(f"Missing initial_simulation_objects.pt in {sim_dir_path}")
+
+    if not os.path.exists(results_path):
+        raise FileNotFoundError(f"Missing simulation_results.pt in {sim_dir_path}")
+
+    print("[INFO] Loading initial simulation objects...")
+    init_objs = torch.load(init_path, map_location="cpu")
+
+    print("[INFO] Loading latest simulation results...")
+    results = torch.load(results_path, map_location="cpu")
+
+    # Infer device exactly like in __main__
+    dtype = torch.float64
+    torch.set_default_dtype(dtype)
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() else
+        "mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available() else
+        "cpu"
+    )
+    print(f"[INFO] Using device: {device}")
+
+    # Extract objects
+    data_generator = init_objs["data_generator"]
+    credit_data = init_objs["initial_sample"]
+    holdout_data = init_objs["holdout_data"]
+    classifier_accepts = init_objs["classifier_accepts"]
+    classifier_oracle = init_objs["classifier_oracle"]
+    basl_unbiaser = init_objs["basl_unbiaser"]
+
+    configs = init_objs["configs"]
+    sim_state = init_objs["simulation_state_control_objs"]
+
+    # Optionally update num_gens
+    if new_gen_count is not None:
+        print(f"[INFO] Updating num_gens from {configs['num_gens']} → {new_gen_count}")
+        configs["num_gens"] = new_gen_count
+
+        # Save updated initial objects
+        torch.save(init_objs, init_path)
+        print("[INFO] Updated initial_simulation_objects.pt saved.")
+
+    # Move everything to the correct device
+    print("[INFO] Moving simulation objects to device...")
+    data_generator = data_generator.to(device)
+    credit_data = credit_data.to(device)
+    holdout_data = holdout_data.to(device)
+    basl_unbiaser = basl_unbiaser.to(device)
+
+    # Determine where to resume
+    if "gen_round_nr" in results:
+        # Case when persist_classifiers=False
+        current_gen = results["gen_round_nr"]
+    else:
+        # Case when persist_classifiers=True
+        # The last entry in classifiers_state_dicts corresponds to last saved gen
+        last_entry = results["classifiers_state_dicts"][-1]
+        current_gen = last_entry["gen_round_nr"]
+
+    print(f"[INFO] Resuming simulation from generation {current_gen}/{configs['num_gens']}")
+
+    # Extract stats and classifier state dicts (even if unused)
+    stats = results["stats"]
+    classifiers_state_dicts = results.get("classifiers_state_dicts", [])
+
+    # Launch acceptance loop from the correct point
+    print("[INFO] Restarting acceptance loop...")
+    return acceptance_loop(
+        sim_dir_path=sim_dir_path,
+        data_generator=data_generator,
+        credit_data=credit_data,
+        holdout_data=holdout_data,
+        classifier_accepts=classifier_accepts,
+        classifier_oracle=classifier_oracle,
+        basl_unbiaser=basl_unbiaser,
+        base_seed=configs["base_seed"],
+        sample_size=configs["sample_size"],
+        num_gens=configs["num_gens"],
+        top_percent=configs["top_percent"],
+        report_every=configs["report_every"],
+        save_to_disc_every=configs["save_to_disc_every"],
+        persist_classifiers=init_objs["simulation_state_control_objs"]["models_state_dicts"] != [],
+        current_gen=current_gen,
+        stats=stats,
+        classifiers_state_dicts=classifiers_state_dicts
+    )
+
+
 
 if __name__ == "__main__":
     argparser = build_parser_for_loop()
