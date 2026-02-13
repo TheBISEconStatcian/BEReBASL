@@ -342,6 +342,8 @@ def acceptance_loop(
                 betas = torch.linalg.inv(X_time_to_go.T @ X_time_to_go)@(X_time_to_go.T @ times_needed_tensor)
                 gen_rounds_left = num_gens-gen_round_nr+1
                 expected_time_left = betas.dot(torch.tensor([1, gen_rounds_left], dtype=torch.float32)).item()
+                if expected_time_left <= 0:
+                    expected_time_left=times_needed_tensor.mean().item() * gen_rounds_left
 
                 print("\tRoughly expected time left: ", round(expected_time_left/60, 2), "min")
             
