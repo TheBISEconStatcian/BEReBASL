@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 from warnings import warn
 
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Tuple, Union
 
 from sklearn.ensemble import IsolationForest
 import torch
@@ -150,28 +150,16 @@ def accept_based_on_top_percentent_of_arbitrary_var(
     
     return accepts
 
-def acceptance_loop(
-        sim_dir_path: str,
-        data_gen: CreditDataGenerator,
-        classifier_accepts: Classifier,
-        classifier_oracle: Classifier,
-        basl_unbiaser: BASLPartialUnbiaser,
-        initial_seed: int = 1807,
-        init_sample: int = 200,
-        sample_size: int = 100,
+def generate_initial_and_holdout_population(
+        data_gen : CreditDataGenerator,
+        initial_seed : int = 1807,
+        init_sample: int = 100,
         holdout_sample: int = 3000,
-        num_gens: int = 300,
-        top_percent: float = 200,
-        report_every: int = 10,
-        save_model_every: int = 10,
-        determinstic_mixture_weights: bool = True,
-        persist_classifiers: bool = True
-) -> None:
-    # Initial population
+        top_percent: float = 0.2
+) -> Tuple[CreditDataGenerator, CreditData, CreditData]:
     data_gen.manual_seed(initial_seed)
     feats_new_applicants, def_flag_new_applicants = data_gen.sample(
-        init_sample, 
-        determinstic_mixture_weights
+        init_sample
     )
     
     accepts = accept_based_on_top_percentent_of_arbitrary_var(
@@ -192,7 +180,25 @@ def acceptance_loop(
         accepted_initial=torch.ones(holdout_flag.shape, dtype=torch.bool) # All are "accepted"
     )
 
-    # Acceptance Loop
+    return data_gen, credit_data, holdout_data
+    
+
+def acceptance_loop(
+        sim_dir_path: str,
+        data_gen: CreditDataGenerator,
+        credit_data: CreditData,
+        holdout_data: CreditData,
+        classifier_accepts: Classifier,
+        classifier_oracle: Classifier,
+        basl_unbiaser: BASLPartialUnbiaser,
+        initial_seed: int = 1807,
+        sample_size: int = 100,
+        num_gens: int = 300,
+        top_percent: float = 200,
+        report_every: int = 10,
+        save_model_every: int = 10,
+        persist_classifiers: bool = True
+) -> None:
     ## Containers
     stats: List[Dict[str, Union[float, int]]] = []
     models_state_dicts: List[Dict[str, Union[Dict[str, Any], str]]] = []
@@ -250,7 +256,7 @@ def acceptance_loop(
             ## Generate new data
             data_gen.manual_seed(initial_seed + gen_nr)
             # Let S:=sample_size
-            feats_new_applicants, def_flag_new_applicants = data_gen.sample(sample_size, determinstic_mixture_weights) # [S, F], [S]
+            feats_new_applicants, def_flag_new_applicants = data_gen.sample(sample_size) # [S, F], [S]
             with torch.no_grad():
                 new_applicants_pred_def_probs = classifier_accepts.predict_proba(feats_new_applicants)[..., 1] # [S]
                 new_applicants_accepted = new_applicants_pred_def_probs >= new_applicants_pred_def_probs.quantile(1-top_percent) # [S]
