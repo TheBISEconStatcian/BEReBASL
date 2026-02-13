@@ -85,9 +85,8 @@ class BASLPartialUnbiaser:
             "max_iterations"
         ]
         kwargs_for_init = {k : v for k, v in state_dict.items() if k in kwargs_directly_passable}
-
+        
         return cls(**kwargs_for_init)
-
 
     @staticmethod
     def check_filtering_quantiles(filtering_quantiles) -> None:
