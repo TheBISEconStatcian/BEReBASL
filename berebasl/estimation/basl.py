@@ -61,6 +61,34 @@ class BASLPartialUnbiaser:
 
         self.bayesian_metric.change_model(self.strong_learner)
 
+    def to_state_dict(self):
+        members_to_take_as_plain = [
+            "holdout_percent", 
+            "sampling_percent", 
+            "labels_bad_percent",
+            "labels_good_percent",
+            "max_iterations"
+        ]
+        state_dict = {k : v for k, v in self.__dict__ if k in members_to_take_as_plain}
+        state_dict["filtering_quantiles"] = self.filtering_quantiles.copy() #this is a dictionary of floats
+
+        state_dict["weak_learner_dict"] = self.weak_learner.to_state_dict()
+        state_dict["strong_learner_dict"] = self.strong_learner.to_state_dict()
+
+    @classmethod
+    def from_state_dict(cls, state_dict : dict):
+        kwargs_directly_passable = [
+            "holdout_percent", 
+            "sampling_percent", 
+            "labels_bad_percent",
+            "labels_good_percent",
+            "max_iterations"
+        ]
+        kwargs_for_init = {k : v for k, v in state_dict.items() if k in kwargs_directly_passable}
+
+        return cls(**kwargs_for_init)
+
+
     @staticmethod
     def check_filtering_quantiles(filtering_quantiles) -> None:
         if not 0.0 <= filtering_quantiles['lower'] <= 1.0:
