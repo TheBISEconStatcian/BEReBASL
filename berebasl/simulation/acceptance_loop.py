@@ -340,6 +340,8 @@ def acceptance_loop(
             )
 
             torch.save(checkpoint_to_save_to_disc, results_path)
+    
+    return credit_data, stats, classifiers_state_dicts
 
 
 if __name__ == "__main__":
@@ -423,7 +425,7 @@ if __name__ == "__main__":
     #persist_classifiers arg of acceptance loop should also be able to be passed through the
     #args parsing
 
-    acceptance_loop(
+    accepts_based_biased_data, stats, classifiers_state_dicts = acceptance_loop(
         data_generator=data_generator,
         credit_data=credit_data,
         holdout_data=holdout_data,
