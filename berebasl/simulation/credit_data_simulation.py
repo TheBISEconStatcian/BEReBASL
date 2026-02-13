@@ -266,7 +266,8 @@ class CreditDataGenerator:
             good_mixture : GaussianMixture,
             noise_var : float,
             bad_ratio : float,
-            seed : Optional[int] = None
+            seed : Optional[int] = None,
+            determinstic_weight_sampling: bool = False
     ):
         if not isinstance(bad_mixture, GaussianMixture) and not isinstance(good_mixture, GaussianMixture):
             raise ValueError("Mixtures need to be GaussianMixture classes")
@@ -282,6 +283,7 @@ class CreditDataGenerator:
             self.bad_mixture.manual_seed(seed)
 
         self.good_mixture.rng = self.bad_mixture.rng
+        self.determinstic_mixture_weights = bool(determinstic_weight_sampling)
 
     @property
     def device(self) -> torch.device:
@@ -335,8 +337,7 @@ class CreditDataGenerator:
     
     def sample(
             self, 
-            n : int, 
-            deterministic_weights_for_mixture_sampling : bool = False
+            n : int
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         n_bad = round(self.bad_ratio * n)
         n_good = round((1-self.bad_ratio) * n)
@@ -350,10 +351,10 @@ class CreditDataGenerator:
         dtype = self.dtype
         device = self.device
 
-        X_bad = self.bad_mixture.sample(n_bad, deterministic_weights = deterministic_weights_for_mixture_sampling) # [n, k]
+        X_bad = self.bad_mixture.sample(n_bad, deterministic_weights = self.determinstic_mixture_weights) # [n, k]
         y_bad = torch.full((n_bad,), self.bad_good_encoding["bad"], device=device, dtype=dtype) # [n]
 
-        X_good = self.good_mixture.sample(n_good, deterministic_weights = deterministic_weights_for_mixture_sampling) # [n, k]
+        X_good = self.good_mixture.sample(n_good, deterministic_weights = self.determinstic_mixture_weights) # [n, k]
         y_good = torch.full((n_good,), self.bad_good_encoding["good"], device=device, dtype=dtype) # [n]
 
         X = torch.cat([X_bad, X_good], dim=0)
