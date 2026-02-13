@@ -164,7 +164,8 @@ def acceptance_loop(
         top_percent: float = 200,
         report_every: int = 10,
         save_model_every: int = 10,
-        determinstic_mixture_weights: bool = True
+        determinstic_mixture_weights: bool = True,
+        persist_classifiers: bool = True
 ) -> None:
     # Initial population
     data_gen.manual_seed(initial_seed)
