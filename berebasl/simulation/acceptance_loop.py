@@ -185,20 +185,29 @@ def generate_initial_and_holdout_population(
 
 def acceptance_loop(
         sim_dir_path: str,
-        data_gen: CreditDataGenerator,
+        data_generator: CreditDataGenerator,
         credit_data: CreditData,
         holdout_data: CreditData,
         classifier_accepts: Classifier,
         classifier_oracle: Classifier,
         basl_unbiaser: BASLPartialUnbiaser,
-        initial_seed: int = 1807,
+        base_seed: int = 1807,
         sample_size: int = 100,
         num_gens: int = 300,
         top_percent: float = 200,
         report_every: int = 10,
         save_model_every: int = 10,
-        persist_classifiers: bool = True
+        persist_classifiers: bool = True,
+        current_gen : int = 0,
+        stats: List[Dict[str, Union[float, int]]] = [],
+        models_state_dicts: List[Dict[str, Union[Dict[str, Any], str]]] = []
 ) -> None:
+    if current_gen < 0 or current_gen > num_gens:
+        raise ValueError("current_gen must be in [0, num_gens]")
+    
+    if not Classifier.obj_has_needed_funs(classifier_accepts):
+        raise AssertionError("classifier_accepts is not a valid Classifier. Check Classifier.obj_has_needed_funs for details")
+    
     if persist_classifiers:
         def _get_state_method(classifier, classifier_name):
             possible_state_dict_names = ["to_state_dict", "state_dict"]
@@ -214,9 +223,39 @@ def acceptance_loop(
         state_of_classifier_accepts = _get_state_method(classifier_accepts, "classifier_accepts")
         state_of_classifier_oracle = _get_state_method(classifier_oracle, "classifier_oracle")
 
-    ## Containers
-    stats: List[Dict[str, Union[float, int]]] = []
-    models_state_dicts: List[Dict[str, Union[Dict[str, Any], str]]] = []
+        init_objs_path = os.path.join(sim_dir_path, "initial_simulation_objects.pt")
+        init_objs_path_exists = os.path.exists(init_objs_path)
+
+        if init_objs_path_exists and current_gen==0:
+            raise AssertionError(f"current_gen = 0 but {os.path.basename(init_objs_path)} already exists in {sim_dir_path}")
+        
+        if not init_objs_path_exists:
+            torch.save(
+                {
+                    "data_generator" : data_generator,
+                    "initial_sample" : credit_data,
+                    "holdout_data" : holdout_data,
+                    "classifier_accepts" : classifier_accepts,
+                    "classifier_oracle": classifier_oracle,
+                    "basl_unbiaser" : basl_unbiaser,
+                    "configs" : {
+                        "base_seed" : base_seed,
+                        "sample_size" : sample_size,
+                        "num_gens" : num_gens,
+                        "top_percent" : top_percent,
+                        "report_every" : report_every,
+                        "save_model_every" : save_model_every,
+                        "current_gen" : current_gen
+                    },
+                    "simulation_state_control_objs" : {
+                        "current_gen" : current_gen,
+                        "stats" : stats,
+                        "models_state_dicts" : models_state_dicts
+                    }
+                },
+                f=os.path.join(sim_dir_path, "initial_simulation_objects.pt")
+            )
+
 
     for gen_nr in range(1, num_gens + 1):
         if gen_nr % report_every == 0:
@@ -228,7 +267,7 @@ def acceptance_loop(
  
         ## Get leakage-free data
         current_sample: CreditDataSample = credit_data.to_sample_dataset() # Ensure leakage-free data
-        current_sample.manual_seed(initial_seed + gen_nr + 1) # internal rng handles seeds for splitting
+        current_sample.manual_seed(base_seed + gen_nr + 1) # internal rng handles seeds for splitting
 
         ## Accepts based scorecard
         ### Reset params to ensure no effect of last calculation
@@ -269,9 +308,9 @@ def acceptance_loop(
 
         if gen_nr < num_gens:
             ## Generate new data
-            data_gen.manual_seed(initial_seed + gen_nr)
+            data_generator.manual_seed(base_seed + gen_nr)
             # Let S:=sample_size
-            feats_new_applicants, def_flag_new_applicants = data_gen.sample(sample_size) # [S, F], [S]
+            feats_new_applicants, def_flag_new_applicants = data_generator.sample(sample_size) # [S, F], [S]
             with torch.no_grad():
                 new_applicants_pred_def_probs = classifier_accepts.predict_proba(feats_new_applicants)[..., 1] # [S]
                 new_applicants_accepted = new_applicants_pred_def_probs >= new_applicants_pred_def_probs.quantile(1-top_percent) # [S]
@@ -281,7 +320,7 @@ def acceptance_loop(
             if currently_accepted > max_accepts_allowed:
                 count_to_flip = currently_accepted - max_accepts_allowed
                 idx_accepted = torch.where(new_applicants_accepted)[0] # [currently_accepted,] 
-                perm = torch.randperm(currently_accepted, generator=data_gen.rng, device=data_gen.device) 
+                perm = torch.randperm(currently_accepted, generator=data_generator.rng, device=data_generator.device) 
                 idx_to_flip = idx_accepted[perm[:count_to_flip]]
                 new_applicants_accepted[idx_to_flip] = False
                 
