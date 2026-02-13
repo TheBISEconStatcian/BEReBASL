@@ -2,6 +2,7 @@ import argparse
 from datetime import datetime
 from copy import deepcopy
 import os
+import time
 from warnings import warn
 
 from typing import Any, Dict, List, Tuple, Union
@@ -122,6 +123,12 @@ def build_parser_for_loop():
         help="Disable saving classifier state dicts during the simulation."
     )
 
+    parser.add_argument(
+        "--resume",
+        action="store_true", 
+        help="Interpret the output path as an already-started simulation and resume it."
+    )
+
     return parser
 
 def process_args_of_loop_parser(args):
@@ -169,6 +176,7 @@ def process_args_of_loop_parser(args):
         "save_to_disc_every": args.save_to_disc_every,
         "deterministic_weights": not args.nondeterministic_weights,
         "persist_classifiers": not args.no_persist_classifiers,
+        "resume": args.resume
     }
 
 
@@ -302,7 +310,8 @@ def acceptance_loop(
                         "top_percent" : top_percent,
                         "report_every" : report_every,
                         "save_to_disc_every" : save_to_disc_every,
-                        "current_gen" : current_gen
+                        "current_gen" : current_gen,
+                        "persist_classifiers" : persist_classifiers
                     },
                     "simulation_state_control_objs" : {
                         "current_gen" : current_gen,
@@ -400,9 +409,6 @@ def acceptance_loop(
     
     return credit_data, stats, classifiers_state_dicts
 
-import os
-import torch
-from warnings import warn
 
 def resume_simulation_from_dir(sim_dir_path: str, new_gen_count: int = None):
     """
@@ -440,9 +446,6 @@ def resume_simulation_from_dir(sim_dir_path: str, new_gen_count: int = None):
     print("[INFO] Loading latest simulation results...")
     results = torch.load(results_path, map_location="cpu")
 
-    # Infer device exactly like in __main__
-    dtype = torch.float64
-    torch.set_default_dtype(dtype)
     device = torch.device(
         "cuda" if torch.cuda.is_available() else
         "mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available() else
@@ -451,15 +454,7 @@ def resume_simulation_from_dir(sim_dir_path: str, new_gen_count: int = None):
     print(f"[INFO] Using device: {device}")
 
     # Extract objects
-    data_generator = init_objs["data_generator"]
-    credit_data = init_objs["initial_sample"]
-    holdout_data = init_objs["holdout_data"]
-    classifier_accepts = init_objs["classifier_accepts"]
-    classifier_oracle = init_objs["classifier_oracle"]
-    basl_unbiaser = init_objs["basl_unbiaser"]
-
     configs = init_objs["configs"]
-    sim_state = init_objs["simulation_state_control_objs"]
 
     # Optionally update num_gens
     if new_gen_count is not None:
@@ -472,17 +467,21 @@ def resume_simulation_from_dir(sim_dir_path: str, new_gen_count: int = None):
 
     # Move everything to the correct device
     print("[INFO] Moving simulation objects to device...")
-    data_generator = data_generator.to(device)
-    credit_data = credit_data.to(device)
-    holdout_data = holdout_data.to(device)
-    basl_unbiaser = basl_unbiaser.to(device)
+    objs_to_move = ["credit_data", "data_generator", "holdout_data",
+                   "basl_unbiaser", "classifier_accepts", "classifier_oracle"]
+    simulation_objs =  {
+        k : v for k, v in init_objs.items() 
+        if k in objs_to_move[1:]
+    }
+    simulation_objs["credit_data"] = results["credit_data"]
+    for obj_name in objs_to_move:
+        if hasattr(simulation_objs[obj_name], "to"):
+            simulation_objs[obj_name] = simulation_objs[obj_name].to(device)
 
     # Determine where to resume
-    if "gen_round_nr" in results:
-        # Case when persist_classifiers=False
+    if not configs["persist_classifiers"]:
         current_gen = results["gen_round_nr"]
     else:
-        # Case when persist_classifiers=True
         # The last entry in classifiers_state_dicts corresponds to last saved gen
         last_entry = results["classifiers_state_dicts"][-1]
         current_gen = last_entry["gen_round_nr"]
@@ -490,29 +489,19 @@ def resume_simulation_from_dir(sim_dir_path: str, new_gen_count: int = None):
     print(f"[INFO] Resuming simulation from generation {current_gen}/{configs['num_gens']}")
 
     # Extract stats and classifier state dicts (even if unused)
-    stats = results["stats"]
-    classifiers_state_dicts = results.get("classifiers_state_dicts", [])
+    configs["stats"] = results["stats"]
+    configs["classifiers_state_dicts"] = results.get("classifiers_state_dicts", [])
+
+    configs = {k : v for k, v in configs.items() if k not in ["init_sample", "holdout_sample"]}
 
     # Launch acceptance loop from the correct point
     print("[INFO] Restarting acceptance loop...")
+
     return acceptance_loop(
         sim_dir_path=sim_dir_path,
-        data_generator=data_generator,
-        credit_data=credit_data,
-        holdout_data=holdout_data,
-        classifier_accepts=classifier_accepts,
-        classifier_oracle=classifier_oracle,
-        basl_unbiaser=basl_unbiaser,
-        base_seed=configs["base_seed"],
-        sample_size=configs["sample_size"],
-        num_gens=configs["num_gens"],
-        top_percent=configs["top_percent"],
-        report_every=configs["report_every"],
-        save_to_disc_every=configs["save_to_disc_every"],
-        persist_classifiers=init_objs["simulation_state_control_objs"]["models_state_dicts"] != [],
         current_gen=current_gen,
-        stats=stats,
-        classifiers_state_dicts=classifiers_state_dicts
+        **simulation_objs,
+        **configs
     )
 
 
@@ -521,7 +510,13 @@ if __name__ == "__main__":
     argparser = build_parser_for_loop()
     params = process_args_of_loop_parser(argparser.parse_args())
 
-    print("Building 'default' classes for loop")
+    if params["resume"]:
+        print("Resuming simulation...")
+        resume_simulation_from_dir(
+            sim_dir_path=params["sim_dir_path"],
+            new_gen_count=params["num_gens"]
+        )
+        exit(0)
 
     print("Begin of simulation. Results to be saved in")
     print(params["sim_dir_path"])
