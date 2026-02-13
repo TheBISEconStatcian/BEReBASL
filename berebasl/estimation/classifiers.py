@@ -1,3 +1,4 @@
+from copy import deepcopy
 import inspect
 from math import sqrt
 
@@ -51,10 +52,10 @@ class Classifier:
     def reset_parameters_to_initial(self):
         self.reset_parameters_to_initial_state(self.model)
 
-    def load_saved_params(self, state_dict : dict):
-        self.state_dict_loader(state_dict)
+    def load_from_state_dict(self, state_dict : dict, *args, **kwargs):
+        self.state_dict_loader(state_dict, *args, **kwargs)
 
-    def copied_state_dict(self):
+    def to_state_dict(self):
         return self.copy_current_state_dict(self.model)
 
     @staticmethod
@@ -62,15 +63,17 @@ class Classifier:
         expected_funs_with_param_count = [
             ("fit", 2),
             ("predict_proba", 1),
-            ("reset_parameters_to_initial", 0),
-            ("load_saved_params", 1),
-            ("copied_state_dict", 0)
+            ("reset_parameters_to_initial", 0)
         ]
         for fun_name, param_count in expected_funs_with_param_count:
             if not hasattr(obj, fun_name):
                 return False
             
             if not function_has_expected_signature(getattr(obj, fun_name), param_count):
+                return False
+            
+        for fun_name in ["load_from_state_dict", "to_state_dict"]:
+            if not hasattr(obj, fun_name):
                 return False
             
         return True
@@ -463,7 +466,7 @@ class TorchLogistic(nn.Module):
 
         return self
     
-    def copied_state_dict(self) -> Dict[str, ndarray]:
+    def to_state_dict(self) -> Dict[str, ndarray]:
         r"""
         Return a lightweight, device-agnostic snapshot of the model parameters.
 
@@ -488,10 +491,11 @@ class TorchLogistic(nn.Module):
 
         return {
             "weight" : self.lin_estimator.weight.detach().cpu().numpy(),
-            "bias" : self.lin_estimator.bias.detach().cpu().numpy()
+            "bias" : self.lin_estimator.bias.detach().cpu().numpy(),
+            "lbfgs_kwargs" : self.lbfgs_kwargs.copy()
         }
     
-    def load_saved_params(self, state_dict : Dict[str, Union[ndarray, torch.Tensor]]):
+    def load_from_state_dict(self, state_dict : Dict[str, Union[ndarray, torch.Tensor]]):
         r"""
         Load model parameters from a lightweight state dictionary.
 
@@ -520,9 +524,7 @@ class TorchLogistic(nn.Module):
         - Parameter shapes are expected to match exactly; no broadcasting or reshaping
         is performed.
         """
-        bias_to_load = state_dict.get("bias", None)
-        weight_to_load = state_dict.get("weight", None)
-        if bias_to_load is None or weight_to_load is None:
+        if not ("bias" in state_dict and "weight" in state_dict):
             raise ValueError("state_dict does not contain bias and weight")
         if len(state_dict)>2:
             raise ValueError("state_dict contains more than only 'bias' and 'weight' als keys")
@@ -540,4 +542,35 @@ class TorchLogistic(nn.Module):
                     raise ValueError(f"Shape mismatch for {param_name}: expected {param.shape}, got {saved_param_data.shape}")
 
                 param.copy_(saved_param_data.to(param.dtype).to(param.device))
+
+        if "lbfgs_kwargs" in state_dict:
+            self.lbfgs_kwargs = deepcopy(state_dict["lbfgs_kwargs"])
     
+    @classmethod
+    def instantiate_from_state_dict(cls, state_dict : dict, device: torch.device = None):
+        expected_keys = ["weight", "bias", "lbfgs_kwargs"]
+        if set(state_dict.keys()) != set(expected_keys):
+            keys_str_expected = ", ".join([f"'{k}'" for k in expected_keys])
+            keys_str_found = ", ".join([f"'{k}'" for k in state_dict.keys()])
+            raise KeyError(
+                "state_dict has to contain exactly the keys " + keys_str_expected + ". Contains: " + keys_str_found
+            )
+        
+        if not isinstance(state_dict["weight"], (ndarray, torch.Tensor)):
+            raise TypeError("state_dict['weight'] has to contain an np.ndarray or a torch.Tensor")
+        
+        
+        weight_data = state_dict["weight"]
+
+        if weight_data.ndim != 2:
+            raise AssertionError("state_dict['weight'] should be a 2d np.ndarray or torch.Tensor")
+        n_classes, n_features = weight_data.shape
+        n_classes = max(n_classes, 2)
+
+        dtype = weight_data.dtype
+        if isinstance(weight_data, ndarray):
+            dtype=getattr(torch, str(dtype))
+        
+        instance = cls(n_features, n_classes, state_dict.pop("lbfgs_kwargs"), device=device, dtype=dtype, secure_init=True)
+
+        instance.load_from_state_dict(state_dict)
