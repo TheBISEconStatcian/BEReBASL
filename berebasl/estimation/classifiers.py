@@ -72,10 +72,6 @@ class Classifier:
             if not function_has_expected_signature(getattr(obj, fun_name), param_count):
                 return False
             
-        for fun_name in ["load_from_state_dict", "to_state_dict"]:
-            if not hasattr(obj, fun_name):
-                return False
-            
         return True
 
 class TorchLogistic(nn.Module):
