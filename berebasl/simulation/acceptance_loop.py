@@ -199,6 +199,21 @@ def acceptance_loop(
         save_model_every: int = 10,
         persist_classifiers: bool = True
 ) -> None:
+    if persist_classifiers:
+        def _get_state_method(classifier, classifier_name):
+            possible_state_dict_names = ["to_state_dict", "state_dict"]
+            for fun_name in possible_state_dict_names:
+                get_state_method = getattr(classifier, fun_name, None)
+                if get_state_method is not None and callable(get_state_method):
+                    return get_state_method
+                
+            warn(f"No state_dict method found for {classifier_name}, every check point will contain the whole object")
+            
+            return lambda : classifier
+        
+        state_of_classifier_accepts = _get_state_method(classifier_accepts, "classifier_accepts")
+        state_of_classifier_oracle = _get_state_method(classifier_oracle, "classifier_oracle")
+
     ## Containers
     stats: List[Dict[str, Union[float, int]]] = []
     models_state_dicts: List[Dict[str, Union[Dict[str, Any], str]]] = []
