@@ -58,7 +58,7 @@ def build_parser_for_loop():
     )
 
     parser.add_argument(
-        "--save-model-every",
+        "--save-to-disc-every",
         type=int,
         default=10,
         help="Save model snapshots every N generations."
@@ -112,7 +112,7 @@ def process_args_of_loop_parser(args):
         "num_gens": args.num_gens, 
         "top_percent": args.top_percent, 
         "report_every": args.report_every, 
-        "save_model_every": args.save_model_every, 
+        "save_to_disc_every": args.save_to_disc_every, 
     }
 
 def accept_based_on_top_percentent_of_arbitrary_var(
@@ -196,7 +196,7 @@ def acceptance_loop(
         num_gens: int = 300,
         top_percent: float = 200,
         report_every: int = 10,
-        save_model_every: int = 10,
+        save_to_disc_every: int = 10,
         persist_classifiers: bool = True,
         current_gen : int = 0,
         stats: List[Dict[str, Union[float, int]]] = [],
@@ -244,7 +244,7 @@ def acceptance_loop(
                         "num_gens" : num_gens,
                         "top_percent" : top_percent,
                         "report_every" : report_every,
-                        "save_model_every" : save_model_every,
+                        "save_to_disc_every" : save_to_disc_every,
                         "current_gen" : current_gen
                     },
                     "simulation_state_control_objs" : {
@@ -298,7 +298,7 @@ def acceptance_loop(
 
         stats.append(current_stats)
 
-        if gen_nr == 1 or gen_nr % save_model_every == 0 or gen_nr == num_gens:
+        if gen_nr == 1 or gen_nr % save_to_disc_every == 0 or gen_nr == num_gens:
             models_state_dicts.append({
                 "gen_round" : gen_nr,
                 "accepts_model" : classifier_accepts.to_state_dict(),
