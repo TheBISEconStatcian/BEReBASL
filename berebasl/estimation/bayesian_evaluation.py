@@ -83,8 +83,8 @@ class BayesianMetric:
         joint_preds = torch.cat([preds_accept, preds_reject], dim=-1)
 
         
-        metric_mean_up_to_last_it = torch.full(size = data.labels.shape[:-1], fill_value=0.0)
-        mask_nonconverged = torch.full(size = data.labels.shape[:-1], fill_value=True)
+        metric_mean_up_to_last_it = joint_preds.new_full(size=data.labels.shape[:-1], fill_value=0)
+        mask_nonconverged = data.labels.new_ones(size=data.labels.shape[:-1], dtype=bool)
 
         should_stop = False
 
