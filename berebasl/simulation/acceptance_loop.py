@@ -343,6 +343,94 @@ def acceptance_loop(
 
 
 if __name__ == "__main__":
-    pass
+    argparser = build_parser_for_loop()
+    params = process_args_of_loop_parser(argparser.parse_args())
+
+    print("Building 'default' classes for loop")
+
+    print("Begin of simulation. Results to be saved in")
+    print(params["sim_dir_path"])
+
+    dtype = torch.float64
+    torch.set_default_dtype(dtype)
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() else 
+        "mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available() else 
+        "cpu"
+    )
+
+    print("Simulation to be run on device", device)
+
+    print("Defining data generating process\n")
+
+    data_generator = CreditDataGenerator.init_with_internal_logic(
+        count_covariates=2,
+        mean_bad_diff=torch.tensor([1.0,2.0], dtype=dtype, device=device),
+        covars = {
+            "bad" : torch.tensor([[1.0, 0.2], [0.2,1.0]], dtype=dtype, device=device),
+            "good" : torch.tensor([[1.0,-0.2], [-0.2,1.0]], dtype=dtype, device=device)
+        },
+        iid = False,
+        mixture_weights=None,
+        bad_ratio = 0.5,
+        noise_var=0.0,
+        device = device,
+        dtype=dtype,
+        seed_credit_data_gen=params["initial_seed"],
+        deterministic_weights_for_mixture_sampling = True #This should come from parsed args in a clean way
+    )
+
+    print("Generating initial and holdout population")
+    data_generator, credit_data, holdout_data = generate_initial_and_holdout_population(
+        data_generator,
+        params["initial_seed"],
+        params.pop("init_sample"),
+        params.pop("holdout_sample"),
+        params["top_percent"]
+    )
+
+    print("Defining classifiers")
+    # BASL related classes
+    strong_learner = TorchLogistic(n_features=data_generator.features_count, seed_for_weight_init=1807)
+    basl_unbiaser = BASLPartialUnbiaser(
+        filtering_quantiles={"lower" : 0.01, "upper" : 0.99},
+        weak_learner=TorchLogistic(n_features=data_generator.features_count, seed_for_weight_init=187),
+        strong_learner=strong_learner,
+        holdout_percent=0.1,
+        sampling_percent=0.8,
+        label_bads_percent=0.1,
+        label_goods_percent=0.1/2,
+        max_iterations=5,
+        isolation_forest=IsolationForest(n_estimators=100, max_samples="auto", random_state=1807),
+        bayesian_metric = BayesianMetric(
+            model=strong_learner,
+            min_iterations=1e2,
+            max_iterations=1e5,
+            epsilon=1e-5,
+            metric = batched_auroc,
+            device=credit_data.device
+        )
+    )
+
+    classifier_accepts = TorchLogistic(n_features=data_generator.features_count, seed_for_weight_init=781)
+    classifier_oracle = TorchLogistic(n_features=data_generator.features_count, seed_for_weight_init=10807)
+
+
+
+    print("\n\n************Starting acceptance loop********************\n\n")
+    params["base_seed"] = params.pop("initial_seed")
+
+    #persist_classifiers arg of acceptance loop should also be able to be passed through the
+    #args parsing
+
+    acceptance_loop(
+        data_generator=data_generator,
+        credit_data=credit_data,
+        holdout_data=holdout_data,
+        classifier_accepts=classifier_accepts,
+        classifier_oracle=classifier_oracle,
+        basl_unbiaser=basl_unbiaser,
+        **params
+    )
 
 
