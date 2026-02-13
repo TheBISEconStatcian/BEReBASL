@@ -446,6 +446,7 @@ class CreditDataGenerator:
         mix_mean_dif_good  : Union[torch.Tensor, float]   = None,
         mix_var_dif_bad  : Union[torch.Tensor, float]   = None,
         mix_var_dif_good  : Union[torch.Tensor, float]   = None,
+        deterministic_weights_for_mixture_sampling: bool = True,
         noise_var : float = 0.1,
         bad_ratio : float = 0.5,
         device : Optional[torch.device] = None, 
@@ -580,7 +581,8 @@ class CreditDataGenerator:
             good_mixture = mixture_good,
             seed = seed_credit_data_gen,
             noise_var=noise_var,
-            bad_ratio=bad_ratio
+            bad_ratio=bad_ratio,
+            deterministic_weight_sampling=deterministic_weights_for_mixture_sampling
         )
     
 def _mask2d_to_int_idxs(mask : torch.Tensor, correction_last_idx : Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
