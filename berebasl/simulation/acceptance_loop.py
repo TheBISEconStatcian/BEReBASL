@@ -73,8 +73,7 @@ def process_args_of_loop_parser(args):
     if args.output_path and args.output_path_opt:
         warn(
             "Both a positional path and --output-path were provided. "
-            "Using the value from --output-path.",
-            UserWarning
+            "Using the value from --output-path."
         )
 
     # Prefer the optional argument if provided
@@ -201,7 +200,7 @@ def acceptance_loop(
         persist_classifiers: bool = True,
         current_gen : int = 0,
         stats: List[Dict[str, Union[float, int]]] = [],
-        models_state_dicts: List[Dict[str, Union[Dict[str, Any], str]]] = []
+        classifiers_state_dicts: List[Dict[str, Union[Dict[str, Any], str]]] = []
 ) -> None:
     if current_gen < 0 or current_gen > num_gens:
         raise ValueError("current_gen must be in [0, num_gens]")
@@ -251,16 +250,18 @@ def acceptance_loop(
                     "simulation_state_control_objs" : {
                         "current_gen" : current_gen,
                         "stats" : stats,
-                        "models_state_dicts" : models_state_dicts
+                        "models_state_dicts" : classifiers_state_dicts
                     }
                 },
-                f=os.path.join(sim_dir_path, "initial_simulation_objects.pt")
+                f=init_objs_path
             )
 
 
-    for gen_nr in range(1, num_gens + 1):
-        if gen_nr % report_every == 0:
-            print("-- Iteration", f"{gen_nr}/{num_gens}:", credit_data.accepted_count, 
+    results_path = os.path.join(sim_dir_path, "simulation_results.pt")
+
+    for gen_round_nr in range(1, num_gens + 1):
+        if gen_round_nr % report_every == 0:
+            print("-- Iteration", f"{gen_round_nr}/{num_gens}:", credit_data.accepted_count, 
                 "accepts and", credit_data.rejected_count, " rejects")
             
         ## Gather current statistics
@@ -268,7 +269,7 @@ def acceptance_loop(
  
         ## Get leakage-free data
         current_sample: CreditDataSample = credit_data.to_sample_dataset() # Ensure leakage-free data
-        current_sample.manual_seed(base_seed + gen_nr + 1) # internal rng handles seeds for splitting
+        current_sample.manual_seed(base_seed + gen_round_nr + 1) # internal rng handles seeds for splitting
 
         ## Accepts based scorecard
         ### Reset params to ensure no effect of last calculation
@@ -299,19 +300,9 @@ def acceptance_loop(
 
         stats.append(current_stats)
 
-        if gen_nr == 1 or gen_nr % save_to_disc_every == 0 or gen_nr == num_gens:
-            models_state_dicts.append({
-                "gen_round" : gen_nr,
-                "accepts_model" : classifier_accepts.to_state_dict(),
-                "oracle_model" : classifier_oracle.to_state_dict(),
-                "basl_strong_model" : basl_unbiaser.strong_learner.to_state_dict()
-            })
-
-
-
-        if gen_nr < num_gens:
+        if gen_round_nr < num_gens:
             ## Generate new data
-            data_generator.manual_seed(base_seed + gen_nr)
+            data_generator.manual_seed(base_seed + gen_round_nr)
             # Let S:=sample_size
             feats_new_applicants, def_flag_new_applicants = data_generator.sample(sample_size) # [S, F], [S]
             with torch.no_grad():
@@ -329,5 +320,29 @@ def acceptance_loop(
                 
             credit_data.add_gen(feats_new_applicants, def_flag_new_applicants, new_applicants_accepted)
 
+        if gen_round_nr == 1 or gen_round_nr % save_to_disc_every == 0 or gen_round_nr == num_gens:
+            classifiers_state_dicts.append({
+                "gen_round_nr" : gen_round_nr,
+                "classifiers" : {
+                    "accepts_classifier" : state_of_classifier_accepts(),
+                    "oracle_classifier" : state_of_classifier_oracle(),
+                    "basl_strong_classifier" : basl_unbiaser.strong_learner.to_state_dict()
+                }
+            })
+
+            checkpoint_to_save_to_disc = {
+                "credit_data" : credit_data,
+                "stats" : stats
+            } | (
+                {"classifiers_state_dicts" : classifiers_state_dicts} 
+                if persist_classifiers else 
+                {"gen_round_nr" : gen_round_nr}
+            )
+
+            torch.save(checkpoint_to_save_to_disc, results_path)
+
+
 if __name__ == "__main__":
-    print(__file__)
+    pass
+
+
