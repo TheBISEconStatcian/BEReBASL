@@ -16,7 +16,7 @@ from berebasl.estimation.classifiers import Classifier, TorchLogistic
 
 def build_parser_for_loop():
     parser = argparse.ArgumentParser(
-        description="Run a simulation and store results."
+        description="Run an acceptance-feedback simulation (Kozdoi et al. 2025) and store results."
     )
 
     # Optional positional argument
@@ -24,7 +24,8 @@ def build_parser_for_loop():
         "output_path",
         nargs="?",
         type=str,
-        help="Directory where simulation results will be saved."
+        help="Directory where simulation results will be saved. "
+             "If omitted, a timestamped directory is created automatically."
     )
 
     # Optional named argument
@@ -32,7 +33,8 @@ def build_parser_for_loop():
         "--output-path",
         dest="output_path_opt",
         type=str,
-        help="Directory where simulation results will be saved (alternative to positional argument)."
+        help="Directory where simulation results will be saved "
+             "(alternative to the positional argument)."
     )
 
     parser.add_argument(
@@ -42,21 +44,76 @@ def build_parser_for_loop():
     )
 
     # Simulation parameters with defaults
-    parser.add_argument("--initial-seed", type=int, default=1807)
-    parser.add_argument("--init-sample", type=int, default=200)
-    parser.add_argument("--sample-size", type=int, default=100)
-    parser.add_argument("--holdout-sample", type=int, default=3000)
-    parser.add_argument("--num-gens", type=int, default=300)
-    parser.add_argument("--top-percent", type=float, default=0.2)
+    parser.add_argument(
+        "--initial-seed",
+        type=int,
+        default=1807,
+        help="Seed used for generating the initial applicant population. "
+             "It is also used as base_seed in the acceptance loop to set rngs "
+             "to 'deterministically defined seeds' in each loop"
+    )
+
+    parser.add_argument(
+        "--init-sample",
+        type=int,
+        default=200,
+        help="Number of applicants in the initial sample."
+    )
+
+    parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=100,
+        help="Number of new applicants generated in each generation."
+    )
+
+    parser.add_argument(
+        "--holdout-sample",
+        type=int,
+        default=3000,
+        help="Size of the unbiased holdout population used for evaluation."
+    )
+
+    parser.add_argument(
+        "--num-gens",
+        type=int,
+        default=300,
+        help="Number of acceptance-feedback generations to simulate. "
+             "(Does **not** include the initial sample)"
+    )
+
+    parser.add_argument(
+        "--top-percent",
+        type=float,
+        default=0.2,
+        help="Fraction of applicants to accept in each generation "
+             "(e.g., 0.2 means top 20% by predicted risk)."
+    )
 
     # Reporting and saving intervals
-    parser.add_argument("--report-every", type=int, default=10)
-    parser.add_argument("--save-to-disc-every", type=int, default=10)
+    parser.add_argument(
+        "--report-every",
+        type=int,
+        default=10,
+        help="Print a progress report every N generations."
+    )
 
+    parser.add_argument(
+        "--save-to-disc-every",
+        type=int,
+        default=10,
+        help="Save simulation checkpoints every N generations."
+    )
+
+    # NEW FLAGS
     parser.add_argument(
         "--nondeterministic-weights",
         action="store_true",
-        help="Use non-deterministic weight initialization and sampling behavior."
+        help=(
+            "Use non-deterministic mixture weights in the data generating process. "
+            "If omitted, mixture component proportions are deterministic "
+            "(each component contributes a fixed share of observations)."
+        )
     )
 
     parser.add_argument(
