@@ -263,12 +263,12 @@ def acceptance_loop(
         report_every: int = 10,
         save_to_disc_every: int = 10,
         persist_classifiers: bool = True,
-        current_gen : int = 0,
+        current_gen : int = 1,
         stats: List[Dict[str, Union[float, int]]] = [],
         classifiers_state_dicts: List[Dict[str, Union[Dict[str, Any], str]]] = []
 ) -> None:
-    if current_gen < 0 or current_gen > num_gens:
-        raise ValueError("current_gen must be in [0, num_gens]")
+    if current_gen < 1 or current_gen > num_gens:
+        raise ValueError("current_gen must be in [1, num_gens]")
     
     if not Classifier.obj_has_needed_funs(classifier_accepts):
         raise AssertionError("classifier_accepts is not a valid Classifier. Check Classifier.obj_has_needed_funs for details")
@@ -291,8 +291,8 @@ def acceptance_loop(
     init_objs_path = os.path.join(sim_dir_path, "initial_simulation_objects.pt")
     init_objs_path_exists = os.path.exists(init_objs_path)
 
-    if init_objs_path_exists and current_gen==0:
-        raise AssertionError(f"current_gen = 0 but {os.path.basename(init_objs_path)} already exists in {sim_dir_path}")
+    if init_objs_path_exists and current_gen==1:
+        raise AssertionError(f"current_gen = 1 but {os.path.basename(init_objs_path)} already exists in {sim_dir_path}")
     
     if not init_objs_path_exists:
         torch.save(
@@ -331,11 +331,11 @@ def acceptance_loop(
 
     for gen_round_nr in range(current_gen, num_gens + 1):
         if gen_round_nr % report_every == 0:
-            print("-- Iteration", f"{gen_round_nr}/{num_gens}:", credit_data.accepted_count, 
-                "accepts and", credit_data.rejected_count, " rejects")
+            print("-- Iteration", f"{gen_round_nr}/{num_gens}:", credit_data.count_accepts, 
+                "accepts and", credit_data.count_rejects, " rejects")
             
-            if gen_round_nr > current_gen+1:
-                times_needed_tensor = torch.rand(times_needed, dtype=torch.float32)
+            if gen_round_nr > current_gen+1: # needs at least two data points
+                times_needed_tensor = torch.tensor(times_needed, dtype=torch.float32)
                 T = times_needed_tensor.size(0)
                 X_time_to_go = torch.nn.functional.pad(torch.arange(T, dtype=torch.float32).unsqueeze(-1), pad=(1,0), value=1.0)
 
@@ -463,10 +463,10 @@ def resume_simulation_from_dir(sim_dir_path: str, new_gen_count: int = None):
         raise FileNotFoundError(f"Missing simulation_results.pt in {sim_dir_path}")
 
     print("[INFO] Loading initial simulation objects...")
-    init_objs = torch.load(init_path, map_location="cpu")
+    init_objs = torch.load(init_path, map_location="cpu", weights_only=False)
 
     print("[INFO] Loading latest simulation results...")
-    results = torch.load(results_path, map_location="cpu")
+    results = torch.load(results_path, map_location="cpu", weights_only=False)
 
     device = torch.device(
         "cuda" if torch.cuda.is_available() else
@@ -514,7 +514,7 @@ def resume_simulation_from_dir(sim_dir_path: str, new_gen_count: int = None):
     configs["stats"] = results["stats"]
     configs["classifiers_state_dicts"] = results.get("classifiers_state_dicts", [])
 
-    configs = {k : v for k, v in configs.items() if k not in ["init_sample", "holdout_sample"]}
+    configs = {k : v for k, v in configs.items() if k not in ["init_sample", "holdout_sample", "current_gen"]}
 
     # Launch acceptance loop from the correct point
     print("[INFO] Restarting acceptance loop...")
@@ -532,7 +532,7 @@ if __name__ == "__main__":
     argparser = build_parser_for_loop()
     params = process_args_of_loop_parser(argparser.parse_args())
 
-    if params["resume"]:
+    if params.pop("resume"):
         print("Resuming simulation...")
         resume_simulation_from_dir(
             sim_dir_path=params["sim_dir_path"],
