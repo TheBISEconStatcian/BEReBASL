@@ -34,6 +34,7 @@ For each used chat a link is provided to be called if wished. I always add a sma
 - [Generalize train test splitting to new batched logic](https://copilot.microsoft.com/shares/oipQ7Yv7ddGRUyULHtVZA)
 - [List available torch devices and docstring of `CreditDataSample.inspect_data`](https://copilot.microsoft.com/shares/JZD2AY81aEyaaSYnpstyq)
 - [Bettering my `CreditDataSample.filter_unlabeld` method](https://copilot.microsoft.com/shares/PCBB8Q7nqNwHwuw2rdEJy)
+- [Parser for the acceptance loop](https://copilot.microsoft.com/shares/2bCrkT5X8Ziii7JZE8PNr)
 
 ## Link to `perplexity` usage
 
