@@ -48,25 +48,24 @@ def build_parser_for_loop():
     parser.add_argument("--holdout-sample", type=int, default=3000)
     parser.add_argument("--num-gens", type=int, default=300)
     parser.add_argument("--top-percent", type=float, default=0.2)
-    
 
     # Reporting and saving intervals
+    parser.add_argument("--report-every", type=int, default=10)
+    parser.add_argument("--save-to-disc-every", type=int, default=10)
+
     parser.add_argument(
-        "--report-every",
-        type=int,
-        default=10,
-        help="Print a progress report every N generations."
+        "--nondeterministic-weights",
+        action="store_true",
+        help="Use non-deterministic weight initialization and sampling behavior."
     )
 
     parser.add_argument(
-        "--save-to-disc-every",
-        type=int,
-        default=10,
-        help="Save model snapshots every N generations."
+        "--no-persist-classifiers",
+        action="store_true",
+        help="Disable saving classifier state dicts during the simulation."
     )
 
     return parser
-
 
 def process_args_of_loop_parser(args):
     # Warn if both positional and optional paths are provided
@@ -88,32 +87,33 @@ def process_args_of_loop_parser(args):
         else:
             if args.create_path_if_missing:
                 os.makedirs(path, exist_ok=True)
-
-            raise FileNotFoundError(
-                f"Output path '{path}' does not exist. "
-                "Use --create-path-if-missing to create it."
-            )
+            else:
+                raise FileNotFoundError(
+                    f"Output path '{path}' does not exist. "
+                    "Use --create-path-if-missing to create it."
+                )
     else:
         # No path provided → generate timestamped directory
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = os.path.abspath(
             os.path.join(__file__, f"../../data/simulations/simulation_{timestamp}")
         )
-
         os.makedirs(path, exist_ok=True)
 
-     # Build the return dictionary 
-    return { 
-        "sim_dir_path": path, 
-        "initial_seed": args.initial_seed, 
-        "init_sample": args.init_sample, 
-        "sample_size": args.sample_size, 
-        "holdout_sample": args.holdout_sample, 
-        "num_gens": args.num_gens, 
-        "top_percent": args.top_percent, 
-        "report_every": args.report_every, 
-        "save_to_disc_every": args.save_to_disc_every, 
+    return {
+        "sim_dir_path": path,
+        "initial_seed": args.initial_seed,
+        "init_sample": args.init_sample,
+        "sample_size": args.sample_size,
+        "holdout_sample": args.holdout_sample,
+        "num_gens": args.num_gens,
+        "top_percent": args.top_percent,
+        "report_every": args.report_every,
+        "save_to_disc_every": args.save_to_disc_every,
+        "deterministic_weights": not args.nondeterministic_weights,
+        "persist_classifiers": not args.no_persist_classifiers,
     }
+
 
 def accept_based_on_top_percentent_of_arbitrary_var(
         features : torch.Tensor, 
@@ -379,7 +379,7 @@ if __name__ == "__main__":
         device = device,
         dtype=dtype,
         seed_credit_data_gen=params["initial_seed"],
-        deterministic_weights_for_mixture_sampling = True #This should come from parsed args in a clean way
+        deterministic_weights_for_mixture_sampling = params.pop("deterministic_weights")
     )
 
     print("Generating initial and holdout population")
@@ -421,9 +421,6 @@ if __name__ == "__main__":
 
     print("\n\n************Starting acceptance loop********************\n\n")
     params["base_seed"] = params.pop("initial_seed")
-
-    #persist_classifiers arg of acceptance loop should also be able to be passed through the
-    #args parsing
 
     accepts_based_biased_data, stats, classifiers_state_dicts = acceptance_loop(
         data_generator=data_generator,
