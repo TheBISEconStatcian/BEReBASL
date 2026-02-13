@@ -1,6 +1,7 @@
 import argparse
-import os
 from datetime import datetime
+from copy import deepcopy
+import os
 from warnings import warn
 
 from typing import Any, Dict, List, Tuple, Union
@@ -216,9 +217,9 @@ def acceptance_loop(
                 if get_state_method is not None and callable(get_state_method):
                     return get_state_method
                 
-            warn(f"No state_dict method found for {classifier_name}, every check point will contain the whole object")
+            warn(f"No state_dict method found for {classifier_name}, every check point will contain the whole object and require a deepcopy")
             
-            return lambda : classifier
+            return lambda : deepcopy(classifier)
         
         state_of_classifier_accepts = _get_state_method(classifier_accepts, "classifier_accepts")
         state_of_classifier_oracle = _get_state_method(classifier_oracle, "classifier_oracle")
@@ -305,6 +306,8 @@ def acceptance_loop(
                 "oracle_model" : classifier_oracle.to_state_dict(),
                 "basl_strong_model" : basl_unbiaser.strong_learner.to_state_dict()
             })
+
+
 
         if gen_nr < num_gens:
             ## Generate new data
