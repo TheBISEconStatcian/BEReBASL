@@ -1,7 +1,7 @@
 ##### Base libraries
 from copy import deepcopy
 from types import FunctionType
-from math import isnan
+from math import isnan, log, sqrt
 from warnings import warn
 
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
@@ -278,7 +278,7 @@ class CreditDataGenerator:
         
         self.bad_mixture = bad_mixture
         self.good_mixture = good_mixture
-        self.noise_std = torch.sqrt(torch.tensor(float(noise_var)))
+        self.noise_std = sqrt(float(noise_var))
         self.bad_ratio = float(bad_ratio)
         
         self.add_noise = self.noise_std > 0
@@ -298,7 +298,7 @@ class CreditDataGenerator:
     
     @property
     def dtype(self) -> torch.dtype:
-        return self.bad_mixture.mean.dtype
+        return self.bad_mixture.dtype
     
     @property
     def rng(self) -> torch.Generator:
@@ -355,20 +355,19 @@ class CreditDataGenerator:
         dtype = self.dtype
         device = self.device
 
-        X_bad = self.bad_mixture.sample(n_bad, deterministic_weights = self.determinstic_mixture_weights) # [n, k]
-        y_bad = torch.full((n_bad,), self.bad_good_encoding["bad"], device=device, dtype=dtype) # [n]
+        X_bad = self.bad_mixture.sample(n_bad, deterministic_weights = self.determinstic_mixture_weights) # [n_bad, k] or [b, n_bad, k]
+        y_bad = torch.full(X_bad.shape[:-1], self.bad_good_encoding["bad"], device=device, dtype=dtype) # [n_good] or [b, n_good, k]
 
-        X_good = self.good_mixture.sample(n_good, deterministic_weights = self.determinstic_mixture_weights) # [n, k]
-        y_good = torch.full((n_good,), self.bad_good_encoding["good"], device=device, dtype=dtype) # [n]
+        X_good = self.good_mixture.sample(n_good, deterministic_weights = self.determinstic_mixture_weights) # [n_good, k] or [b, n_good, k]
+        y_good = torch.full((n_good,), self.bad_good_encoding["good"], device=device, dtype=dtype) # [n_good] or [b, n_good]
 
-        X = torch.cat([X_bad, X_good], dim=0)
-        y = torch.cat([y_bad, y_good])
+        X = torch.cat([X_bad, X_good], dim=-2) # [n, k] or [b, n, k]
+        y = torch.cat([y_bad, y_good], dim=-1) # [n] or [b, n]
 
         if self.add_noise:
             X = X + torch.randn(X.shape, generator=self.rng, device=device, dtype=dtype) * self.noise_std
 
         return X, y
-
     
     @staticmethod
     def generate_sigma_bad_and_good(
