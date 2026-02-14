@@ -143,6 +143,7 @@ def process_args_of_loop_parser(args):
     path = args.output_path_opt or args.output_path
 
     if path:
+        path = os.path.abspath(path)
         if os.path.exists(path):
             if not os.path.isdir(path):
                 raise NotADirectoryError(
@@ -350,11 +351,11 @@ def acceptance_loop(
 
         ## Oracle scorecard
         classifier_oracle.reset_parameters_to_initial()
-        classifier_oracle.fit(credit_data.features, credit_data.default_flag) # Using explicitly all data
+        classifier_oracle.fit(*credit_data.unbiased_obs(include_gen_round=False)) # Using explicitly all data
 
         classifier_oracle.eval()
         holdout_probs_bad_oracle = classifier_oracle.predict_proba(holdout_data.features)[..., 1]
-        current_stats["auc_biased"] = batched_auroc(holdout_probs_bad_oracle, holdout_data.default_flag).item()
+        current_stats["auc_unbiased"] = batched_auroc(holdout_probs_bad_oracle, holdout_data.default_flag).item()
 
         ## Corrected scorecard
         augmented_sample: CreditDataSample = basl_unbiaser.basl_augment_sample(
