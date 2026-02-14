@@ -329,16 +329,7 @@ def acceptance_loop(
     times_needed = []
     print("Checks passed in acceptance_loop, beginning now")
 
-    for gen_round_nr in range(current_gen, num_gens + 1):
-        if gen_round_nr % report_every == 0:
-            print("-- Iteration", f"{gen_round_nr}/{num_gens}:", credit_data.count_accepts, 
-                "accepts and", credit_data.count_rejects, " rejects")
-            times_needed_tensor = torch.tensor(times_needed, dtype=torch.float32)
-            expected_time_left=times_needed_tensor.mean().item() * gen_rounds_left
-
-            print("\tRoughly expected time left: ", round(expected_time_left/60, 2), "min")
-            
-            
+    for gen_round_nr in range(current_gen, num_gens + 1):          
         begin_round = time.time()
             
         ## Gather current statistics
@@ -419,6 +410,14 @@ def acceptance_loop(
             torch.save(checkpoint_to_save_to_disc, results_path)
 
         times_needed.append(time.time() - begin_round)
+        if gen_round_nr % report_every == 0:
+            print("-- Finished Iteration", f"{gen_round_nr}/{num_gens}:", credit_data.count_accepts, 
+                "accepts and", credit_data.count_rejects, " rejects")
+            times_needed_tensor = torch.tensor(times_needed, dtype=torch.float32)
+            gen_rounds_left = num_gens - gen_round_nr
+            expected_time_left=times_needed_tensor.mean().item() * gen_rounds_left
+
+            print("\tRoughly expected time left: ", round(expected_time_left/60, 2), "min")
 
     print("-- Simulation ended. Time needed:", round((time.time()-simulation_begin)/60, 2), "min")
     
@@ -544,7 +543,7 @@ if __name__ == "__main__":
         "cpu"
     )
 
-    torch.set_num_threads(16)
+    torch.set_num_threads(24)
     torch.set_num_interop_threads(8)
 
     print("Simulation to be run on device", device)
