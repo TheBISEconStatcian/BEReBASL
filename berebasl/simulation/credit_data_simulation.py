@@ -372,7 +372,7 @@ class CreditDataGenerator:
     def log_prob_bad(self, x: torch.Tensor) -> torch.Tensor:
         r"""
         Log-probability density of observations ``x`` under the bad class mixture,
-        optionally inflated with additive white noise.
+        inflated with additive white noise if self.noise_std > 0.
 
         Concretely computes:
 
@@ -391,7 +391,7 @@ class CreditDataGenerator:
     def log_prob_good(self, x: torch.Tensor) -> torch.Tensor:
         r"""
         Log-probability density of observations ``x`` under the good class mixture,
-        optionally inflated with additive white noise.
+        inflated with additive white noise if self.noise_std > 0.
 
         Concretely computes:
 
