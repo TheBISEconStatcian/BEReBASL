@@ -526,7 +526,9 @@ def resume_simulation_from_dir(sim_dir_path: str, new_gen_count: int = None):
     )
 
 def default_dgp(seed_credit_data_gen: int, 
-                deterministic_weights_for_mixture_sampling : bool) -> CreditDataGenerator:
+                deterministic_weights_for_mixture_sampling : bool,
+                device : torch.device,
+                dtype : torch.dtype) -> CreditDataGenerator:
     return CreditDataGenerator.init_with_internal_logic(
         count_covariates=2,
         mean_bad_diff=torch.tensor([1.0,2.0], dtype=dtype, device=device),
