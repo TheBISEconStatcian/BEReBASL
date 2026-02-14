@@ -1,3 +1,4 @@
+from math import log
 import torch
 from warnings import warn
 
@@ -259,7 +260,7 @@ class GaussianMixture:
         else:
             self.b = 1 if self.mean.dim() == 1 else self.mean.size(1)
 
-
+        self.is_batched = self.b>1
         self.rng = torch.Generator(device=mean.device)
         if seed is not None:
             self.rng.manual_seed(seed)
@@ -306,6 +307,14 @@ class GaussianMixture:
             self.rng.manual_seed(seed)
 
         return self
+    
+    @property
+    def cov(self):
+        return self.cov_chol_decomp @ self.cov_chol_decomp.mT
+
+    @property
+    def k(self):
+        return self.mean.size(-1)
     
     @property
     def device(self) -> torch.device:
@@ -457,6 +466,114 @@ class GaussianMixture:
             seed (int): Seed to set for the internal torch.Generator.
         """
         self.rng.manual_seed(seed)
+
+    def _normalized_params(self) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+        r"""
+        Return mean, cov_chol (and optionally log_weights) expanded to a
+        consistent ``(b, m, ...)`` shape, using ``expand`` (no data copy).
+
+        Returns:
+            Tuple of:
+                - mean:       ``(b, m, k)``
+                - cov_chol:   ``(b, m, k, k)``
+                - weights: ``(b, m)`` if mixture, else ``None``
+        """
+        k = self.mean.size(-1)
+
+        if not self.is_mixture and self.is_batched:
+            mean = self.mean.squeeze(1)
+            cov_chol = self.cov_chol_decomp.squeeze(1)
+        else:
+            mean = self.mean.expand(self.b, self.m, k)
+            cov_chol = self.cov_chol_decomp.expand(self.b, self.m, k, k)
+        
+
+        weights = None
+        if self.is_mixture:
+            weights = self.weights_dist.probs.expand(self.b, self.m)
+        else:
+            if self.is_batched:
+                mean = self.mean.squeeze(1)
+                cov_chol = self.cov_chol_decomp.squeeze(1)
+
+
+
+        return mean, cov_chol, weights
+    
+    def log_prob(self, x: torch.Tensor, check_input: bool = True) -> torch.Tensor:
+        r"""
+        Evaluate the log-probability density at observations ``x``.
+
+        For a mixture, computes:
+
+        .. math::
+            \log p(x) = \log \sum_{j=1}^{m} w_j \,\mathcal{N}(x \mid \mu_j, \Sigma_j)
+
+        via the log-sum-exp trick for numerical stability. For independent
+        Gaussians (no weights), computes the per-component log-prob directly.
+
+        Args:
+            x (Tensor): Observations. Either:
+
+                - ``(n, k)``    — broadcast over batches if batched
+                - ``(b, n, k)`` — batch-specific observations
+
+        Returns:
+            Tensor:
+                - ``(n,)``   if unbatched
+                - ``(b, n)`` if batched
+        """
+        k = self.k
+        if check_input:
+            if x.size(-1) != k:
+                raise AssertionError("x cannot come from current mixture, wrong amount of covariates")
+            if x.dim() not in [2,3]:
+                raise AssertionError("x has to have shape (b, n, k) or (n, k)")
+            if x.dim() == 3 and x.size(0) != self.b:
+                raise AssertionError("Wrong batch dimension")
+            
+        mean, cov_chol, weights = self._normalized_params()
+        # mean:     (b, m, k)
+        # cov_chol: (b, m, k, k)
+
+        # Normalize x to (b, n, k)
+        n = x.size(1)
+        x = x.expand(self.b, n, k)
+        # x is now (b, n, k)
+
+        # Residuals: (b, n, m, k)
+        # x: (b, n, 1, k),  mean: (b, 1, m, k)
+        residuals = x.unsqueeze(2) - mean.unsqueeze(1)  # (b, n, m, k)
+
+        # Solve L v = residual for v, then Mahalanobis = ||v||^2
+        # L:          (b, m, k, k) -> (b, 1, m, k, k)
+        # residuals:  (b, n, m, k) -> (b, n, m, k, 1)
+        # Note (x-\mu)^T \Sigma^{-1}(x-\mu) = \|L^{-1}(x-\mu)\|^2_2 =: \|v\|^2_2
+        L = cov_chol.unsqueeze(1)                                       # (b, 1, m, k, k)
+        r = residuals.unsqueeze(-1)                                     # (b, n, m, k, 1)
+        v = torch.linalg.solve_triangular(L, r, upper=False)           # (b, n, m, k, 1)
+        mahal = v.squeeze(-1).pow(2).sum(dim=-1)                       # (b, n, m)
+
+        # Log determinant of Sigma from Cholesky diagonal: (b, m)
+        log_det = 2.0 * cov_chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)  # (b, m)
+
+        # Per-component log-probs: (b, n, m)
+        log_norm = -0.5 * (k * log(2 * torch.pi) + log_det)       # (b, m)
+        comp_log_probs = log_norm.unsqueeze(1) - 0.5 * mahal           # (b, n, m)
+
+        if self.is_mixture:
+            # log_weights: (b, m) -> (b, 1, m)
+            log_p = torch.logsumexp(
+                comp_log_probs + weights.log().unsqueeze(1), dim=-1
+            )                                                           # (b, n)
+        else:
+            # In this case self.m = m is 1
+            log_p = comp_log_probs.squeeze(-1)                        # (b, n)
+
+        if not self.is_batched:
+            log_p = log_p.squeeze(0)                                   # (n,)
+
+        return log_p
 
     def params_str_rep(self, spacing_before : str = ''):
         r"""
