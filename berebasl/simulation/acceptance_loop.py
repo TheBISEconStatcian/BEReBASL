@@ -519,6 +519,52 @@ def resume_simulation_from_dir(sim_dir_path: str, new_gen_count: int = None):
         **configs
     )
 
+def default_dgp(seed_credit_data: int, 
+                deterministic_weights_for_mixture_sampling : bool) -> CreditDataGenerator:
+    return CreditDataGenerator.init_with_internal_logic(
+        count_covariates=2,
+        mean_bad_diff=torch.tensor([1.0,2.0], dtype=dtype, device=device),
+        covars = {
+            "bad" : torch.tensor([[1.0, 0.2], [0.2,1.0]], dtype=dtype, device=device),
+            "good" : torch.tensor([[1.0,-0.2], [-0.2,1.0]], dtype=dtype, device=device)
+        },
+        iid = False,
+        mixture_weights=None,
+        bad_ratio = 0.5,
+        noise_var=0.0,
+        device = device,
+        dtype=dtype,
+        seed_credit_data_gen=seed_credit_data,
+        deterministic_weights_for_mixture_sampling = deterministic_weights_for_mixture_sampling
+    )
+
+def default_classifiers(n_features: int) -> Tuple[BASLPartialUnbiaser, TorchLogistic, TorchLogistic]:
+    strong_learner = TorchLogistic(n_features, seed_for_weight_init=1807)
+    basl_unbiaser = BASLPartialUnbiaser(
+        filtering_quantiles={"lower" : 0.01, "upper" : 0.99},
+        weak_learner=TorchLogistic(n_features, seed_for_weight_init=187),
+        strong_learner=strong_learner,
+        holdout_percent=0.1,
+        sampling_percent=0.8,
+        label_bads_percent=0.1,
+        label_goods_percent=0.1/2,
+        max_iterations=5,
+        isolation_forest=IsolationForest(n_estimators=100, max_samples="auto", random_state=1807),
+        bayesian_metric = BayesianMetric(
+            model=strong_learner,
+            min_iterations=1e2,
+            max_iterations=1e5,
+            epsilon=1e-5,
+            metric = batched_auroc,
+            device=credit_data.device
+        )
+    )
+
+    classifier_accepts = TorchLogistic(n_features, seed_for_weight_init=781)
+    classifier_oracle = TorchLogistic(n_features, seed_for_weight_init=10807)
+
+    return basl_unbiaser, classifier_accepts, classifier_oracle
+
 
 
 if __name__ == "__main__":
@@ -551,19 +597,7 @@ if __name__ == "__main__":
 
     print("Defining data generating process\n")
 
-    data_generator = CreditDataGenerator.init_with_internal_logic(
-        count_covariates=2,
-        mean_bad_diff=torch.tensor([1.0,2.0], dtype=dtype, device=device),
-        covars = {
-            "bad" : torch.tensor([[1.0, 0.2], [0.2,1.0]], dtype=dtype, device=device),
-            "good" : torch.tensor([[1.0,-0.2], [-0.2,1.0]], dtype=dtype, device=device)
-        },
-        iid = False,
-        mixture_weights=None,
-        bad_ratio = 0.5,
-        noise_var=0.0,
-        device = device,
-        dtype=dtype,
+    data_generator : CreditDataGenerator = default_dgp(
         seed_credit_data_gen=params["initial_seed"],
         deterministic_weights_for_mixture_sampling = params.pop("deterministic_weights")
     )
@@ -579,31 +613,7 @@ if __name__ == "__main__":
 
     print("Defining classifiers")
     # BASL related classes
-    strong_learner = TorchLogistic(n_features=data_generator.features_count, seed_for_weight_init=1807)
-    basl_unbiaser = BASLPartialUnbiaser(
-        filtering_quantiles={"lower" : 0.01, "upper" : 0.99},
-        weak_learner=TorchLogistic(n_features=data_generator.features_count, seed_for_weight_init=187),
-        strong_learner=strong_learner,
-        holdout_percent=0.1,
-        sampling_percent=0.8,
-        label_bads_percent=0.1,
-        label_goods_percent=0.1/2,
-        max_iterations=5,
-        isolation_forest=IsolationForest(n_estimators=100, max_samples="auto", random_state=1807),
-        bayesian_metric = BayesianMetric(
-            model=strong_learner,
-            min_iterations=1e2,
-            max_iterations=1e5,
-            epsilon=1e-5,
-            metric = batched_auroc,
-            device=credit_data.device
-        )
-    )
-
-    classifier_accepts = TorchLogistic(n_features=data_generator.features_count, seed_for_weight_init=781)
-    classifier_oracle = TorchLogistic(n_features=data_generator.features_count, seed_for_weight_init=10807)
-
-
+    basl_unbiaser, classifier_accepts, classifier_oracle = default_classifiers(n_features=data_generator.features_count)
 
     print("\n\n************Starting acceptance loop********************\n\n")
     params["base_seed"] = params.pop("initial_seed")
