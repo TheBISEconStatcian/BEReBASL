@@ -88,7 +88,7 @@ def build_parser_for_loop():
         type=float,
         default=0.2,
         help="Fraction of applicants to accept in each generation "
-             "(e.g., 0.2 means top 20% by predicted risk)."
+             "(e.g., 0.2 means top 20 percent by predicted risk)."
     )
 
     # Reporting and saving intervals
