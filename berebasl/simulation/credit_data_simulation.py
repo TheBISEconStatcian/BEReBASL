@@ -369,10 +369,24 @@ class CreditDataGenerator:
 
         return X, y
     
-    def _default_mc_simulations_count_for_error_rates(self):
-        return max(10_000, 1_000 * self.bad_mixture.m * self.features_count)
+    def sample_with_log_probs(self, n_samples: Optional[int]) -> Tuple[torch.Tensor]:
+        if n_samples is None:
+            n_samples = self._default_mc_simulations_count_for_error_rates()
+
+        X, y = self.sample(n_samples) # (b, n, f), (b, n) or (n, f), (n,)
+        rho = self.bad_ratio  # P(bad)
+
+        noise_var = self.noise_std**2
+        log_p_bad  = self.bad_mixture.log_prob(X, check_input=False, white_noise_var=noise_var)   # (n,) or [b, n]
+        log_p_good = self.good_mixture.log_prob(X, check_input=False, white_noise_var=noise_var)   # (n,) or [b, n]
+
+        # log of rho * p_bad and (1-rho) * p_good
+        log_rho_p_bad  = log(rho)       + log_p_bad           # (n,) or [b, n]
+        log_rho_p_good = log(1 - rho)   + log_p_good          # (n,) or [b, n]
+
+        return X, y, log_rho_p_bad, log_rho_p_good
     
-    def bayes_error_rate(self, n_samples: int = None) -> float:
+    def bayes_error_rate(self, n_samples: Optional[int] = None) -> float:
         r"""
         Monte Carlo estimate of the Bayes (optimal) error rate:
 
@@ -409,26 +423,14 @@ class CreditDataGenerator:
         Returns:
             float: Estimated Bayes error rate in ``[0, 0.5]``.
         """
-        if n_samples is None:
-            n_samples = self._default_mc_simulations_count_for_error_rates()
-
-        X, y = self.sample(n_samples) # (b, n, f), (b, n) or (n, f), (n,)
-        rho = self.bad_ratio  # P(bad)
-
-        noise_var = self.noise_std**2
-        log_p_bad  = self.bad_mixture.log_prob(X, check_input=False, white_noise_var=noise_var)   # (n,) or [b, n]
-        log_p_good = self.good_mixture.log_prob(X, check_input=False, white_noise_var=noise_var)   # (n,)
-
-        # log of rho * p_bad and (1-rho) * p_good
-        log_rho_p_bad  = log(rho)       + log_p_bad           # (n,)
-        log_rho_p_good = log(1 - rho)   + log_p_good          # (n,)
+        _, y, log_rho_p_bad, log_rho_p_good = self.sample_with_log_probs(n_samples)
 
         # Bayes classifier predicts bad if rho*p_bad > (1-rho)*p_good
-        pred_bad = log_rho_p_bad > log_rho_p_good                  # (n,) bool
+        pred_bad = log_rho_p_bad > log_rho_p_good                  # (n,) or [b, n] bool
 
         # Error: predicted bad but is good, or predicted good but is bad
-        true_bad = y == self.bad_good_encoding["bad"]
-        errors = pred_bad ^ true_bad                               # XOR
+        true_bad = y == self.bad_good_encoding["bad"]              # (n,) or [b, n]
+        errors = pred_bad ^ true_bad                               # (n,) or [b, n]
 
         return errors.float().mean().item()
     
@@ -454,24 +456,14 @@ class CreditDataGenerator:
         """
         assert 0 < d <= 0.5, "d must be in (0, 0.5]"
 
-        if n_samples is None:
-            n_samples = self._default_mc_simulations_count_for_error_rates()
-
-        X, _ = self.sample(n_samples)
-        rho = self.bad_ratio
-
-        log_p_bad  = self._noisy_log_prob(self.bad_mixture,  X)
-        log_p_good = self._noisy_log_prob(self.good_mixture, X)
-
-        log_rho_p_bad  = math.log(rho)     + log_p_bad
-        log_rho_p_good = math.log(1 - rho) + log_p_good
+        _, _, log_rho_p_bad, log_rho_p_good = self.sample_with_log_probs(n_samples)
 
         # Posterior P(bad | x) via log-sum-exp normalisation
         # log_marginal is P(X=x)
-        log_marginal = torch.logaddexp(log_rho_p_bad, log_rho_p_good)  # (n,)
-        posterior_bad = (log_rho_p_bad - log_marginal).exp()           # (n,)
+        log_marginal = torch.logaddexp(log_rho_p_bad, log_rho_p_good)  # (n,) or [b, n]
+        posterior_bad = (log_rho_p_bad - log_marginal).exp()           # (n,) or [b, n]
 
-        in_band = (posterior_bad >= 0.5 - d) & (posterior_bad <= 0.5 + d)
+        in_band = (posterior_bad >= 0.5 - d) & (posterior_bad <= 0.5 + d) # (n,) or [b, n]
 
         return in_band.float().mean().item()
 
