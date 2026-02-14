@@ -2365,6 +2365,30 @@ class CreditData(Dataset):
 
         return stats
 
+    def counts_per_round(self) -> Dict[str, torch.Tensor]:
+        """
+        Count how many total, accepted and rejected observations per round
+        there are.
+
+        Returns:
+            Dict[str, torch.Tensor]:
+                Each count is contained in a tensor where the counts of
+                ``gen_idx`` is found in ``counts[gen_idx]``. The keys
+                of the dict are ``['total', 'accepts', 'rejects']``
+        """
+        unique_gen_round_idxs = torch.arange(self.last_gen_round, device=self.device) # [g]
+
+        flag_is_from_round = unique_gen_round_idxs.unsqueeze(1) == self.gen_round.unsqueeze(0) # [g, N]
+        counts_per_round = flag_is_from_round.sum(dim=-1) # [g]
+        accepts_per_round = (flag_is_from_round & self.accepted.unsqueeze(0)).sum(dim=-1) # [g]
+        rejects_per_round = counts_per_round - accepts_per_round
+
+        return {
+            "total" : counts_per_round,
+            "accepts" : accepts_per_round,
+            "rejects" : rejects_per_round
+        }
+
 
 
 
