@@ -369,104 +369,235 @@ class CreditDataGenerator:
 
         return X, y
     
-    def sample_with_log_probs(self, n_samples: Optional[int]) -> Tuple[torch.Tensor]:
+    def log_prob_bad(self, x: torch.Tensor) -> torch.Tensor:
+        r"""
+        Log-probability density of observations ``x`` under the bad class mixture,
+        optionally inflated with additive white noise.
+
+        Concretely computes:
+
+        .. math::
+            \log p_{\text{bad}}(x)
+
+        Args:
+            x (Tensor): Observations of shape ``(n, k)`` or ``(b, n, k)``.
+
+        Returns:
+            Tensor: Shape ``(n,)`` or ``(b, n)``.
+        """
+        return self.bad_mixture.log_prob(x, white_noise_var=self.noise_std ** 2)
+
+
+    def log_prob_good(self, x: torch.Tensor) -> torch.Tensor:
+        r"""
+        Log-probability density of observations ``x`` under the good class mixture,
+        optionally inflated with additive white noise.
+
+        Concretely computes:
+
+        .. math::
+            \log p_{\text{good}}(x)
+
+        Args:
+            x (Tensor): Observations of shape ``(n, k)`` or ``(b, n, k)``.
+
+        Returns:
+            Tensor: Shape ``(n,)`` or ``(b, n)``.
+        """
+        return self.good_mixture.log_prob(x, white_noise_var=self.noise_std ** 2)
+
+
+    def _log_prob_given_components(
+            self,
+            log_p_bad: torch.Tensor,
+            log_p_good: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        r"""
+        Apply class priors to raw component log-densities.
+
+        Computes the prior-weighted log-densities:
+
+        .. math::
+            \log(\rho \cdot p_{\text{bad}}(x)) \quad \text{and} \quad
+            \log((1-\rho) \cdot p_{\text{good}}(x))
+
+        which are the two terms needed by every downstream consumer
+        (log marginal, Bayes classifier, posterior).
+
+        Args:
+            log_p_bad  (Tensor): Raw log-density under bad mixture,  shape ``(n,)`` or ``(b, n)``.
+            log_p_good (Tensor): Raw log-density under good mixture, shape ``(n,)`` or ``(b, n)``.
+
+        Returns:
+            Tuple[Tensor, Tensor]: ``(log_rho_p_bad, log_rho_p_good)``, same shape as inputs.
+        """
+        log_rho_p_bad  = math.log(self.bad_ratio)       + log_p_bad
+        log_rho_p_good = math.log(1.0 - self.bad_ratio) + log_p_good
+        return log_rho_p_bad, log_rho_p_good
+
+
+    def log_prob(self, x: torch.Tensor) -> torch.Tensor:
+        r"""
+        Log-probability of observations ``x`` under the marginal distribution:
+
+        .. math::
+            \log p(x) = \log\!\bigl(\rho\, p_{\text{bad}}(x) + (1-\rho)\, p_{\text{good}}(x)\bigr)
+
+        Computed stably in log-space as:
+
+        .. math::
+            \log p(x) = \text{logaddexp}\!\bigl(
+                \log\rho + \log p_{\text{bad}}(x),\;
+                \log(1-\rho) + \log p_{\text{good}}(x)
+            \bigr)
+
+        This is the standard pytorch-convention ``log_prob`` interface.
+
+        Args:
+            x (Tensor): Observations of shape ``(n, k)`` or ``(b, n, k)``.
+
+        Returns:
+            Tensor: Log marginal density, shape ``(n,)`` or ``(b, n)``.
+        """
+        log_rho_p_bad, log_rho_p_good = self._log_prob_given_components(
+            self.log_prob_bad(x),
+            self.log_prob_good(x)
+        )
+        return torch.logaddexp(log_rho_p_bad, log_rho_p_good)
+
+
+    def mc_simulate(self, n_samples: int = None) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        r"""
+        Draw a Monte Carlo sample from the joint DGP and compute per-observation
+        log-densities under both class models.
+
+        This is the shared backbone for :meth:`bayes_error_rate` and
+        :meth:`confusion_probability`. Drawing from the joint guarantees that
+        samples are distributed according to the true marginal
+        :math:`p(x) = \rho\,p_{\text{bad}}(x) + (1-\rho)\,p_{\text{good}}(x)`,
+        which is required for both MC estimators to be unbiased.
+
+        The default sample size is :math:`\max(10^4,\; 200 \cdot m \cdot k)`,
+        scaling with mixture complexity to ensure adequate coverage of all components.
+
+        Args:
+            n_samples (int, optional): Number of joint samples to draw. If ``None``,
+                defaults to ``max(10_000, 200 * bad_mixture.m * features_count)``.
+
+        Returns:
+            Tuple of four tensors, all shape ``(n,)`` / ``(b, n)`` except ``X``:
+
+            - **X**            ``(n, k)`` or ``(b, n, k)`` — drawn observations.
+            - **y**            ``(n,)``   or ``(b, n)``    — true class labels.
+            - **log_p_bad**    ``(n,)``   or ``(b, n)``    — :math:`\log p_{\text{bad}}(x)`.
+            - **log_p_good**   ``(n,)``   or ``(b, n)``    — :math:`\log p_{\text{good}}(x)`.
+        """
         if n_samples is None:
-            n_samples = self._default_mc_simulations_count_for_error_rates()
+            n_samples = max(10_000, 200 * self.bad_mixture.m * self.features_count)
 
-        X, y = self.sample(n_samples) # (b, n, f), (b, n) or (n, f), (n,)
-        rho = self.bad_ratio  # P(bad)
+        X, y        = self.sample(n_samples)
+        log_p_bad   = self.log_prob_bad(X)
+        log_p_good  = self.log_prob_good(X)
 
-        noise_var = self.noise_std**2
-        log_p_bad  = self.bad_mixture.log_prob(X, check_input=False, white_noise_var=noise_var)   # (n,) or [b, n]
-        log_p_good = self.good_mixture.log_prob(X, check_input=False, white_noise_var=noise_var)   # (n,) or [b, n]
+        return X, y, log_p_bad, log_p_good
 
-        # log of rho * p_bad and (1-rho) * p_good
-        log_rho_p_bad  = log(rho)       + log_p_bad           # (n,) or [b, n]
-        log_rho_p_good = log(1 - rho)   + log_p_good          # (n,) or [b, n]
 
-        return X, y, log_rho_p_bad, log_rho_p_good
-    
-    def bayes_error_rate(self, n_samples: Optional[int] = None) -> float:
+    def bayes_error_rate(self, n_samples: int = None) -> Union[float, torch.Tensor]:
         r"""
         Monte Carlo estimate of the Bayes (optimal) error rate:
 
         .. math::
-            \epsilon^* = \int \min\!\bigl(\rho\, p_0(x),\;(1-\rho)\,p_1(x)\bigr)\,dx
+            \epsilon^* = P_{(x,y)\sim p_{\text{joint}}}\!\bigl(\hat{y}(x) \neq y\bigr)
 
-        Estimated as:
-
-        .. math::
-            \hat{\epsilon}^* = \frac{1}{N}\sum_{i=1}^N
-            \min\!\bigl(\rho\, p_0(x^{(i)}),\;(1-\rho)\,p_1(x^{(i)})\bigr)
-            \;/\; p_{\text{marginal}}(x^{(i)})
-
-        where samples :math:`x^{(i)}` are drawn from the marginal
-        :math:`p(x) = \rho\,p_0(x) + (1-\rho)\,p_1(x)`.
-
-        Note that when sampling from the marginal the importance weight
-        :math:`p_{\text{marginal}}(x) / p_{\text{marginal}}(x)` cancels to 1,
-        so the estimator simplifies to the indicator form:
+        where :math:`\hat{y}(x)` is the Bayes-optimal decision:
 
         .. math::
-            \hat{\epsilon}^* = \frac{1}{N}\sum_i
-            \mathbf{1}\!\left[
-            \text{posterior of true class} < 0.5
-            \right]
+            \hat{y}(x) = \text{bad} \iff
+            \log\rho + \log p_{\text{bad}}(x) > \log(1-\rho) + \log p_{\text{good}}(x)
 
-        which is just the fraction of samples where the Bayes classifier
-        is wrong — i.e. where the wrong class has higher weighted density.
+        The MC estimator counts the fraction of samples where the classifier
+        is wrong, which is unbiased because samples come from the true joint.
 
         Args:
-            n_samples (int, optional): Number of MC samples. Defaults to
-                ``max(10_000, 100 * m * k)``.
+            n_samples (int, optional): Number of MC samples. See :meth:`mc_simulate`
+                for the default value and its rationale.
 
         Returns:
-            float: Estimated Bayes error rate in ``[0, 0.5]``.
+            float or Tensor: Estimated Bayes error rate in :math:`[0, 0.5]`.
+                Returns a ``float`` when unbatched, a tensor of shape ``(b,)``
+                when batched.
         """
-        _, y, log_rho_p_bad, log_rho_p_good = self.sample_with_log_probs(n_samples)
+        _, y, log_p_bad, log_p_good = self.mc_simulate(n_samples)
 
-        # Bayes classifier predicts bad if rho*p_bad > (1-rho)*p_good
-        pred_bad = log_rho_p_bad > log_rho_p_good                  # (n,) or [b, n] bool
+        log_rho_p_bad, log_rho_p_good = self._log_prob_given_components(log_p_bad, log_p_good)
 
-        # Error: predicted bad but is good, or predicted good but is bad
-        true_bad = y == self.bad_good_encoding["bad"]              # (n,) or [b, n]
-        errors = pred_bad ^ true_bad                               # (n,) or [b, n]
+        pred_bad = log_rho_p_bad > log_rho_p_good           # (n,) or (b, n)
+        true_bad = y == self.bad_good_encoding["bad"]        # (n,) or (b, n)
+        errors   = pred_bad ^ true_bad                       # (n,) or (b, n)
 
-        return errors.float().mean(dim=-1) # singleton or (b,)
-    
-    def confusion_probability(self, d_lower: float, d_upper: float, n_samples: int = None) -> float:
+        result = errors.float().mean(dim=-1)                 # scalar or (b,)
+        return result.item() if result.dim() == 0 else result
+
+
+    def confusion_probability(
+            self,
+            d_lower: float,
+            d_upper: float,
+            n_samples: int = None
+    ) -> Union[float, torch.Tensor]:
         r"""
-        Monte Carlo estimate of the probability that a Bayes-optimal classifier
-        assigns a posterior in the confusion band :math:`[0.5-d,\, 0.5+d]`:
+        Monte Carlo estimate of the probability that the Bayes-optimal posterior
+        falls inside the confusion band :math:`[0.5 - d_{\text{lower}},\; 0.5 + d_{\text{upper}}]`:
 
         .. math::
-            \Pi(d, \rho) = P\!\left(P(\text{bad} \mid x) \in [0.5-d,\,0.5+d]\right)
+            \Pi(d_{\text{lower}}, d_{\text{upper}}, \rho) =
+            P_{x \sim p}\!\Bigl(P(\text{bad}\mid x)
+            \in [0.5 - d_{\text{lower}},\; 0.5 + d_{\text{upper}}]\Bigr)
 
-        where :math:`x` is drawn from the marginal. Larger values mean the
-        two classes are harder to separate.
+        The posterior is computed stably as:
+
+        .. math::
+            P(\text{bad}\mid x) = \exp\!\Bigl(
+                \log(\rho\, p_{\text{bad}}(x)) -
+                \operatorname{logaddexp}\!\bigl(
+                    \log(\rho\, p_{\text{bad}}(x)),\,
+                    \log((1-\rho)\,p_{\text{good}}(x))
+                \bigr)
+            \Bigr)
+
+        Asymmetric bands (:math:`d_{\text{lower}} \neq d_{\text{upper}}`) are
+        meaningful from a risk perspective: financial institutions typically operate
+        at thresholds well above 0.5, so the operationally relevant confusion region
+        is not symmetric around the statistical decision boundary.
 
         Args:
-            d (float): Half-width of the confusion band. Must satisfy
-                ``0 < d <= 0.5``.
-            n_samples (int, optional): Number of MC samples. Defaults to
-                ``max(10_000, 100 * m * k)``.
+            d_lower (float): Lower half-width of the confusion band. Must be in ``(0, 0.5)``.
+            d_upper (float): Upper half-width of the confusion band. Must be in ``(0, 0.5)``.
+            n_samples (int, optional): Number of MC samples. See :meth:`mc_simulate`
+                for the default value and its rationale.
 
         Returns:
-            float: Estimated confusion probability in ``[0, 1]``.
+            float or Tensor: Estimated confusion probability in :math:`[0, 1]`.
+                Returns a ``float`` when unbatched, a tensor of shape ``(b,)``
+                when batched.
+
+        Raises:
+            AssertionError: If ``d_lower`` or ``d_upper`` are outside ``(0, 0.5)``.
         """
-        if not ((0 <= d_lower < 0.5) and (0 <= d_lower < 0.5)):
-            raise AssertionError("d_lower, d_upper must be in [0,0.5)")
+        assert 0 < d_lower < 0.5, "d_lower must be in (0, 0.5)"
+        assert 0 < d_upper < 0.5, "d_upper must be in (0, 0.5)"
 
-        _, _, log_rho_p_bad, log_rho_p_good = self.sample_with_log_probs(n_samples)
+        _, _, log_p_bad, log_p_good = self.mc_simulate(n_samples)
 
-        # Posterior P(bad | x) via log-sum-exp normalisation
-        # log_marginal is P(X=x)
-        log_marginal = torch.logaddexp(log_rho_p_bad, log_rho_p_good)  # (n,) or [b, n]
-        posterior_bad = (log_rho_p_bad - log_marginal).exp()           # (n,) or [b, n]
+        log_rho_p_bad, log_rho_p_good = self._log_prob_given_components(log_p_bad, log_p_good)
 
-        in_band = (posterior_bad >= 0.5 - d) & (posterior_bad <= 0.5 + d) # (n,) or [b, n]
+        log_marginal  = torch.logaddexp(log_rho_p_bad, log_rho_p_good)  # (n,) or (b, n)
+        posterior_bad = (log_rho_p_bad - log_marginal).exp()             # (n,) or (b, n)
 
-        return in_band.float().mean(dim=-1) # singleton or (b,)
+        in_band = (posterior_bad >= 0.5 - d_lower) & (posterior_bad <= 0.5 + d_upper)
+
+        result = in_band.float().mean(dim=-1)                            # scalar or (b,)
+        return result.item() if result.dim() == 0 else result
 
     
     @staticmethod
