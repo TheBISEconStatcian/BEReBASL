@@ -581,7 +581,8 @@ class GaussianMixture:
             cov_white_noise = white_noise_var * torch.eye(k, device=self.device, dtype=self.dtype) # [k, k]
             cov_wn_normalized = cov_white_noise.expand(1,1,k,k) # [1,1, k, k]
             cov_inflated = cov_normalized + cov_wn_normalized # (b, m, k, k)
-            L = torch.linalg.cholesky(cov_inflated).unsqueeze(1) # (b, 1, m, k, k)
+            cov_chol = torch.linalg.cholesky(cov_inflated) # rewrite cov_chol to the inflated version
+            L = cov_chol.unsqueeze(1) # (b, 1, m, k, k)
 
         r = residuals.unsqueeze(-1)                                     # (b, n, m, k, 1)
         v = torch.linalg.solve_triangular(L, r, upper=False)           # (b, n, m, k, 1)
