@@ -381,8 +381,8 @@ def acceptance_loop(
             # Let S:=sample_size
             feats_new_applicants, def_flag_new_applicants = data_generator.sample(sample_size) # [S, F], [S]
             with torch.no_grad():
-                new_applicants_pred_def_probs = classifier_accepts.predict_proba(feats_new_applicants)[..., 1] # [S]
-                new_applicants_accepted = new_applicants_pred_def_probs >= new_applicants_pred_def_probs.quantile(1-top_percent) # [S]
+                new_apps_prob_good_pred = classifier_accepts.predict_proba(feats_new_applicants)[..., 0] # [S]
+                new_applicants_accepted = new_apps_prob_good_pred >= new_apps_prob_good_pred.quantile(1-top_percent) # [S]
 
             max_accepts_allowed = round(sample_size*top_percent)
             currently_accepted = new_applicants_accepted.sum()
