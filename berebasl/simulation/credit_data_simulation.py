@@ -269,8 +269,12 @@ class CreditDataGenerator:
             seed : Optional[int] = None,
             deterministic_weight_sampling: bool = False
     ):
-        if not isinstance(bad_mixture, GaussianMixture) and not isinstance(good_mixture, GaussianMixture):
+        if not isinstance(bad_mixture, GaussianMixture) or not isinstance(good_mixture, GaussianMixture):
             raise ValueError("Mixtures need to be GaussianMixture classes")
+        
+        mixtures_are_compatible = (bad_mixture.k == good_mixture.k) and (bad_mixture.b == good_mixture.b)
+        if not mixtures_are_compatible:
+            raise AssertionError("Mixtures are not compatible, batch and feature dimension must match")
         
         self.bad_mixture = bad_mixture
         self.good_mixture = good_mixture
@@ -302,7 +306,7 @@ class CreditDataGenerator:
     
     @property
     def features_count(self):
-        return self.bad_mixture.mean.size(-1)
+        return self.bad_mixture.k
     
     def manual_seed(self, seed : int) -> torch.Generator:
         self.rng.manual_seed(seed)
