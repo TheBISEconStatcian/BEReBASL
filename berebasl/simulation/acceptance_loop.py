@@ -26,7 +26,8 @@ def build_parser_for_loop():
         nargs="?",
         type=str,
         help="Directory where simulation results will be saved. "
-             "If omitted, a timestamped directory is created automatically."
+             "Alternatively it can be passes as named arg (see --output-path). "
+             "If both are omitted, a timestamped directory is created automatically."
     )
 
     # Optional named argument
@@ -35,7 +36,8 @@ def build_parser_for_loop():
         dest="output_path_opt",
         type=str,
         help="Directory where simulation results will be saved "
-             "(alternative to the positional argument)."
+             "(alternative to the positional argument). It overwrites"
+             "the positional argument if it was passed as well"
     )
 
     parser.add_argument(
@@ -268,8 +270,10 @@ def acceptance_loop(
         stats: List[Dict[str, Union[float, int]]] = [],
         classifiers_state_dicts: List[Dict[str, Union[Dict[str, Any], str]]] = []
 ) -> None:
-    if num_gens < 1:
-        raise ValueError("num_gens needs to be greater than 1")
+    if num_gens < 0:
+        raise ValueError("num_gens needs to be greater than 0")
+    elif num_gens==0:
+        warn("Running dry run - no data will be generated as num_gens = 0")
     if current_gen < 1 or current_gen > num_gens:
         raise ValueError(f"current_gen must be in [1, num_gens={num_gens}]")
     
@@ -521,7 +525,7 @@ def resume_simulation_from_dir(sim_dir_path: str, new_gen_count: int = None):
         **configs
     )
 
-def default_dgp(seed_credit_data: int, 
+def default_dgp(seed_credit_data_gen: int, 
                 deterministic_weights_for_mixture_sampling : bool) -> CreditDataGenerator:
     return CreditDataGenerator.init_with_internal_logic(
         count_covariates=2,
@@ -536,7 +540,7 @@ def default_dgp(seed_credit_data: int,
         noise_var=0.0,
         device = device,
         dtype=dtype,
-        seed_credit_data_gen=seed_credit_data,
+        seed_credit_data_gen=seed_credit_data_gen,
         deterministic_weights_for_mixture_sampling = deterministic_weights_for_mixture_sampling
     )
 
