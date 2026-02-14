@@ -368,6 +368,7 @@ class CreditDataGenerator:
             X = X + torch.randn(X.shape, generator=self.rng, device=device, dtype=dtype) * self.noise_std
 
         return X, y
+        
     
     def bayes_error_rate(self, n_samples: int = None) -> float:
         r"""
@@ -428,6 +429,49 @@ class CreditDataGenerator:
         errors = pred_bad ^ true_bad                               # XOR
 
         return errors.float().mean().item()
+    
+    def confusion_probability(self, d: float, n_samples: int = None) -> float:
+        r"""
+        Monte Carlo estimate of the probability that a Bayes-optimal classifier
+        assigns a posterior in the confusion band :math:`[0.5-d,\, 0.5+d]`:
+
+        .. math::
+            \Pi(d, \rho) = P\!\left(P(\text{bad} \mid x) \in [0.5-d,\,0.5+d]\right)
+
+        where :math:`x` is drawn from the marginal. Larger values mean the
+        two classes are harder to separate.
+
+        Args:
+            d (float): Half-width of the confusion band. Must satisfy
+                ``0 < d <= 0.5``.
+            n_samples (int, optional): Number of MC samples. Defaults to
+                ``max(10_000, 100 * m * k)``.
+
+        Returns:
+            float: Estimated confusion probability in ``[0, 1]``.
+        """
+        assert 0 < d <= 0.5, "d must be in (0, 0.5]"
+
+        if n_samples is None:
+            n_samples = max(10_000, 100 * self.bad_mixture.m * self.features_count)
+
+        X, _ = self.sample(n_samples)
+        rho = self.bad_ratio
+
+        log_p_bad  = self._noisy_log_prob(self.bad_mixture,  X)
+        log_p_good = self._noisy_log_prob(self.good_mixture, X)
+
+        log_rho_p_bad  = math.log(rho)     + log_p_bad
+        log_rho_p_good = math.log(1 - rho) + log_p_good
+
+        # Posterior P(bad | x) via log-sum-exp normalisation
+        # log_marginal is P(X=x)
+        log_marginal = torch.logaddexp(log_rho_p_bad, log_rho_p_good)  # (n,)
+        posterior_bad = (log_rho_p_bad - log_marginal).exp()           # (n,)
+
+        in_band = (posterior_bad >= 0.5 - d) & (posterior_bad <= 0.5 + d)
+
+        return in_band.float().mean().item()
 
     
     @staticmethod
