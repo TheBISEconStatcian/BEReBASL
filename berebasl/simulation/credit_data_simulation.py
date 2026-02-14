@@ -431,8 +431,8 @@ class CreditDataGenerator:
         Returns:
             Tuple[Tensor, Tensor]: ``(log_rho_p_bad, log_rho_p_good)``, same shape as inputs.
         """
-        log_rho_p_bad  = math.log(self.bad_ratio)       + log_p_bad
-        log_rho_p_good = math.log(1.0 - self.bad_ratio) + log_p_good
+        log_rho_p_bad  = log(self.bad_ratio)       + log_p_bad
+        log_rho_p_good = log(1.0 - self.bad_ratio) + log_p_good
         return log_rho_p_bad, log_rho_p_good
 
 
@@ -477,29 +477,31 @@ class CreditDataGenerator:
         :math:`p(x) = \rho\,p_{\text{bad}}(x) + (1-\rho)\,p_{\text{good}}(x)`,
         which is required for both MC estimators to be unbiased.
 
-        The default sample size is :math:`\max(10^4,\; 200 \cdot m \cdot k)`,
+        The default sample size is :math:`\max(10^4,\; 500 \cdot m \cdot k)`,
         scaling with mixture complexity to ensure adequate coverage of all components.
 
         Args:
             n_samples (int, optional): Number of joint samples to draw. If ``None``,
-                defaults to ``max(10_000, 200 * bad_mixture.m * features_count)``.
+                defaults to ``max(10_000, 500 * bad_mixture.m * features_count)``.
 
         Returns:
             Tuple of four tensors, all shape ``(n,)`` / ``(b, n)`` except ``X``:
 
             - **X**            ``(n, k)`` or ``(b, n, k)`` — drawn observations.
             - **y**            ``(n,)``   or ``(b, n)``    — true class labels.
-            - **log_p_bad**    ``(n,)``   or ``(b, n)``    — :math:`\log p_{\text{bad}}(x)`.
-            - **log_p_good**   ``(n,)``   or ``(b, n)``    — :math:`\log p_{\text{good}}(x)`.
+            - **log_rho_p_bad**    ``(n,)``   or ``(b, n)``    — :math:`\log(\rho \cdot p_{\text{bad}}(x))`.
+            - **log_rho_p_good**   ``(n,)``   or ``(b, n)``    — :math:`\log((1-\rho) \cdot p_{\text{good}}(x))`.
         """
         if n_samples is None:
-            n_samples = max(10_000, 200 * self.bad_mixture.m * self.features_count)
+            n_samples = max(10_000, 500 * self.bad_mixture.m * self.features_count)
 
         X, y        = self.sample(n_samples)
         log_p_bad   = self.log_prob_bad(X)
         log_p_good  = self.log_prob_good(X)
 
-        return X, y, log_p_bad, log_p_good
+        log_rho_p_bad, log_rho_p_good = self._log_prob_given_components(log_p_bad, log_p_good)
+
+        return X, y, log_rho_p_bad, log_rho_p_good
 
 
     def bayes_error_rate(self, n_samples: int = None) -> Union[float, torch.Tensor]:
@@ -527,9 +529,7 @@ class CreditDataGenerator:
                 Returns a ``float`` when unbatched, a tensor of shape ``(b,)``
                 when batched.
         """
-        _, y, log_p_bad, log_p_good = self.mc_simulate(n_samples)
-
-        log_rho_p_bad, log_rho_p_good = self._log_prob_given_components(log_p_bad, log_p_good)
+        _, y, log_rho_p_bad, log_rho_p_good = self.mc_simulate(n_samples)
 
         pred_bad = log_rho_p_bad > log_rho_p_good           # (n,) or (b, n)
         true_bad = y == self.bad_good_encoding["bad"]        # (n,) or (b, n)
@@ -587,9 +587,7 @@ class CreditDataGenerator:
         assert 0 < d_lower < 0.5, "d_lower must be in (0, 0.5)"
         assert 0 < d_upper < 0.5, "d_upper must be in (0, 0.5)"
 
-        _, _, log_p_bad, log_p_good = self.mc_simulate(n_samples)
-
-        log_rho_p_bad, log_rho_p_good = self._log_prob_given_components(log_p_bad, log_p_good)
+        _, _, log_rho_p_bad, log_rho_p_good = self.mc_simulate(n_samples)
 
         log_marginal  = torch.logaddexp(log_rho_p_bad, log_rho_p_good)  # (n,) or (b, n)
         posterior_bad = (log_rho_p_bad - log_marginal).exp()             # (n,) or (b, n)
