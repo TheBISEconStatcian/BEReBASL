@@ -368,7 +368,9 @@ class CreditDataGenerator:
             X = X + torch.randn(X.shape, generator=self.rng, device=device, dtype=dtype) * self.noise_std
 
         return X, y
-        
+    
+    def _default_mc_simulations_count_for_error_rates(self):
+        return max(10_000, 1_000 * self.bad_mixture.m * self.features_count)
     
     def bayes_error_rate(self, n_samples: int = None) -> float:
         r"""
@@ -408,7 +410,7 @@ class CreditDataGenerator:
             float: Estimated Bayes error rate in ``[0, 0.5]``.
         """
         if n_samples is None:
-            n_samples = max(10_000, 100 * self.bad_mixture.m * self.features_count)
+            n_samples = self._default_mc_simulations_count_for_error_rates()
 
         X, y = self.sample(n_samples) # (b, n, f), (b, n) or (n, f), (n,)
         rho = self.bad_ratio  # P(bad)
@@ -453,7 +455,7 @@ class CreditDataGenerator:
         assert 0 < d <= 0.5, "d must be in (0, 0.5]"
 
         if n_samples is None:
-            n_samples = max(10_000, 100 * self.bad_mixture.m * self.features_count)
+            n_samples = self._default_mc_simulations_count_for_error_rates()
 
         X, _ = self.sample(n_samples)
         rho = self.bad_ratio
