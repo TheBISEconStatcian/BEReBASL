@@ -369,6 +369,67 @@ class CreditDataGenerator:
 
         return X, y
     
+    def bayes_error_rate(self, n_samples: int = None) -> float:
+        r"""
+        Monte Carlo estimate of the Bayes (optimal) error rate:
+
+        .. math::
+            \epsilon^* = \int \min\!\bigl(\rho\, p_0(x),\;(1-\rho)\,p_1(x)\bigr)\,dx
+
+        Estimated as:
+
+        .. math::
+            \hat{\epsilon}^* = \frac{1}{N}\sum_{i=1}^N
+            \min\!\bigl(\rho\, p_0(x^{(i)}),\;(1-\rho)\,p_1(x^{(i)})\bigr)
+            \;/\; p_{\text{marginal}}(x^{(i)})
+
+        where samples :math:`x^{(i)}` are drawn from the marginal
+        :math:`p(x) = \rho\,p_0(x) + (1-\rho)\,p_1(x)`.
+
+        Note that when sampling from the marginal the importance weight
+        :math:`p_{\text{marginal}}(x) / p_{\text{marginal}}(x)` cancels to 1,
+        so the estimator simplifies to the indicator form:
+
+        .. math::
+            \hat{\epsilon}^* = \frac{1}{N}\sum_i
+            \mathbf{1}\!\left[
+            \text{posterior of true class} < 0.5
+            \right]
+
+        which is just the fraction of samples where the Bayes classifier
+        is wrong — i.e. where the wrong class has higher weighted density.
+
+        Args:
+            n_samples (int, optional): Number of MC samples. Defaults to
+                ``max(10_000, 100 * m * k)``.
+
+        Returns:
+            float: Estimated Bayes error rate in ``[0, 0.5]``.
+        """
+        if n_samples is None:
+            n_samples = max(10_000, 100 * self.bad_mixture.m * self.features_count)
+
+        X, y = self.sample(n_samples) # (b, n, f), (b, n) or (n, f), (n,)
+        rho = self.bad_ratio  # P(bad)
+
+        noise_var = self.noise_std**2
+        log_p_bad  = self.bad_mixture.log_prob(X, check_input=False, white_noise_var=noise_var)   # (n,) or [b, n]
+        log_p_good = self.good_mixture.log_prob(X, check_input=False, white_noise_var=noise_var)   # (n,)
+
+        # log of rho * p_bad and (1-rho) * p_good
+        log_rho_p_bad  = log(rho)       + log_p_bad           # (n,)
+        log_rho_p_good = log(1 - rho)   + log_p_good          # (n,)
+
+        # Bayes classifier predicts bad if rho*p_bad > (1-rho)*p_good
+        pred_bad = log_rho_p_bad > log_rho_p_good                  # (n,) bool
+
+        # Error: predicted bad but is good, or predicted good but is bad
+        true_bad = y == self.bad_good_encoding["bad"]
+        errors = pred_bad ^ true_bad                               # XOR
+
+        return errors.float().mean().item()
+
+    
     @staticmethod
     def generate_sigma_bad_and_good(
         k: int,
