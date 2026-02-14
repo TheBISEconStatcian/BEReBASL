@@ -622,9 +622,13 @@ class GaussianMixture:
         """
         assert mean.dim() in (1,2,3), "Means  needs to be of shape (k,), (m, k) or (b, k) or (b, m, k)"
         assert cov.dim() == mean.dim()+1, "Covs has to have one more dimension than means"
+        assert mean.dtype == cov.dtype, "Means and covs need to have the same dtype"
+        assert mean.device == cov.device, "Means and covs need to have the same device"
         
         if weights is not None:
             assert weights.dim() == mean.dim() - 1, "weights must have one dimension less than means"
+            assert weights.dtype == mean.dtype, "weights must have same dtype as mean and cov"
+            assert weights.device == mean.device, "weights must have the same device as mean and cov"
 
             size_checks = [
                 (mean.size(-2) == 1) and (cov.size(-3) == weights.size(-1)),
