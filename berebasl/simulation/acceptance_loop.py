@@ -268,8 +268,10 @@ def acceptance_loop(
         stats: List[Dict[str, Union[float, int]]] = [],
         classifiers_state_dicts: List[Dict[str, Union[Dict[str, Any], str]]] = []
 ) -> None:
+    if num_gens < 1:
+        raise ValueError("num_gens needs to be greater than 1")
     if current_gen < 1 or current_gen > num_gens:
-        raise ValueError("current_gen must be in [1, num_gens]")
+        raise ValueError(f"current_gen must be in [1, num_gens={num_gens}]")
     
     if not Classifier.obj_has_needed_funs(classifier_accepts):
         raise AssertionError("classifier_accepts is not a valid Classifier. Check Classifier.obj_has_needed_funs for details")
