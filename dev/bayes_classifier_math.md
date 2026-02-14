@@ -136,7 +136,7 @@ For a threshold pair $0 < d_{\text{lower}}, d_{\text{upper}} < 0.5$, the **confu
 
 $$\Pi(d_{\text{lower}}, d_{\text{upper}}, \rho) = P_{x \sim p}\!\Bigl(P(\text{bad}\mid x) \in [0.5 - d_{\text{lower}},\; 0.5 + d_{\text{upper}}]\Bigr)$$
 
-Intuitively, this is the fraction of observations for which even a perfect classifier is uncertain. When $d_{\text{lower}} = d_{\text{upper}} = d$ the band is symmetric. Asymmetric bands are meaningful when the prior $\rho \neq 0.5$: the posterior distribution is skewed toward one class, so the confusion region may not be symmetric around $0.5$.
+Intuitively, this is the fraction of observations for which even a perfect classifier is uncertain. When $d_{\text{lower}} = d_{\text{upper}} = d$ the band is symmetric. Asymmetric bands are meaningful from a risk perspective. E. g. financial institutions typically operate at thresholds well above 0.5, so the operationally relevant confusion region is not symmetric around the statistical decision boundary.
 
 As the band widens, $\Pi \to 1$. As the band shrinks, $\Pi \to 0$ for well-separated classes and $\Pi \to 1$ for fully overlapping classes. The relationship to the Bayes error rate is:
 
