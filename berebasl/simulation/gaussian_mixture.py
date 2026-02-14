@@ -504,7 +504,7 @@ class GaussianMixture:
 
         return mean, cov_chol, weights
     
-    def log_prob(self, x: torch.Tensor, check_input: bool = True) -> torch.Tensor:
+    def log_prob(self, x: torch.Tensor, check_input: bool = True, white_noise_var: float = 0.0) -> torch.Tensor:
         r"""
         Evaluate the log-probability density at observations ``x``.
 
@@ -516,16 +516,31 @@ class GaussianMixture:
         via the log-sum-exp trick for numerical stability. For independent
         Gaussians (no weights), computes the per-component log-prob directly.
 
+        Optionally, an isotropic white noise term :math:`\sigma^2 I` can be folded
+        into each component covariance. This corresponds to the case where
+        observations are generated as :math:`x = z + \epsilon` with
+        :math:`z \sim \text{GMM}` and :math:`\epsilon \sim \mathcal{N}(0, \sigma^2 I)`,
+        which inflates each component covariance to :math:`\Sigma_j + \sigma^2 I`
+        while leaving the mixture weights and means unchanged.
+
         Args:
             x (Tensor): Observations. Either:
 
-                - ``(n, k)``    — broadcast over batches if batched
-                - ``(b, n, k)`` — batch-specific observations
+                - ``(n, k)``    — ``n`` observations, broadcast over batches if batched.
+                - ``(b, n, k)`` — ``n`` batch-specific observations per DGP.
+
+            check_input (bool): If ``True``, validates shape and covariate count of ``x``
+                and non-negativity of ``white_noise_var``. Default: ``True``.
+            white_noise_var (float): Variance :math:`\sigma^2` of isotropic additive
+                noise. If ``0.0`` (default), no inflation is applied. Must be ``>= 0``.
 
         Returns:
             Tensor:
-                - ``(n,)``   if unbatched
-                - ``(b, n)`` if batched
+                - ``(n,)``   if unbatched.
+                - ``(b, n)`` if batched.
+
+        Raises:
+            AssertionError: If ``check_input=True`` and any shape or value check fails.
         """
         k = self.k
         if check_input:
@@ -535,6 +550,9 @@ class GaussianMixture:
                 raise AssertionError("x has to have shape (b, n, k) or (n, k)")
             if x.dim() == 3 and x.size(0) != self.b:
                 raise AssertionError("Wrong batch dimension")
+            
+            if white_noise_var < 0:
+                raise AssertionError("white_noise_var has to be greater equal 0")
             
         mean, cov_chol, weights = self._normalized_params()
         # mean:     (b, m, k)
@@ -553,10 +571,22 @@ class GaussianMixture:
         # L:          (b, m, k, k) -> (b, 1, m, k, k)
         # residuals:  (b, n, m, k) -> (b, n, m, k, 1)
         # Note (x-\mu)^T \Sigma^{-1}(x-\mu) = \|L^{-1}(x-\mu)\|^2_2 =: \|v\|^2_2
-        L = cov_chol.unsqueeze(1)                                       # (b, 1, m, k, k)
+
+        if white_noise_var == 0.0:
+            # Simple case: no white noise
+            L = cov_chol.unsqueeze(1)                                       # (b, 1, m, k, k)
+        else:
+            # Harder case: need to add the noise manually
+            cov_normalized = cov_chol @ cov_chol.mT # (b, m, k, k)
+            cov_white_noise = white_noise_var * torch.eye(k, device=self.device, dtype=self.dtype) # [k, k]
+            cov_wn_normalized = cov_white_noise.expand(1,1,k,k) # [1,1, k, k]
+            cov_inflated = cov_normalized + cov_wn_normalized # (b, m, k, k)
+            L = torch.linalg.cholesky(cov_inflated).unsqueeze(1) # (b, 1, m, k, k)
+
         r = residuals.unsqueeze(-1)                                     # (b, n, m, k, 1)
         v = torch.linalg.solve_triangular(L, r, upper=False)           # (b, n, m, k, 1)
         mahal = v.squeeze(-1).pow(2).sum(dim=-1)                       # (b, n, m)
+
 
         # Log determinant of Sigma from Cholesky diagonal: (b, m)
         log_det = 2.0 * cov_chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)  # (b, m)
