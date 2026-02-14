@@ -322,6 +322,10 @@ class GaussianMixture:
         The device on which the GaussianMixture parameters reside.
         """
         return self.mean.device
+    
+    @property
+    def dtype(self):
+        return self.mean.dtype
 
     def _correction_for_diff(self, diff : torch.Tensor) -> torch.Tensor:
         r"""
