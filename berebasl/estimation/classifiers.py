@@ -570,3 +570,5 @@ class TorchLogistic(nn.Module):
         instance = cls(n_features, n_classes, state_dict.pop("lbfgs_kwargs"), device=device, dtype=dtype, secure_init=True)
 
         instance.load_from_state_dict(state_dict)
+
+        return instance
