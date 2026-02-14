@@ -432,9 +432,9 @@ class CreditDataGenerator:
         true_bad = y == self.bad_good_encoding["bad"]              # (n,) or [b, n]
         errors = pred_bad ^ true_bad                               # (n,) or [b, n]
 
-        return errors.float().mean().item()
+        return errors.float().mean(dim=-1) # singleton or (b,)
     
-    def confusion_probability(self, d: float, n_samples: int = None) -> float:
+    def confusion_probability(self, d_lower: float, d_upper: float, n_samples: int = None) -> float:
         r"""
         Monte Carlo estimate of the probability that a Bayes-optimal classifier
         assigns a posterior in the confusion band :math:`[0.5-d,\, 0.5+d]`:
@@ -454,7 +454,8 @@ class CreditDataGenerator:
         Returns:
             float: Estimated confusion probability in ``[0, 1]``.
         """
-        assert 0 < d <= 0.5, "d must be in (0, 0.5]"
+        if not ((0 <= d_lower < 0.5) and (0 <= d_lower < 0.5)):
+            raise AssertionError("d_lower, d_upper must be in [0,0.5)")
 
         _, _, log_rho_p_bad, log_rho_p_good = self.sample_with_log_probs(n_samples)
 
@@ -465,7 +466,7 @@ class CreditDataGenerator:
 
         in_band = (posterior_bad >= 0.5 - d) & (posterior_bad <= 0.5 + d) # (n,) or [b, n]
 
-        return in_band.float().mean().item()
+        return in_band.float().mean(dim=-1) # singleton or (b,)
 
     
     @staticmethod
