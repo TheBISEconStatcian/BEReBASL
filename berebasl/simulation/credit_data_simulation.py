@@ -2129,21 +2129,25 @@ class CreditData(Dataset):
     # Accessors
     # -------------------------------------------------------------------------
 
-    def _up_to_round_mask(self, up_to_round_idx: Optional[int] = None):
-        if up_to_round_idx is None:
-            up_to_round_idx = self.last_gen_round
-        else:
-            up_to_round_idx = int(up_to_round_idx)
-            if up_to_round_idx < 0:
-                raise AssertionError("up_to_round_idx needs to be between 0 and self.last_gen_round")
-            if up_to_round_idx > self.last_gen_round:
-                warn(f"up_to_round_idx={up_to_round_idx} > {self.last_gen_round}=last_gen_round. "
-                     "no gen_round_filtering is being applied")
+    def round_selection_mask(self, from_round_idx: Optional[int] = None, up_to_round_idx: Optional[int] = None):
+        from_round_idx = 0 if from_round_idx is None else int(from_round_idx)
+        up_to_round_idx = self.last_gen_round if up_to_round_idx is None else int(up_to_round_idx)
+
+        if from_round_idx > up_to_round_idx:
+            raise ValueError("from_round_idx needs to be smaller than up_to_round_idx")
+        if from_round_idx < 0:
+            raise AssertionError("from_round_idx needs to be between 0 and self.last_gen_round")
+        if up_to_round_idx > self.last_gen_round:
+            warn(f"up_to_round_idx={up_to_round_idx} > {self.last_gen_round}=last_gen_round. "
+                    "no gen_round_filtering is being applied")
                 
-        return self.gen_round <= up_to_round_idx
+        return (from_round_idx <= self.gen_round) & (self.gen_round <= up_to_round_idx)
 
     def rejects(
-        self, include_gen_round: bool = False, up_to_round_idx : Optional[int] = None
+        self, 
+        include_gen_round: bool = False, 
+        from_round_idx: Optional[int] = None, 
+        up_to_round_idx : Optional[int] = None
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """Return feature observations corresponding to rejected applications.
 
@@ -2163,14 +2167,17 @@ class CreditData(Dataset):
                 - If ``include_gen_round=False``: ``features_rejects``  
                 - If ``include_gen_round=True``: ``(features_rejects, gen_round_rejects)``
         """
-        mask_rej_to_get = self._up_to_round_mask(up_to_round_idx) & ~self.accepted
+        mask_rej_to_get = self.round_selection_mask(from_round_idx, up_to_round_idx) & ~self.accepted
 
         if include_gen_round:
             return self.features[mask_rej_to_get], self.gen_round[mask_rej_to_get]
         return self.features[mask_rej_to_get]
 
     def accepts(
-        self, include_gen_round: bool = False, up_to_round_idx : Optional[int] = 0
+        self, 
+        include_gen_round: bool = False, 
+        from_round_idx: Optional[int] = None, 
+        up_to_round_idx : Optional[int] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Return observations corresponding to accepted applications.
 
@@ -2191,7 +2198,7 @@ class CreditData(Dataset):
         if up_to_round_idx is None:
             up_to_round_idx = self.last_gen_round
         
-        mask_acc_to_get = self._up_to_round_mask(up_to_round_idx) & self.accepted
+        mask_acc_to_get = self.round_selection_mask(from_round_idx, up_to_round_idx) & self.accepted
 
         if include_gen_round:
             return (
@@ -2202,7 +2209,10 @@ class CreditData(Dataset):
         return self.features[mask_acc_to_get], self.default_flag[mask_acc_to_get]
 
     def unbiased_obs(
-        self, include_gen_round: bool = False, up_to_round_idx : Optional[int] = None
+        self, 
+        include_gen_round: bool = False, 
+        from_round_idx: Optional[int] = None, 
+        up_to_round_idx : Optional[int] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Return the full dataset without any acceptance-based filtering.
 
@@ -2220,7 +2230,7 @@ class CreditData(Dataset):
                 - If ``include_gen_round=False``: ``(features, default_flag)``
                 - If ``include_gen_round=True``: ``(features, default_flag, gen_round)``
         """
-        gen_round_mask = self._up_to_round_mask(up_to_round_idx)
+        gen_round_mask = self.round_selection_mask(from_round_idx, up_to_round_idx)
         if include_gen_round:
             return self.features[gen_round_mask], self.default_flag[gen_round_mask], self.gen_round[gen_round_mask]
         return self.features[gen_round_mask], self.default_flag[gen_round_mask]
@@ -2228,6 +2238,7 @@ class CreditData(Dataset):
     def to_sample_dataset(
         self,
         retrieve_only_accepted: bool = True,
+        from_round_idx: Optional[int] = None,
         up_to_round_idx : Optional[int] = None
     ) -> CreditDataSample:
         """Create a leakage-safe sample dataset from current observations.
@@ -2250,8 +2261,10 @@ class CreditData(Dataset):
                 observations, suitable for training, evaluation, or splitting.
         """
         return CreditDataSample(
-            self.rejects(include_gen_round=False, up_to_round_idx=up_to_round_idx),
-            *self.accepts(include_gen_round=False, up_to_round_idx=up_to_round_idx),
+            self.rejects(include_gen_round=False, from_round_idx=from_round_idx,
+                         up_to_round_idx=up_to_round_idx),
+            *self.accepts(include_gen_round=False, from_round_idx=from_round_idx,
+                          up_to_round_idx=up_to_round_idx),
             retrieve_only_labeled=retrieve_only_accepted,
         )
 
