@@ -559,7 +559,7 @@ class GaussianMixture:
         # cov_chol: (b, m, k, k)
 
         # Normalize x to (b, n, k)
-        n = x.size(1)
+        n = x.size(-2)
         x = x.expand(self.b, n, k)
         # x is now (b, n, k)
 
