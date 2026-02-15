@@ -607,7 +607,9 @@ if __name__ == "__main__":
 
     data_generator : CreditDataGenerator = default_dgp(
         seed_credit_data_gen=params["initial_seed"],
-        deterministic_weights_for_mixture_sampling = params.pop("deterministic_weights")
+        deterministic_weights_for_mixture_sampling = params.pop("deterministic_weights"),
+        device=device,
+        dtype=dtype
     )
 
     print("Generating initial and holdout population")
