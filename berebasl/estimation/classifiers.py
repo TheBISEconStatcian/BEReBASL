@@ -567,8 +567,9 @@ class TorchLogistic(nn.Module):
         if isinstance(weight_data, ndarray):
             dtype=getattr(torch, str(dtype))
         
-        instance = cls(n_features, n_classes, state_dict.pop("lbfgs_kwargs"), device=device, dtype=dtype, secure_init=True)
+        instance = cls(n_features, n_classes, state_dict["lbfgs_kwargs"], device=device, dtype=dtype, secure_init=True)
 
-        instance.load_from_state_dict(state_dict)
+        filtered_state_dict = {k : v for k,v in state_dict.items() if k!="lbfgs_kwargs"}
+        instance.load_from_state_dict(filtered_state_dict)
 
         return instance
