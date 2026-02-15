@@ -541,8 +541,8 @@ class CreditDataGenerator:
 
     def confusion_probability(
             self,
-            d_lower: float,
-            d_upper: float,
+            band_lower: float,
+            band_upper: float,
             n_samples: int = None
     ) -> Union[float, torch.Tensor]:
         r"""
@@ -584,15 +584,17 @@ class CreditDataGenerator:
         Raises:
             AssertionError: If ``d_lower`` or ``d_upper`` are outside ``(0, 0.5)``.
         """
-        assert 0 < d_lower < 0.5, "d_lower must be in (0, 0.5)"
-        assert 0 < d_upper < 0.5, "d_upper must be in (0, 0.5)"
-
+        if band_lower > band_upper:
+            raise AssertionError("band_lower needs to be lower than band upper")
+        if not ((0 <= band_lower <= 1.0) and (0 <= band_upper <= 1.0)):
+            raise AssertionError("band_lower, band_upper in [0,1] required")
+        
         _, _, log_rho_p_bad, log_rho_p_good = self.mc_simulate(n_samples)
 
         log_marginal  = torch.logaddexp(log_rho_p_bad, log_rho_p_good)  # (n,) or (b, n)
         posterior_bad = (log_rho_p_bad - log_marginal).exp()             # (n,) or (b, n)
 
-        in_band = (posterior_bad >= 0.5 - d_lower) & (posterior_bad <= 0.5 + d_upper)
+        in_band = (band_lower <= posterior_bad) & (posterior_bad <= band_upper)
 
         result = in_band.float().mean(dim=-1)                            # scalar or (b,)
         return result.item() if result.dim() == 0 else result
