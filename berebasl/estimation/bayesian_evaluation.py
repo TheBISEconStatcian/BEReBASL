@@ -5,6 +5,7 @@ import torch
 from berebasl.simulation.credit_data_simulation import CreditDataSample
 from berebasl.estimation.classifiers import Classifier
 from berebasl.utils.masked_ops import masked_batched_trapz
+from berebasl.utils.tensor_validation import assert_tensors
 
 class BayesianMetric:
     # Only implemented for binary classification right now
@@ -160,10 +161,18 @@ def batched_auroc(
     if scores.dtype == torch.bool or torch.is_complex(scores):
         raise ValueError("scores must be a floating point or integer type")
     
+    assert_tensors(scores, targets, tensor_names="scores, targets", 
+                   checks=["same_shape", "same_device"], throw_error=True)
+    
+    
     if mask_valid_scores is None:
-        mask_valid_scores = scores.isnan()
-    if scores.shape != targets.shape:
-        raise ValueError("scores and targets must have the same shape")
+        mask_valid_scores = ~scores.isnan()
+    else:
+        if mask_valid_scores.dtype!=torch.bool:
+            raise ValueError("mask_valid has to be bool")
+        
+        assert_tensors(mask_valid_scores, scores, tensor_names="mask_valid_scores, scores",
+                       checks=["same_shape", "same_device"], throw_error=True)
     
     if targets.dtype == torch.bool:
         targets = targets.to(scores.dtype)
