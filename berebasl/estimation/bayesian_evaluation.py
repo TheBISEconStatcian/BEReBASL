@@ -4,6 +4,7 @@ import torch
 
 from berebasl.simulation.credit_data_simulation import CreditDataSample
 from berebasl.estimation.classifiers import Classifier
+from berebasl.utils.masked_ops import masked_batched_trapz
 
 class BayesianMetric:
     # Only implemented for binary classification right now
@@ -117,9 +118,28 @@ class BayesianMetric:
     
 
 def batched_auroc(
-    preds: torch.Tensor,
+    scores: torch.Tensor,
     targets: torch.Tensor,
+    mask_valid_scores: Optional[torch.Tensor] = None
 ) -> torch.Tensor:
+    """
+    Batched AUROC computed via explicit ROC construction with
+    grouped thresholds and trapezoidal integration with optional
+    masking of valid predictions.
+
+    AUROC is computed independently along the last dimension,
+    treating all leading dimensions as batch dimensions
+    (analoguous to nn.Linear-style semantics).
+
+    Matches torchmetrics.BinaryAUROC semantics.
+
+    Args:
+        scores:   Tensor of shape (*batch_dims, N), prediction scores
+        targets: Tensor of shape (*batch_dims, N), binary labels {0,1}
+
+    Returns:
+        auc: Tensor of shape (*batch_dims), AUROC per mini-dataset
+    """
     """
     Batched AUROC computed via explicit ROC construction with
     grouped thresholds and trapezoidal integration.
@@ -131,57 +151,58 @@ def batched_auroc(
     Matches torchmetrics.BinaryAUROC semantics.
 
     Args:
-        preds:   Tensor of shape (*batch_dims, N), prediction scores
+        scores:   Tensor of shape (*batch_dims, N), prediction scores
         targets: Tensor of shape (*batch_dims, N), binary labels {0,1}
 
     Returns:
         auc: Tensor of shape (*batch_dims), AUROC per mini-dataset
     """
-    if preds.shape != targets.shape:
-        raise ValueError("preds and targets must have the same shape")
+    if scores.dtype == torch.bool or torch.is_complex(scores):
+        raise ValueError("scores must be a floating point or integer type")
+    
+    if mask_valid_scores is None:
+        mask_valid_scores = scores.isnan()
+    if scores.shape != targets.shape:
+        raise ValueError("scores and targets must have the same shape")
+    
+    if targets.dtype == torch.bool:
+        targets = targets.to(scores.dtype)
 
-    *batch_dims, N = preds.shape
-    device = preds.device
+    *batch_dims, N = scores.shape
 
     # Flatten batch dimensions
     B = int(torch.tensor(batch_dims).prod()) if batch_dims else 1
-    preds = preds.reshape(B, N)
+    scores = scores.reshape(B, N)
     targets = targets.reshape(B, N)
 
     # Sort by descending score
-    order = preds.argsort(dim=-1, descending=True)
-    sorted_preds = preds.gather(dim=-1, index=order)
-    sorted_targets = targets.gather(dim=-1, index=order)
+    order = scores.argsort(dim=-1, descending=True) # [B, N]
+    sorted_scores = scores.gather(dim=-1, index=order) # [B, N]
+    sorted_targets = targets.gather(dim=-1, index=order) # [B, N]
+
+    
 
     # Count positives / negatives
-    P = sorted_targets.sum(dim=-1)           # [B]
-    Q = N - P                                # [B]
+    P = sorted_targets.sum(dim=-1, keepdim=True) # [B, 1]
+    Q = N - P                                    # [B, 1]
 
     # Cumulative true / false positives
-    tps = torch.cumsum(sorted_targets, dim=-1)
-    fps = torch.cumsum(1 - sorted_targets, dim=-1)
-
+    tps = torch.cumsum(sorted_targets, dim=-1)     # [B, N]
+    fps = torch.cumsum(1 - sorted_targets, dim=-1) # [B, N]
     # Identify score changes (grouped thresholds)
-    score_change = torch.ones_like(sorted_preds, dtype=torch.bool)
-    score_change[:, 1:] = sorted_preds[:, 1:] != sorted_preds[:, :-1]
-
-    # Select ROC vertices
-    tps = tps[score_change].view(B, -1)
-    fps = fps[score_change].view(B, -1)
-
+    # +1 because of the zero to be concatenated at the beginning
+    score_change = sorted_scores.new_ones((B, N+1), dtype=bool)
+    if N > 1:
+        score_change[:, 2:] = sorted_scores[:, 1:] != sorted_scores[:, :-1] # [B, N-1]
     # Normalize to TPR / FPR
-    tpr = tps / P.unsqueeze(-1)
-    fpr = fps / Q.unsqueeze(-1)
+    tpr = tps / P
+    fpr = fps / Q
 
     # Explicit (0,0) start point
-    zero = torch.zeros(B, 1, device=device)
+    zero = targets.new_zeros((B, 1))
     tpr = torch.cat([zero, tpr], dim=-1)
     fpr = torch.cat([zero, fpr], dim=-1)
 
-    # Trapezoidal integration
-    auc = torch.trapz(tpr, fpr, dim=-1)
+    return masked_batched_trapz(tpr, fpr, mask=score_change)
 
-    # Reshape back to batch dimensions
-    auc = auc.reshape(*batch_dims) if batch_dims else auc[0] # get 0 dim tensor in this case
 
-    return auc
