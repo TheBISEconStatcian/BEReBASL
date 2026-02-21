@@ -1,7 +1,9 @@
 from enum import Enum
 import sys
 from warnings import warn
-from typing import List, Optional, Union
+
+from collections.abc import Iterable
+from typing import Optional, Union
 
 import torch
 
@@ -34,11 +36,14 @@ def same_shape(*tensors) -> bool:
 def assert_tensors(
         *tensors, 
         tensor_names : Optional[str],
-        checks : List[Union[Validations, str]],
+        checks : Iterable[Union[Validations, str]],
         throw_error : bool = True
     ) -> None:
     if len(tensors) == 0:
         return
+    
+    if not isinstance(checks, Iterable):
+        raise RuntimeError("checks was expected to be an iterable")
     
     current_module = sys.modules[__name__]
     
