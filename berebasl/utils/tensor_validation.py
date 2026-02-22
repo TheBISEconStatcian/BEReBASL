@@ -11,10 +11,13 @@ class Validations(Enum):
     same_device = "same_device"
     same_dtype = "same_dtype"
     same_shape = "same_shape"
+    are_tensors = "are_tensors"
 
     def msg_completion(self):
         if self.value[:5] == "same_":
             return "did not have the same " + self.value[5:]
+        if self.value=="are_tensors":
+            return "were not all tensors"
 
 def same_attribute(*tensors, attribute: str):
     try:
@@ -32,6 +35,9 @@ def same_dtype(*tensors) -> bool:
 
 def same_shape(*tensors) -> bool:
     return same_attribute(*tensors, attribute="shape")
+
+def are_tensors(*tensors) -> bool:
+    return all([isinstance(t, torch.Tensor) for t in tensors])
 
 def assert_tensors(
         *tensors, 
