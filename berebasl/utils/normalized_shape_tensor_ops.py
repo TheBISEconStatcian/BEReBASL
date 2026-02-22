@@ -1,14 +1,12 @@
 import torch
 
+from .tensor_validation import assert_tensors
+
 def masked_batched_trapz(y, x, mask):
-    if not (isinstance(y, torch.Tensor) and isinstance(x, torch.Tensor) and isinstance(mask, torch.Tensor)):
-        raise ValueError("x, y and mask have to be tensors")
+    assert_tensors(y, x, mask, tensor_names="y, x, mask",
+                   checks=["are_tensors", "same_device", "same_shape"])
     if not mask.dtype == torch.bool:
         raise ValueError("mask was expected to be boolean")
-    if not (x.device==y.device==mask.device):
-        raise ValueError("x, y and mask have to be on same device")
-    if not (y.shape == x.shape == mask.shape):
-        raise ValueError("y, x and mask expected to have the same shape")
     
     *batch_dims, N = y.shape
 
