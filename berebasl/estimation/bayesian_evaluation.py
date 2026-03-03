@@ -4,7 +4,7 @@ import torch
 
 from berebasl.simulation.credit_data_simulation import CreditDataSample
 from berebasl.estimation.classifiers import Classifier
-from berebasl.utils.masked_ops import masked_batched_trapz
+from berebasl.utils.normalized_shape_tensor_ops import masked_batched_trapz
 from berebasl.utils.tensor_validation import assert_tensors
 
 class BayesianMetric:
