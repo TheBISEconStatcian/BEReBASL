@@ -179,36 +179,31 @@ def batched_auroc(
 
     *batch_dims, N = scores.shape
 
-    # Flatten batch dimensions
-    B = int(torch.tensor(batch_dims).prod()) if batch_dims else 1
-    scores = scores.reshape(B, N)
-    targets = targets.reshape(B, N)
-
     # Sort by descending score
-    order = scores.argsort(dim=-1, descending=True) # [B, N]
-    sorted_scores = scores.gather(dim=-1, index=order) # [B, N]
-    sorted_targets = targets.gather(dim=-1, index=order) # [B, N]
+    order = scores.argsort(dim=-1, descending=True) # [*batch_dims, N]
+    sorted_scores = scores.gather(dim=-1, index=order) # [*batch_dims, N]
+    sorted_targets = targets.gather(dim=-1, index=order) # [*batch_dims, N]
 
     
 
     # Count positives / negatives
-    P = sorted_targets.sum(dim=-1, keepdim=True) # [B, 1]
-    Q = N - P                                    # [B, 1]
+    P = sorted_targets.sum(dim=-1, keepdim=True) # [*batch_dims, 1]
+    Q = N - P                                    # [*batch_dims, 1]
 
     # Cumulative true / false positives
-    tps = torch.cumsum(sorted_targets, dim=-1)     # [B, N]
-    fps = torch.cumsum(1 - sorted_targets, dim=-1) # [B, N]
+    tps = torch.cumsum(sorted_targets, dim=-1)     # [*batch_dims, N]
+    fps = torch.cumsum(1 - sorted_targets, dim=-1) # [*batch_dims, N]
     # Identify score changes (grouped thresholds)
     # +1 because of the zero to be concatenated at the beginning
-    score_change = sorted_scores.new_ones((B, N+1), dtype=bool)
+    score_change = sorted_scores.new_ones((*batch_dims, N+1), dtype=bool)
     if N > 1:
-        score_change[:, 2:] = sorted_scores[:, 1:] != sorted_scores[:, :-1] # [B, N-1]
+        score_change[..., 2:] = sorted_scores[..., 1:] != sorted_scores[..., :-1] # [*batch_dims, N-1]
     # Normalize to TPR / FPR
     tpr = tps / P
     fpr = fps / Q
 
     # Explicit (0,0) start point
-    zero = targets.new_zeros((B, 1))
+    zero = tps.new_zeros((*batch_dims, 1))
     tpr = torch.cat([zero, tpr], dim=-1)
     fpr = torch.cat([zero, fpr], dim=-1)
 
