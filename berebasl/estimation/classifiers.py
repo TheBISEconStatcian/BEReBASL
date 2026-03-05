@@ -173,7 +173,8 @@ class TorchLogistic(nn.Module):
             lbfgs_kwargs = {
                 'lr' : 1,
                 'max_iter' :  100,
-                'tolerance_grad' :  torch.finfo(torch.get_default_dtype()).eps * 64,
+                'tolerance_grad' :  torch.finfo(torch.get_default_dtype()).eps ** (2/3),
+                'tolerance_change': torch.finfo(torch.get_default_dtype()).eps ** (7/8),
                 'history_size' : 50,
                 'line_search_fn' :  'strong_wolfe'
             }
