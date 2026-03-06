@@ -121,7 +121,7 @@ class BayesianMetric:
 def batched_auroc(
     scores: torch.Tensor,
     targets: torch.Tensor,
-    mask_valid_scores: Optional[torch.Tensor] = None
+    mask_valid: Optional[torch.Tensor] = None
 ) -> torch.Tensor:
     """
     Batched AUROC computed via explicit ROC construction with
@@ -165,13 +165,13 @@ def batched_auroc(
                    checks=["same_shape", "same_device"], throw_error=True)
     
     
-    if mask_valid_scores is None:
-        mask_valid_scores = ~scores.isnan()
+    if mask_valid is None:
+        mask_valid = ~scores.isnan()
     else:
-        if mask_valid_scores.dtype!=torch.bool:
+        if mask_valid.dtype!=torch.bool:
             raise ValueError("mask_valid has to be bool")
         
-        assert_tensors(mask_valid_scores, scores, tensor_names="mask_valid_scores, scores",
+        assert_tensors(mask_valid, scores, tensor_names="mask_valid_scores, scores",
                        checks=["same_shape", "same_device"], throw_error=True)
     
     if targets.dtype == torch.bool:
