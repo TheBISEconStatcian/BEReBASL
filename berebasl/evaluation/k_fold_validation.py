@@ -194,7 +194,8 @@ def k_fold_evaluate_metric(
         min_bads: int,
         classif: TorchLogistic,
         batched_metric : callable,
-        metrics_mask_name: str = "mask_valid"
+        metrics_mask_name: str = "mask_valid",
+        further_metrics_kwargs: dict = {}
     ):
     if not isinstance(feats, torch.Tensor) and feats.dim() == 2:
         raise AssertionError(
@@ -202,6 +203,12 @@ def k_fold_evaluate_metric(
             "Please do a loop over batch dimensions for higher "
             "dimensional feats and "
         )
+
+    if metrics_mask_name in further_metrics_kwargs:
+        raise RuntimeError(
+            "further_metric_kwargs should not be used to set a mask"
+        )
+    
     feats_cv, labels_cv, mask_valid_cv = k_fold_cv_normalized_split(
         feats, 
         labels,
@@ -216,5 +223,5 @@ def k_fold_evaluate_metric(
         dim=0
     )
     
-    return batched_metric(preds_bad, labels, **{metrics_mask_name : mask_valid_cv})
+    return batched_metric(preds_bad, labels, **{metrics_mask_name : mask_valid_cv}, **further_metrics_kwargs)
 
