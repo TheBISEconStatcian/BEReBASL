@@ -180,18 +180,21 @@ def train_fold(
     classif.eval()
     with torch.no_grad():
         mask_validation = mask_valid_cv[k] # [N]
-        pred_probs_bad_k = classif.predict_proba(feats_cv[k][mask_validation])[:, 1]
-        normalized_probs = pred_probs_bad_k.new_full()
-        labels_bad_k = labels_cv[k].clone().to(pred_probs_bad_k.dtype)
-        return torch.stack([pred_probs_bad_k, labels_bad_k], dim = 0)
+        feats_validation = feats_cv[k]
+        pred_probs_bad_k = classif.predict_proba(feats_validation[mask_validation].reshape(-1, F))[:, 1]
+        normalized_probs = torch.full_like(feats_validation, fill_value=float('nan'), dtype=pred_probs_bad_k.dtype)
+        normalized_probs[mask_validation] = pred_probs_bad_k
+        return normalized_probs
 
-def k_fold_evaluate_au_roc(
+def k_fold_evaluate_metric(
         feats: torch.Tensor, 
         labels: torch.Tensor,
         rng: torch.Generator,
         k_folds: int,
         min_bads: int,
-        classif: TorchLogistic
+        classif: TorchLogistic,
+        batched_metric : callable,
+        metrics_mask_name: str = "mask_valid"
     ):
     if not isinstance(feats, torch.Tensor) and feats.dim() == 2:
         raise AssertionError(
@@ -207,13 +210,11 @@ def k_fold_evaluate_au_roc(
         min_bad=min_bads
     )
 
-    preds_and_labels = torch.stack(
+    preds_bad = torch.stack(
         [train_fold(feats_cv, labels_cv, mask_valid_cv, classif, k) 
          for k in range(k_folds)],
-        dim=1
+        dim=0
     )
-    preds_bad = preds_and_labels[0]
-    labels = preds_and_labels[1]
-
-    return batched_auroc(preds_bad, labels)
+    
+    return batched_metric(preds_bad, labels, **{metrics_mask_name : mask_valid_cv})
 
