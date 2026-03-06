@@ -224,4 +224,3 @@ def k_fold_evaluate_metric(
     )
     
     return batched_metric(preds_bad, labels, **{metrics_mask_name : mask_valid_cv}, **further_metrics_kwargs)
-
