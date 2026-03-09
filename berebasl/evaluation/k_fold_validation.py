@@ -14,6 +14,7 @@ def k_fold_cv_normalized_split(
     k: int = 4,
     nan_lbls: Union[float, int] = float('nan'),
     nan_feats: Union[float, int] = float('nan'),
+    min_bads: int = 4,
     safety_checks: bool = True
 ):
     """
@@ -53,13 +54,13 @@ def k_fold_cv_normalized_split(
                        >= 2. Defaults to True.
 
     Returns:
-        cv_feats: Float tensor of shape ``(*batch_dims, k, fold_cols, F)``, where
-                  ``fold_cols = ceil(max_N_valid / k)`` and ``max_N_valid`` is the
+        cv_feats: Float tensor of shape ``(*batch_dims, k, fold_rows, F)``, where
+                  ``fold_rows = ceil(max_N_valid / k)`` and ``max_N_valid`` is the
                   maximum count_valids across the batch. Invalid/remainder slots
                   are filled with nan_feats.
-        cv_lbls:  Tensor of shape ``(*batch_dims, k, fold_cols)``. Invalid/remainder
+        cv_lbls:  Tensor of shape ``(*batch_dims, k, fold_rows)``. Invalid/remainder
                   slots are filled with nan_lbls.
-        cv_mask:  Bool tensor of shape ``(*batch_dims, k, fold_cols)``. True where
+        cv_mask:  Bool tensor of shape ``(*batch_dims, k, fold_rows)``. True where
                   the corresponding entry in cv_feats/cv_lbls is a real valid
                   observation, False for invalid or remainder-padding slots.
 
@@ -71,7 +72,7 @@ def k_fold_cv_normalized_split(
         - The fold assignment is a random permutation of the valid indices for
           each batch element independently.
         - Remainder slots (from ceil rounding) are interleaved across folds via
-          a (fold_cols, k) reshape + transpose, ensuring the imbalance is at
+          a (fold_rows, k) reshape + transpose, ensuring the imbalance is at
           most 1 valid observation between any two folds for any batch element.
         - The index-0 padding trick is used so that all invalid/remainder slots
           index into a prepended nan/False row, keeping all gather ops fully
@@ -119,8 +120,8 @@ def k_fold_cv_normalized_split(
     max_N = count_valids.max().item()
 
     # Fold size: ceil(max_N / k) columns per fold
-    fold_cols = (max_N + k - 1) // k  # = ceil(max_N / k)
-    total_slots = k * fold_cols        # >= max_N
+    fold_rows = (max_N + k - 1) // k  # = ceil(max_N / k)
+    total_slots = k * fold_rows        # >= max_N
 
     # --- Pad random_orderings to total_slots with 0 (nan index) ---
     # Shape: (*batch_dims, total_slots)
@@ -138,21 +139,21 @@ def k_fold_cv_normalized_split(
     beyond_valid = slot_idx >= count_valids.unsqueeze(-1)
     padded_orderings[beyond_valid] = 0
 
-    # --- Reshape into (k, fold_cols) folds, interleaving remainder ---
-    # reshape as (fold_cols, k) then transpose so remainder is spread across folds
-    cv_idx = padded_orderings.reshape(*batch_dims, fold_cols, k).transpose(-2, -1)
-    # shape: (*batch_dims, k, fold_cols)
+    # --- Reshape into (k, fold_rows) folds, interleaving remainder ---
+    # reshape as (fold_rows, k) then transpose so remainder is spread across folds
+    cv_idx = padded_orderings.reshape(*batch_dims, fold_rows, k).transpose(-2, -1)
+    # shape: (*batch_dims, k, fold_rows)
 
     # --- Gather features and labels ---
-    # cv_idx: (*batch_dims, k, fold_cols) -> index into dim -2 of nan_padded_feats
-    # features gather: (*batch_dims, k, fold_cols, F)
-    cv_idx_feats = cv_idx.unsqueeze(-1).expand(*batch_dims, k, fold_cols, F)
+    # cv_idx: (*batch_dims, k, fold_rows) -> index into dim -2 of nan_padded_feats
+    # features gather: (*batch_dims, k, fold_rows, F)
+    cv_idx_feats = cv_idx.unsqueeze(-1).expand(*batch_dims, k, fold_rows, F)
     cv_feats = nan_padded_feats.unsqueeze(-3).expand(*batch_dims, k, N+1, F).gather(-2, cv_idx_feats)
 
-    # labels gather: (*batch_dims, k, fold_cols)
+    # labels gather: (*batch_dims, k, fold_rows)
     cv_lbls = nan_padded_labels.unsqueeze(-2).expand(*batch_dims, k, N+1).gather(-1, cv_idx)
 
-    # Mask gather: (*batch_dims, k, fold_cols)
+    # Mask gather: (*batch_dims, k, fold_rows)
     cv_mask = false_padded_mask.unsqueeze(-2).expand(*batch_dims, k, N+1).gather(-1, cv_idx)
 
     return cv_feats, cv_lbls, cv_mask
