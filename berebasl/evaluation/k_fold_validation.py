@@ -1,8 +1,10 @@
+from math import isnan
+
 import torch
 
 from typing import Optional, Union
 
-from berebasl.estimation.classifiers import TorchLogistic
+from berebasl.estimation.classifiers import Classifier
 
 def k_fold_cv_normalized_split(
     features: torch.Tensor,  # (*batch_dims, N, F)
@@ -155,11 +157,11 @@ def k_fold_cv_normalized_split(
 
     return cv_feats, cv_lbls, cv_mask
 
-def train_fold(
+def train_predict_classifier_fold(
         feats_cv: torch.Tensor, 
         labels_cv: torch.Tensor, 
         mask_valid_cv: torch.Tensor, 
-        classif: TorchLogistic, 
+        classif: Classifier, 
         k: int
     ):
     if not isinstance(feats_cv, torch.Tensor) and feats_cv.dim() == 3:
@@ -172,27 +174,27 @@ def train_fold(
     mask_train = mask_valid_cv.clone() # [B, N_m]
     mask_train[k] &= False
     classif.reset_parameters_to_initial()
-    classif.train()
     classif.fit(
         feats_cv[mask_train].reshape(-1, F),
         labels_cv[mask_train].flatten(),
     )
-    classif.eval()
+    if callable(getattr(classif, "eval", None)):
+        classif.eval()
     with torch.no_grad():
         mask_validation = mask_valid_cv[k] # [N]
         feats_validation = feats_cv[k]
         pred_probs_bad_k = classif.predict_proba(feats_validation[mask_validation].reshape(-1, F))[:, 1]
-        normalized_probs = torch.full_like(feats_validation, fill_value=float('nan'), dtype=pred_probs_bad_k.dtype)
+        normalized_probs = torch.full_like(mask_validation, fill_value=float('nan'), dtype=pred_probs_bad_k.dtype)
         normalized_probs[mask_validation] = pred_probs_bad_k
         return normalized_probs
 
-def k_fold_evaluate_metric(
+def k_fold_evaluate_classifier_on_metric(
         feats: torch.Tensor, 
         labels: torch.Tensor,
         rng: torch.Generator,
         k_folds: int,
         min_bads: int,
-        classif: TorchLogistic,
+        classif: Classifier,
         batched_metric : callable,
         metrics_mask_name: str = "mask_valid",
         further_metrics_kwargs: dict = {}
@@ -218,7 +220,7 @@ def k_fold_evaluate_metric(
     )
 
     preds_bad = torch.stack(
-        [train_fold(feats_cv, labels_cv, mask_valid_cv, classif, k) 
+        [train_predict_classifier_fold(feats_cv, labels_cv, mask_valid_cv, classif, k) 
          for k in range(k_folds)],
         dim=0
     )
