@@ -1,4 +1,5 @@
 from math import isnan
+from warnings import warn
 
 import torch
 
@@ -82,6 +83,24 @@ def k_fold_cv_normalized_split(
     """
     if mask_valid is None:
         mask_valid = ~(labels.isnan() if isnan(nan_lbls) else labels == nan_lbls)
+
+    min_bads_given_per_fold = torch.all(labels.sum(dim=-1) >= (min_bads * k))
+    if safety_checks:
+        inputs_ok = (
+            (type(features) is type(labels) is type(mask_valid) is torch.Tensor) and
+            torch.is_floating_point(features) and
+            (features.dim() >= 2) and
+            (features.dim()-1 == labels.dim() == mask_valid.dim()) and
+            (features.shape[:-1] == mask_valid.shape == labels.shape) and
+            (features.device==mask_valid.device==labels.device)
+        )
+        if not inputs_ok:
+            raise AssertionError(
+                "features, labels and mask_valid (if not None) have to be torch.Tensor"
+                "with the same labels.dim() leading dimensions and be on the same device."
+            )
+        if not min_bads_given_per_fold:
+            warn(f"There are not enough bads in the data to achieve {min_bads} in each fold")
     if safety_checks and not (
         (type(features) is type(labels) is type(mask_valid) is torch.Tensor) and
         torch.is_floating_point(features) and
@@ -146,12 +165,26 @@ def k_fold_cv_normalized_split(
 
     # --- Gather features and labels ---
     # cv_idx: (*batch_dims, k, fold_rows) -> index into dim -2 of nan_padded_feats
+    # labels gather: (*batch_dims, k, fold_rows)
+    cv_lbls = nan_padded_labels.unsqueeze(-2).expand(*batch_dims, k, N+1).gather(-1, cv_idx)
+
+    if min_bads_given_per_fold and torch.any(cv_lbls.sum(dim=-1) < min_bads):
+        return k_fold_cv_normalized_split(
+            features,
+            labels,
+            mask_valid,
+            rng,
+            k,
+            nan_lbls,
+            nan_feats,
+            min_bads,
+            safety_checks = False
+        )
+
     # features gather: (*batch_dims, k, fold_rows, F)
     cv_idx_feats = cv_idx.unsqueeze(-1).expand(*batch_dims, k, fold_rows, F)
     cv_feats = nan_padded_feats.unsqueeze(-3).expand(*batch_dims, k, N+1, F).gather(-2, cv_idx_feats)
 
-    # labels gather: (*batch_dims, k, fold_rows)
-    cv_lbls = nan_padded_labels.unsqueeze(-2).expand(*batch_dims, k, N+1).gather(-1, cv_idx)
 
     # Mask gather: (*batch_dims, k, fold_rows)
     cv_mask = false_padded_mask.unsqueeze(-2).expand(*batch_dims, k, N+1).gather(-1, cv_idx)
