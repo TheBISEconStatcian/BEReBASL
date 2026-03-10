@@ -11,7 +11,8 @@ from sklearn.ensemble import IsolationForest
 import torch
 
 from berebasl.estimation.basl import BASLPartialUnbiaser
-from berebasl.estimation.bayesian_evaluation import BayesianMetric, batched_auroc
+from berebasl.evaluation.batched_metrics import batched_auroc
+from berebasl.evaluation.bayesian_evaluation import BayesianMetric
 from berebasl.simulation.credit_data_simulation import CreditDataGenerator, CreditData, CreditDataSample
 from berebasl.estimation.classifiers import Classifier, TorchLogistic
 
