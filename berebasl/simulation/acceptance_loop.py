@@ -5,7 +5,7 @@ import os
 import time
 from warnings import warn
 
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from sklearn.ensemble import IsolationForest
 import torch
@@ -547,11 +547,11 @@ def default_dgp(seed_credit_data_gen: int,
         deterministic_weights_for_mixture_sampling = deterministic_weights_for_mixture_sampling
     )
 
-def default_classifiers(n_features: int) -> Tuple[BASLPartialUnbiaser, TorchLogistic, TorchLogistic]:
-    strong_learner = TorchLogistic(n_features, seed_for_weight_init=1807)
+def default_classifiers(n_features: int, device: Optional[torch.device]=None) -> Tuple[BASLPartialUnbiaser, TorchLogistic, TorchLogistic]:
+    strong_learner = TorchLogistic(n_features, seed_for_weight_init=1807, device=device)
     basl_unbiaser = BASLPartialUnbiaser(
         filtering_quantiles={"lower" : 0.01, "upper" : 0.99},
-        weak_learner=TorchLogistic(n_features, seed_for_weight_init=187),
+        weak_learner=TorchLogistic(n_features, seed_for_weight_init=187, device=device),
         strong_learner=strong_learner,
         holdout_percent=0.1,
         sampling_percent=0.8,
@@ -565,12 +565,12 @@ def default_classifiers(n_features: int) -> Tuple[BASLPartialUnbiaser, TorchLogi
             max_iterations=1e5,
             epsilon=1e-5,
             metric = batched_auroc,
-            device=credit_data.device
+            device=device
         )
     )
 
-    classifier_accepts = TorchLogistic(n_features, seed_for_weight_init=781)
-    classifier_oracle = TorchLogistic(n_features, seed_for_weight_init=10807)
+    classifier_accepts = TorchLogistic(n_features, seed_for_weight_init=781, device=device)
+    classifier_oracle = TorchLogistic(n_features, seed_for_weight_init=10807, device=device)
 
     return basl_unbiaser, classifier_accepts, classifier_oracle
 
