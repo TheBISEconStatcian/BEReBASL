@@ -250,7 +250,7 @@ def k_fold_evaluate_classifier_on_metric(
         labels,
         rng=rng,
         k=k_folds,
-        min_bad=min_bads
+        min_bads=min_bads
     )
 
     preds_bad = torch.stack(
