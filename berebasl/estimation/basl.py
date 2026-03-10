@@ -2,9 +2,9 @@ from sklearn.ensemble import IsolationForest
 import numpy as np
 import torch
 
-from typing import List, Literal, Optional, Tuple, Union
+from typing import Literal, Optional, Tuple, Union
 
-from berebasl.estimation.bayesian_evaluation import BayesianMetric
+from berebasl.evaluation.bayesian_evaluation import BayesianMetric
 from berebasl.estimation.classifiers import Classifier
 from berebasl.simulation.credit_data_simulation import CreditDataSample
 
