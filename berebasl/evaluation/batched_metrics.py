@@ -45,6 +45,16 @@ def batched_auroc(
             Tensor of shape ``(*batch_dims,)`` containing the AUROC for each
             mini-dataset along dimension ``dim``.
 
+    Raises:
+        IndexError:
+            If ``dim`` is not a valid dimension index for ``scores``.
+        AssertionError:
+            If ``scores`` and ``targets`` (or ``mask_valid``) do not have
+            matching shapes or devices, as checked by ``assert_tensors``.
+        ValueError:
+            If ``scores`` has an unsupported dtype, or if ``mask_valid`` is
+            provided but is not boolean.
+
     Example:
         The batched AUROC matches ``torchmetrics.BinaryAUROC`` when applied
         per batch element:
@@ -78,7 +88,7 @@ def batched_auroc(
         raise ValueError("scores must be a floating point or integer type")
     scores_ndim = scores.dim()
     if dim not in range(-scores_ndim, scores_ndim):
-        raise AssertionError("dim has to be valid w. r. t. the amount of dims of scores")
+        raise IndexError("dim has to be valid w. r. t. the amount of dims of scores")
     
     assert_tensors(scores, targets, tensor_names="scores, targets", 
                    checks=["same_shape", "same_device"], throw_error=True)
