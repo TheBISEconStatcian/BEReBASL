@@ -246,7 +246,7 @@ def generate_initial_and_holdout_population(
     holdout_features, holdout_flag = data_gen.sample(n=holdout_sample)
     holdout_data = CreditData(
         holdout_features, holdout_flag, 
-        accepted_initial=torch.ones(holdout_flag.shape, dtype=torch.bool) # All are "accepted"
+        accepted_initial=torch.ones_like(holdout_flag, dtype=torch.bool) # All are "accepted"
     )
 
     return data_gen, credit_data, holdout_data
