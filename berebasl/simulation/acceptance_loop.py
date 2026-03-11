@@ -624,7 +624,8 @@ if __name__ == "__main__":
 
     print("Defining classifiers")
     # BASL related classes
-    basl_unbiaser, classifier_accepts, classifier_oracle = default_classifiers(n_features=data_generator.features_count)
+    basl_unbiaser, classifier_accepts, classifier_oracle = default_classifiers(n_features=data_generator.features_count,
+                                                                               device = data_generator.device)
 
     print("\n\n************Starting acceptance loop********************\n\n")
     params["base_seed"] = params.pop("initial_seed")
