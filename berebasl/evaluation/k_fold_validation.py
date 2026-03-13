@@ -259,4 +259,4 @@ def k_fold_evaluate_classifier_on_metric(
         dim=0
     )
     
-    return batched_metric(preds_bad, labels, **{metrics_mask_name : mask_valid_cv}, **further_metrics_kwargs)
+    return batched_metric(preds_bad, labels_cv, **{metrics_mask_name : mask_valid_cv}, **further_metrics_kwargs)
