@@ -9,6 +9,8 @@ import torch.optim as optim
 
 from typing import Callable, Dict, Optional, Union
 
+from berebasl.utils.tensor_validation import assert_tensors
+
 def function_has_expected_signature(fun : Callable, count_params : int):
     sig = inspect.signature(fun)
 
@@ -574,3 +576,795 @@ class TorchLogistic(nn.Module):
         instance.load_from_state_dict(filtered_state_dict)
 
         return instance
+
+
+
+class BatchedLogistic(nn.Module):
+    r"""
+    Batched binary logistic regression fitted via exact Newton-Raphson iterations,
+    equivalent to Iteratively Re-weighted Least Squares (IRLS) for the logit link
+    along each batch of Observations.
+
+    The Newton step at iteration :math:`t` for a single batch element is
+
+    .. math::
+
+        H_t &= \tilde{X}^{\top} W_t \tilde{X} + \lambda I, \quad
+        W_t = \operatorname{diag}\!\bigl(\hat{p}_t(1-\hat{p}_t)\bigr), \\
+        s_t &= \tilde{X}^{\top}(y - \hat{p}_t), \\
+        \Delta\beta_t &= H_t^{-1} s_t
+            \quad\text{(via Cholesky solve, never explicit inversion)},
+
+    where :math:`\tilde{X}` is the design matrix, optionally augmented with a
+    leading column of ones when ``fit_intercept=True``, and :math:`\lambda I` is a
+    minimal Tikhonov regularisation term (``tikhonov = eps``) that acts as a
+    numerical floor on the eigenvalues of :math:`H_t` without meaningfully biasing
+    the MLE.  It is purely a numerical guard, not a statistical penalty.
+
+    Convergence is declared independently per batch element once **both** criteria
+    are satisfied:
+
+    * :math:`\|s_t\|_\infty < \texttt{tol\_score}` — no score component is still
+      meaningfully non-zero.
+    * :math:`\|\Delta\beta_t\|_\infty < \texttt{tol\_step}` — parameters have
+      stopped moving.  This guards against the ill-conditioned case where a small
+      score norm can coexist with large parameter steps.
+
+    Once a batch element converges it is **frozen**: its update is masked to zero
+    for all subsequent iterations (early stopping per element).  An external boolean
+    mask can additionally exclude selected elements from training from iteration zero.
+
+    
+
+    Attributes
+    ----------
+    beta : torch.Tensor
+        Coefficient buffer of shape ``[*batch_shape, p_aug, 1]``, where
+        ``p_aug = n_features + 1`` when ``fit_intercept=True`` and ``n_features``
+        otherwise.  When ``fit_intercept=True`` the first row of every coefficient
+        vector corresponds to the intercept (consistent with the statistics
+        convention of placing the constant in the first column of the design
+        matrix).
+    batch_shape : torch.Size
+    n_features : int
+    fit_intercept : bool
+    min_iter : int
+    max_iter : int
+    tol_score : float
+    tol_step : float
+
+    Methods
+    -------
+    fit(X, y, mask=None)
+        Fit all batch elements simultaneously via batched Newton-Raphson.
+    forward(X)
+        Compute raw logits for all batch elements.
+    predict_proba(X)
+        Return ``[p(y=0), p(y=1)]`` probabilities for all batch elements.
+    predict(X)
+        Return binary class predictions for all batch elements.
+    decision_function(X)
+        Alias for :meth:`forward`.
+    reset_beta()
+        Re-initialise ``beta`` to zero in-place.
+    to_state_dict()
+        Lightweight, device-agnostic parameter snapshot.
+    load_from_state_dict(state_dict)
+        Restore parameters from a snapshot produced by :meth:`to_state_dict`.
+    instantiate_from_state_dict(state_dict, device=None)
+        Class method: construct a new instance from a snapshot.
+    from_torch_logistic(torch_logistic, batch_shape, ...)
+        Static method: construct a :class:`BatchedLogistic` from a fitted
+        :class:`TorchLogistic` instance, inheriting its structural configuration.
+
+    Notes
+    -----
+    **Why ``bmm`` throughout?**
+    Every matrix product in :meth:`fit` and :meth:`forward` uses ``torch.bmm``
+    over the explicitly flattened batch dimension so that each batch element's
+    computation is provably independent.  There is no broadcasting across batch
+    elements — ``beta`` has shape ``[*batch_shape, p_aug, 1]`` and is updated
+    element-wise via in-place ``add_``.
+
+    **Why Cholesky instead of explicit inversion?**
+    For any SPD matrix :math:`H`, forming :math:`H^{-1}` explicitly squares the
+    condition number :math:`\kappa(H)`.  Cholesky factorisation followed by
+    triangular solves propagates only :math:`\kappa(H)`, which is critical for
+    folds where limited data or near-multicollinearity makes :math:`H` borderline.
+    This is the same principle as computing the Mahalanobis distance via a
+    triangular solve rather than an explicit inverse of the covariance matrix.
+
+    **Why zero initialisation?**
+    Unlike first-order methods (SGD, Adam), Newton's convergence rate is
+    independent of initialisation once inside the quadratic convergence basin —
+    which for strictly concave objectives like the logistic log-likelihood is
+    essentially the entire parameter space.  He/Xavier initialisation buys nothing
+    here because Newton self-corrects via curvature from the very first step.
+
+    **Statistical interpretation**
+    Because this implements exact Newton on the log-likelihood, the fixed point is
+    the MLE.  The Cholesky factor :math:`L` of the final :math:`H` satisfies
+    :math:`\operatorname{Var}(\hat\beta) = H^{-1}`, so asymptotic standard errors
+    are available from :math:`L` via ``torch.cholesky_inverse`` without ever
+    forming :math:`H^{-1}` explicitly.
+    """
+
+    def __init__(
+        self,
+        n_features: int,
+        batch_shape: Union[torch.Size, Tuple[int, ...]],
+        fit_intercept: bool = True,
+        min_iter: int = 3,
+        max_iter: int = 100,
+        tol_score: Optional[float] = None,
+        tol_step: Optional[float] = None,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
+    ):
+        """
+        Initialize the class
+
+        Parameters
+        ----------
+        n_features : int
+            Number of input features (excluding the implicit intercept if any).
+        batch_shape : torch.Size or tuple of int
+            Shape of the leading batch dimensions, e.g. ``(k,)`` for k-fold CV or
+            ``(B1, B2, k)`` for a nested grid.  Each element of the batch maintains
+            a fully independent coefficient vector.
+        fit_intercept : bool, default=True
+            If ``True``, a column of ones is prepended to the design matrix so that
+            ``beta`` contains an intercept term.  Mirrors the ``fit_intercept``
+            convention of scikit-learn and the ``bias`` convention of
+            ``torch.nn.Linear``.
+        min_iter : int, default=3
+            Minimum number of Newton iterations performed regardless of convergence.
+            Prevents premature termination near the (trivial) zero initialisation.
+        max_iter : int, default=100
+            Maximum number of Newton iterations per :meth:`fit` call.
+        tol_score : float, optional
+            Convergence tolerance for the :math:`L^\infty` score norm.  Defaults to
+            ``eps ** (2/3)`` of the working dtype, mirroring ``tolerance_grad`` in
+            :class:`TorchLogistic`.
+        tol_step : float, optional
+            Convergence tolerance for the :math:`L^\infty` step norm.  Defaults to
+            ``eps ** (7/8)`` of the working dtype, mirroring ``tolerance_change`` in
+            :class:`TorchLogistic`.
+        device : torch.device, optional
+            Device on which all tensors are allocated.
+        dtype : torch.dtype, optional
+            Floating-point dtype.  Defaults to ``torch.get_default_dtype()``.
+        """
+        super().__init__()
+
+        self.n_features    = int(n_features)
+        self.batch_shape   = torch.Size(batch_shape)
+        self.fit_intercept = bool(fit_intercept)
+        self.min_iter      = int(min_iter)
+        self.max_iter      = int(max_iter)
+
+        _dtype = dtype if dtype is not None else torch.get_default_dtype()
+        _eps   = torch.finfo(_dtype).eps
+
+        self.tol_score = float(tol_score) if tol_score is not None else float(_eps ** (2 / 3))
+        self.tol_step  = float(tol_step)  if tol_step  is not None else float(_eps ** (7 / 8))
+        self._tikhonov = float(_eps)
+
+        # p_aug: number of rows in beta per batch element.
+        # With fit_intercept the design matrix is [1 | X] (intercept first,
+        # following the statistics convention), so beta[..., 0, :] is the intercept.
+        self._p_aug = self.n_features + 1 if self.fit_intercept else self.n_features
+
+        beta_shape = self.batch_shape + (self._p_aug, 1)
+        self.register_buffer(
+            "beta",
+            torch.zeros(beta_shape, dtype=_dtype, device=device),
+        )
+
+        # _augment is resolved once at init, mirroring the logit_to_probs
+        # pattern in TorchLogistic, to avoid branching at call time.
+        if self.fit_intercept:
+            self._augment: Callable[[torch.Tensor], torch.Tensor] = self._prepend_ones
+        else:
+            self._augment = lambda X: X
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _prepend_ones(X: torch.Tensor) -> torch.Tensor:
+        r"""
+        Prepend a column of ones to ``X`` to absorb the intercept into ``beta``.
+
+        Placing the constant in the **first** column follows the statistics
+        convention (e.g. as in R's model matrices or classical GLM textbooks),
+        so ``beta[..., 0, :]`` always corresponds to the intercept term.
+
+        Parameters
+        ----------
+        X : torch.Tensor
+            Shape ``[*batch_shape, N, n_features]``.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``[*batch_shape, N, n_features + 1]`` with a leading ones column.
+        """
+        ones = torch.ones(X.shape[:-1] + (1,), dtype=X.dtype, device=X.device)
+        return torch.cat([ones, X], dim=-1)    # [..., N, p_aug], ones first
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
+
+    @property
+    def device(self) -> torch.device:
+        r"""
+        Device on which ``beta`` - the only internal tensor - resides.
+
+        Returns
+        -------
+        torch.device
+        """
+        return self.beta.device
+
+    # ------------------------------------------------------------------
+    # Forward / prediction
+    # ------------------------------------------------------------------
+
+    def validate_inputs(self, feats: torch.Tensor, lbls: Optional[torch.Tensor]):
+        if lbls is not None:
+            assert_tensors(
+                feats, lbls, tensor_names="feats, lbls",
+                checks=["are_tensors", "same_device"]
+            )
+            if feats.shape[:-1] != lbls.shape:
+                raise AssertionError(
+                    "feats and lbls do not have the right dimensions"
+            )
+        assert_tensors(
+            feats, self.betas, tensor_names="feats, betas",
+            checks=["same_dtype", "same_device"]
+        )
+        if feats.dim() < self.betas.dim():
+            raise AssertionError(
+                "feats does not have enough dimensions"
+            )
+        
+        if feats.size(-1) != self.betas.size(-2):
+            raise AssertionError("feats has the wrong amount of features")
+        
+        middle_dims_feats_as_tensor = torch.tensor(feats.shape[-self.betas.dim():-2])
+        
+        middle_feats_dims_ok = (
+            (middle_dims_feats_as_tensor == torch.tensor(self.betas.shape[:-2])) |
+            middle_dims_feats_as_tensor == 1
+        )
+        
+        if not torch.all(middle_feats_dims_ok):
+            raise AssertionError("Wrong dimensions")
+        
+    def handle_shapes(self, feats: torch.Tensor, lbls: Optional[torch.Tensor]):
+        extra_batch_dims_feats = feats.shape[:-betas.dim()]
+        feats = feats.expand(*extra_batch_dims_feats, *betas.shape[:-2], *feats.shape[-2:])
+        lbls = lbls.expand(*extra_batch_dims_feats, *betas.shape[:-2], feats.size(-2))
+        betas = betas.expand(*extra_batch_dims_feats, *betas.shape)
+
+        feats = feats.view(-1, feats.shape[-2:])
+        lbls = feats.view(-1, feats.size(-2), 1)
+        betas = betas.view(-1, betas.shape[-2:])
+
+        return feats, lbls, betas, extra_batch_dims_feats
+
+    def forward(
+            self, 
+            X: torch.Tensor, 
+            betas_reshaped: Optional[torch.Tensor], 
+            extra_batch_dims_feats: Optional[torch.Size]
+        ) -> torch.Tensor:
+        r"""
+        Compute raw logits for all batch elements.
+
+        Parameters
+        ----------
+        X : torch.Tensor
+            Shape ``[*batch_shape, N, n_features]``.
+
+        Returns
+        -------
+        torch.Tensor
+            Logits of shape ``[*batch_shape, N]``.
+
+        Notes
+        -----
+        The logit for observation :math:`i` in batch element :math:`b` is
+
+        .. math::
+
+            z_{b,i} = \tilde{x}_{b,i}^{\top} \beta_b,
+
+        where :math:`\tilde{x}_{b,i}` includes the prepended one when
+        ``fit_intercept=True``.  The computation uses ``torch.bmm`` over the
+        flattened batch dimension so that independence across batch elements is
+        explicit and verifiable.
+        """
+        if (betas_reshaped is None) ^ (extra_batch_dims_feats is None):
+            raise RuntimeError("Either pass none of betas_reshaped and extra_batch_dims or pass both")
+        X_aug = self._augment(X)               # [..., N, p_aug]
+
+        # Flatten all leading batch dims into one axis for bmm.
+        B     = self.beta.shape[:-2].numel()
+        N     = X_aug.shape[-2]
+
+        X_flat    = X_aug.reshape(B, N, self._p_aug)       # [B, N, p_aug]
+        beta_flat = self.beta.reshape(B, self._p_aug, 1)   # [B, p_aug, 1]
+
+        logits_flat = torch.bmm(X_flat, beta_flat)         # [B, N, 1]
+        return logits_flat.reshape(self.batch_shape + (N,))  # [..., N]
+
+    def predict_proba(self, X: torch.Tensor) -> torch.Tensor:
+        r"""
+        Compute binary class probabilities for all batch elements.
+
+        Parameters
+        ----------
+        X : torch.Tensor
+            Shape ``[*batch_shape, N, n_features]``.
+
+        Returns
+        -------
+        torch.Tensor
+            Probabilities of shape ``[*batch_shape, N, 2]`` with columns
+            ``[p(y=0), p(y=1)]``.
+        """
+        p1 = torch.sigmoid(self.forward(X)).unsqueeze(-1)  # [..., N, 1]
+        return torch.cat([1.0 - p1, p1], dim=-1)           # [..., N, 2]
+
+    def predict(self, X: torch.Tensor) -> torch.Tensor:
+        r"""
+        Return binary class predictions for all batch elements.
+
+        Parameters
+        ----------
+        X : torch.Tensor
+            Shape ``[*batch_shape, N, n_features]``.
+
+        Returns
+        -------
+        torch.Tensor
+            Integer labels of shape ``[*batch_shape, N]``.
+        """
+        return torch.argmax(self.predict_proba(X), dim=-1)
+
+    def decision_function(self, X: torch.Tensor) -> torch.Tensor:
+        r"""
+        Compute raw decision scores (logits).
+
+        Alias for :meth:`forward` provided for consistency with
+        :class:`TorchLogistic` and scikit-learn conventions.
+
+        Parameters
+        ----------
+        X : torch.Tensor
+            Shape ``[*batch_shape, N, n_features]``.
+
+        Returns
+        -------
+        torch.Tensor
+            Logits of shape ``[*batch_shape, N]``.
+        """
+        return self.forward(X)
+
+    # ------------------------------------------------------------------
+    # Fitting
+    # ------------------------------------------------------------------
+
+    def reset_beta(self) -> None:
+        r"""
+        Re-initialise ``beta`` to zero in-place.
+
+        Notes
+        -----
+        Zero initialisation is appropriate for Newton-Raphson on a strictly
+        concave log-likelihood: the curvature landscape guarantees convergence
+        from any starting point, and zero is the canonical uninformative start.
+        Unlike first-order methods, Newton self-corrects via curvature from the
+        very first step, so He/Xavier initialisation would provide no benefit.
+        """
+        with torch.no_grad():
+            self.beta.zero_()
+
+    def fit(
+        self,
+        X: torch.Tensor,
+        y: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+    ) -> "BatchedLogistic":
+        r"""
+        Fit all batch elements simultaneously via batched exact Newton-Raphson.
+
+        Parameters
+        ----------
+        X : torch.Tensor
+            Design matrix of shape ``[*batch_shape, N, n_features]``.  Each
+            leading batch element receives its own independent design matrix.
+        y : torch.Tensor
+            Binary targets of shape ``[*batch_shape, N]`` with values in
+            ``{0, 1}``.
+        mask : torch.Tensor, optional
+            Boolean tensor of shape ``[*batch_shape]``.  Elements where ``mask``
+            is ``True`` are **active** and will be optimised.  Elements where
+            ``mask`` is ``False`` are frozen from step 0 — their ``beta`` is
+            never modified.  If ``None``, all elements are treated as active.
+
+        Returns
+        -------
+        self : BatchedLogistic
+            The fitted model (``self.beta`` updated in-place via ``add_``).
+
+        Notes
+        -----
+        **Per-element independence**
+
+        All matrix products use ``torch.bmm`` over the explicitly flattened
+        batch dimension ``B = prod(batch_shape)`` so that each batch element's
+        computation is provably independent.  The Hessian ``H`` and score ``s``
+        for element ``b`` depend only on ``X[b]``, ``y[b]``, and ``beta[b]``.
+
+        **Newton step**
+
+        .. math::
+
+            H_t &= \tilde{X}^{\top} W_t \tilde{X} + \lambda I, \\
+            s_t &= \tilde{X}^{\top}(y - \hat{p}_t), \\
+            \Delta\beta_t &= H_t^{-1} s_t
+                \quad\text{(Cholesky solve)},
+
+        where :math:`\lambda = \varepsilon_{\text{machine}}` is the Tikhonov
+        guard that ensures :math:`H_t` is numerically SPD even under perfect
+        separation or near-multicollinearity, without meaningfully biasing the
+        MLE.
+
+        **Convergence and early stopping**
+
+        A batch element is declared converged when
+
+        .. math::
+
+            \|s_t\|_\infty < \texttt{tol\_score}
+            \;\text{ and }\;
+            \|\Delta\beta_t\|_\infty < \texttt{tol\_step}.
+
+        The combined criterion is necessary because near-multicollinearity can
+        produce a small score norm while the Cholesky solve still yields large
+        parameter steps.  Once frozen, an element's update is zeroed out via
+        the active mask before the in-place ``add_``, so ``beta`` is never
+        modified after convergence.  The ``min_iter`` guard prevents premature
+        freezing near the zero initialisation.
+        """
+        self.reset_beta()
+
+        X_aug = self._augment(X)                           # [..., N, p_aug]
+        y_col = y.unsqueeze(-1).to(self.beta.dtype)        # [..., N, 1]
+
+        # Flatten all leading batch dims into a single axis B for bmm.
+        B     = self.beta.shape[:-2].numel()
+        N     = X_aug.shape[-2]
+        p_aug = self._p_aug
+
+        X_flat = X_aug.reshape(B, N, p_aug)                # [B, N, p_aug]
+        y_flat = y_col.reshape(B, N, 1)                    # [B, N, 1]
+
+        # Tikhonov term: built once, never changes.
+        # Shape [B, p_aug, p_aug] — eps * I per batch element.
+        tikhonov = self._tikhonov * torch.eye(
+            p_aug, dtype=self.beta.dtype, device=self.beta.device
+        ).unsqueeze(0).expand(B, -1, -1)
+
+        # active_flat[b] = True  →  element b should still be updated
+        if mask is not None:
+            active_flat = mask.reshape(B).to(device=self.beta.device)  # [B], bool
+        else:
+            active_flat = torch.ones(B, dtype=torch.bool, device=self.beta.device)
+
+        with torch.no_grad():
+            for iteration in range(self.max_iter):
+
+                beta_flat = self.beta.reshape(B, p_aug, 1)  # [B, p_aug, 1]
+
+                # ---- forward pass ----------------------------------------
+                logits = torch.bmm(X_flat, beta_flat)        # [B, N, 1]
+                p_hat  = torch.sigmoid(logits)               # [B, N, 1]
+
+                # ---- IRLS weights ----------------------------------------
+                W = p_hat * (1.0 - p_hat)                    # [B, N, 1]
+
+                # ---- score  s = X^T (y - p_hat) --------------------------
+                residual = y_flat - p_hat                     # [B, N, 1]
+                score = torch.bmm(
+                    X_flat.transpose(-2, -1), residual
+                )                                            # [B, p_aug, 1]
+
+                # ---- Hessian  H = X^T W X + lambda I ---------------------
+                # Weight rows of X by W then use bmm: avoids the dense
+                # [B, N, N] diagonal weight matrix entirely.
+                X_w = X_flat * W                             # [B, N, p_aug]
+                H   = torch.bmm(
+                    X_flat.transpose(-2, -1), X_w
+                ) + tikhonov                                 # [B, p_aug, p_aug]
+
+                # ---- Newton step via Cholesky solve ----------------------
+                # H is SPD by construction (Tikhonov guard ensures this even
+                # under separation or multicollinearity).
+                # cholesky_solve avoids squaring kappa(H) vs. explicit inversion.
+                L          = torch.linalg.cholesky(H)       # [B, p_aug, p_aug]
+                delta_beta = torch.cholesky_solve(score, L) # [B, p_aug, 1]
+
+                # ---- convergence check  (L-inf on score AND step) --------
+                score_linf = score.abs().amax(dim=(-2, -1))       # [B]
+                step_linf  = delta_beta.abs().amax(dim=(-2, -1))  # [B]
+
+                newly_converged = (
+                    (score_linf < self.tol_score) &
+                    (step_linf  < self.tol_step)
+                )
+
+                # Honour min_iter: do not freeze before that threshold
+                if iteration >= self.min_iter:
+                    active_flat = active_flat & ~newly_converged
+
+                if not active_flat.any():
+                    break
+
+                # ---- masked in-place parameter update --------------------
+                # active_w[b, 0, 0] = 1.0 if active else 0.0
+                # Broadcasts over [B, p_aug, 1] — frozen elements get zero delta.
+                active_w = active_flat.to(self.beta.dtype).reshape(B, 1, 1)
+                masked_delta = (delta_beta * active_w).reshape(
+                    self.batch_shape + (p_aug, 1)
+                )
+                # In-place add preserves the buffer registration.
+                self.beta.add_(masked_delta)
+
+        return self
+
+    # ------------------------------------------------------------------
+    # State dict
+    # ------------------------------------------------------------------
+
+    def to_state_dict(self) -> dict:
+        r"""
+        Return a lightweight, device-agnostic snapshot of the model state.
+
+        Returns
+        -------
+        dict
+            Dictionary with keys:
+
+            ``"beta"``
+                ``numpy.ndarray`` of shape ``[*batch_shape, p_aug, 1]``.
+            ``"n_features"``
+                ``int``.
+            ``"batch_shape"``
+                ``tuple`` of ``int``.
+            ``"fit_intercept"``
+                ``bool``.
+            ``"min_iter"``
+                ``int``.
+            ``"max_iter"``
+                ``int``.
+            ``"tol_score"``
+                ``float``.
+            ``"tol_step"``
+                ``float``.
+
+        Notes
+        -----
+        The returned arrays are detached CPU copies; modifying them does not
+        affect the model.  The dictionary is fully pickle-safe and
+        device-independent, consistent with :meth:`TorchLogistic.to_state_dict`.
+        """
+        return {
+            "beta":          self.beta.detach().cpu().numpy(),
+            "n_features":    self.n_features,
+            "batch_shape":   tuple(self.batch_shape),
+            "fit_intercept": self.fit_intercept,
+            "min_iter":      self.min_iter,
+            "max_iter":      self.max_iter,
+            "tol_score":     self.tol_score,
+            "tol_step":      self.tol_step,
+        }
+
+    def load_from_state_dict(self, state_dict: dict) -> None:
+        r"""
+        Restore model state from a snapshot produced by :meth:`to_state_dict`.
+
+        Parameters
+        ----------
+        state_dict : dict
+            Must contain exactly the keys produced by :meth:`to_state_dict`.
+
+        Raises
+        ------
+        ValueError
+            If required keys are missing, unexpected keys are present, shapes do
+            not match, or ``"beta"`` is neither a NumPy array nor a PyTorch
+            tensor.
+        """
+        expected = {
+            "beta", "n_features", "batch_shape", "fit_intercept",
+            "min_iter", "max_iter", "tol_score", "tol_step",
+        }
+        given = set(state_dict.keys())
+        if given != expected:
+            raise ValueError(
+                f"state_dict keys mismatch.\n  Expected: {sorted(expected)}"
+                f"\n  Got:      {sorted(given)}"
+            )
+
+        beta_data = state_dict["beta"]
+        if isinstance(beta_data, ndarray):
+            beta_data = torch.from_numpy(beta_data)
+        elif not isinstance(beta_data, torch.Tensor):
+            raise ValueError(
+                f"'beta' must be a numpy.ndarray or torch.Tensor, "
+                f"got {type(beta_data)}"
+            )
+
+        if beta_data.shape != self.beta.shape:
+            raise ValueError(
+                f"Shape mismatch for 'beta': "
+                f"expected {tuple(self.beta.shape)}, got {tuple(beta_data.shape)}"
+            )
+
+        with torch.no_grad():
+            self.beta.copy_(
+                beta_data.to(dtype=self.beta.dtype, device=self.beta.device)
+            )
+
+        self.min_iter      = int(state_dict["min_iter"])
+        self.max_iter      = int(state_dict["max_iter"])
+        self.tol_score     = float(state_dict["tol_score"])
+        self.tol_step      = float(state_dict["tol_step"])
+        self.fit_intercept = bool(state_dict["fit_intercept"])
+
+    @classmethod
+    def instantiate_from_state_dict(
+        cls,
+        state_dict: dict,
+        device: Optional[torch.device] = None,
+    ) -> "BatchedLogistic":
+        r"""
+        Construct a new :class:`BatchedLogistic` instance from a snapshot.
+
+        Parameters
+        ----------
+        state_dict : dict
+            Dictionary as produced by :meth:`to_state_dict`.
+        device : torch.device, optional
+            Target device for the new instance.  Defaults to CPU.
+
+        Returns
+        -------
+        BatchedLogistic
+            A fully initialised instance with parameters restored from
+            ``state_dict``.
+
+        Raises
+        ------
+        ValueError
+            If ``state_dict`` keys or tensor shapes are inconsistent.
+        """
+        expected = {
+            "beta", "n_features", "batch_shape", "fit_intercept",
+            "min_iter", "max_iter", "tol_score", "tol_step",
+        }
+        given = set(state_dict.keys())
+        if given != expected:
+            raise ValueError(
+                f"state_dict keys mismatch.\n  Expected: {sorted(expected)}"
+                f"\n  Got:      {sorted(given)}"
+            )
+
+        beta_data = state_dict["beta"]
+        if isinstance(beta_data, ndarray):
+            beta_data = torch.from_numpy(beta_data)
+        elif not isinstance(beta_data, torch.Tensor):
+            raise ValueError(
+                f"'beta' must be a numpy.ndarray or torch.Tensor, "
+                f"got {type(beta_data)}"
+            )
+
+        instance = cls(
+            n_features    = int(state_dict["n_features"]),
+            batch_shape   = tuple(state_dict["batch_shape"]),
+            fit_intercept = bool(state_dict["fit_intercept"]),
+            min_iter      = int(state_dict["min_iter"]),
+            max_iter      = int(state_dict["max_iter"]),
+            tol_score     = float(state_dict["tol_score"]),
+            tol_step      = float(state_dict["tol_step"]),
+            device        = device,
+            dtype         = beta_data.dtype,
+        )
+
+        with torch.no_grad():
+            instance.beta.copy_(
+                beta_data.to(dtype=beta_data.dtype, device=device)
+            )
+
+        return instance
+
+    # ------------------------------------------------------------------
+    # Construction helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def from_torch_logistic(
+        torch_logistic,
+        batch_shape: Union[torch.Size, Tuple[int, ...]],
+        min_iter: int = 3,
+        max_iter: int = 100,
+        device: Optional[torch.device] = None,
+    ) -> "BatchedLogistic":
+        r"""
+        Construct a :class:`BatchedLogistic` from a :class:`TorchLogistic` instance.
+
+        Structural configuration (``n_features``, ``fit_intercept``, dtype,
+        tolerances) is read directly from ``torch_logistic``.  Tolerances are
+        inherited from ``lbfgs_kwargs`` when present (``tolerance_grad`` →
+        ``tol_score``, ``tolerance_change`` → ``tol_step``); otherwise the
+        dtype-derived defaults are used.  ``beta`` is initialised to zero because
+        the batch shape introduces new independent coefficient vectors that have no
+        correspondence to the single vector in :class:`TorchLogistic`.
+
+        Parameters
+        ----------
+        torch_logistic : TorchLogistic
+            A binary (``n_classes == 2``) :class:`TorchLogistic` instance.
+        batch_shape : torch.Size or tuple of int
+            Leading batch dimensions for the new instance.
+        min_iter : int, default=3
+            Minimum Newton iterations.
+        max_iter : int, default=100
+            Maximum Newton iterations.
+        device : torch.device, optional
+            Target device.  Defaults to the device of ``torch_logistic``.
+
+        Returns
+        -------
+        BatchedLogistic
+
+        Raises
+        ------
+        AssertionError
+            If ``torch_logistic.n_classes != 2``.
+        """
+        assert torch_logistic.n_classes == 2, (
+            "from_torch_logistic only supports binary TorchLogistic instances "
+            f"(n_classes=2), got n_classes={torch_logistic.n_classes}."
+        )
+
+        n_features    = torch_logistic.lin_estimator.in_features
+        fit_intercept = torch_logistic.lin_estimator.bias is not None
+        dtype         = torch_logistic.lin_estimator.weight.dtype
+        _eps          = torch.finfo(dtype).eps
+
+        lbfgs_kw  = getattr(torch_logistic, "lbfgs_kwargs", {})
+        tol_score = float(lbfgs_kw.get("tolerance_grad",   _eps ** (2 / 3)))
+        tol_step  = float(lbfgs_kw.get("tolerance_change", _eps ** (7 / 8)))
+
+        if device is None:
+            device = torch_logistic.lin_estimator.weight.device
+
+        return BatchedLogistic(
+            n_features    = n_features,
+            batch_shape   = batch_shape,
+            fit_intercept = fit_intercept,
+            min_iter      = min_iter,
+            max_iter      = max_iter,
+            tol_score     = tol_score,
+            tol_step      = tol_step,
+            device        = device,
+            dtype         = dtype,
+        )
