@@ -121,12 +121,12 @@ def _adapt_mix_mean_dif(
         if is_single_element_tensor:
             mix_mean_dif = mix_mean_dif.flatten()[0]
 
-        return mix_mean_dif.expand(m-1).unsqueeze(-1) * torch.arange(1, m).unsqueeze(-1)
+        return mix_mean_dif.expand(m-1).unsqueeze(-1) * torch.arange(1, m, device=mix_mean_dif.device).unsqueeze(-1)
     
     if mix_mean_dif.dim() == 1:
         dim_size = mix_mean_dif.size(0)
         if dim_size == k:
-            return mix_mean_dif.unsqueeze(0).expand(m-1, -1) * torch.arange(1, m).unsqueeze(-1)
+            return mix_mean_dif.unsqueeze(0).expand(m-1, -1) * torch.arange(1, m, device=mix_mean_dif.device).unsqueeze(-1)
         if dim_size == m-1:
             return mix_mean_dif.unsqueeze(-1)
         
@@ -986,7 +986,7 @@ class CreditDataSample(Dataset):
 
         if ids_rejects is None:
             count_rej_obs = torch.prod(torch.tensor(rej_batch_shape))
-            self._unlabeled_ids = torch.arange(count_rej_obs).reshape(*rej_batch_shape)
+            self._unlabeled_ids = torch.arange(count_rej_obs, device=features_rejects.device).reshape(*rej_batch_shape)
         else:
             if safety_checks:
                 if ids_rejects.shape != rej_batch_shape:
@@ -1626,7 +1626,7 @@ class CreditDataSample(Dataset):
 
         # N_arange mask to get valid scores_ids
         N = shape_up_to_N_dim[-1]
-        arange_N = torch.arange(N).view( # [1,...,1, N]
+        arange_N = torch.arange(N, device=self.device).view( # [1,...,1, N]
             *([1]*(scores_idx.ndim-1)), N
         )
 
