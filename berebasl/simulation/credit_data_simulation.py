@@ -2444,7 +2444,8 @@ class CreditData(Dataset):
 
     def unbiased_obs(
         self, 
-        include_gen_round: bool = False, 
+        include_gen_round: bool = False,
+        include_accepted_status: bool = False,
         from_round_idx: Optional[int] = None, 
         up_to_round_idx : Optional[int] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -2465,9 +2466,12 @@ class CreditData(Dataset):
                 - If ``include_gen_round=True``: ``(features, default_flag, gen_round)``
         """
         gen_round_mask = self.round_selection_mask(from_round_idx, up_to_round_idx)
+        return_tuple = self.features[gen_round_mask], self.default_flag[gen_round_mask]
         if include_gen_round:
-            return self.features[gen_round_mask], self.default_flag[gen_round_mask], self.gen_round[gen_round_mask]
-        return self.features[gen_round_mask], self.default_flag[gen_round_mask]
+            return_tuple += (self.gen_round[gen_round_mask],)
+        if include_accepted_status:
+            return_tuple += (self.accepted[gen_round_mask],)
+        return return_tuple
 
     def to_sample_dataset(
         self,
