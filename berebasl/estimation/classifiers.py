@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from typing import Callable, Dict, Optional, Union
+from typing import Callable, Dict, Optional, Tuple, Union
 
 from berebasl.utils.tensor_validation import assert_tensors
 
@@ -212,6 +212,10 @@ class TorchLogistic(nn.Module):
         else: 
             self.logit_to_probs = self._multiclass_probs
 
+    @property
+    def n_features(self) -> int:
+        return self.lin_estimator.in_features
+    
     @staticmethod
     def _binary_probs(logits: torch.Tensor) -> torch.Tensor:
         r"""
@@ -700,6 +704,7 @@ class BatchedLogistic(nn.Module):
         tol_step: Optional[float] = None,
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
+        init_betas: Optional[torch.Tensor] = None
     ):
         """
         Initialize the class
@@ -738,7 +743,6 @@ class BatchedLogistic(nn.Module):
         super().__init__()
 
         self.n_features    = int(n_features)
-        self.batch_shape   = torch.Size(batch_shape)
         self.fit_intercept = bool(fit_intercept)
         self.min_iter      = int(min_iter)
         self.max_iter      = int(max_iter)
@@ -753,13 +757,18 @@ class BatchedLogistic(nn.Module):
         # p_aug: number of rows in beta per batch element.
         # With fit_intercept the design matrix is [1 | X] (intercept first,
         # following the statistics convention), so beta[..., 0, :] is the intercept.
-        self._p_aug = self.n_features + 1 if self.fit_intercept else self.n_features
+        p_aug = self.n_features + 1 if self.fit_intercept else self.n_features
 
-        beta_shape = self.batch_shape + (self._p_aug, 1)
-        self.register_buffer(
-            "beta",
-            torch.zeros(beta_shape, dtype=_dtype, device=device),
-        )
+        beta_shape = torch.Size(batch_shape) + (p_aug, 1)
+        if init_betas is None:
+            init_betas = torch.zeros(beta_shape, dtype=_dtype, device=device)
+        else:
+            if init_betas.shape == beta_shape[:-1]:
+                init_betas = init_betas.unsqueeze(-1)
+            elif init_betas.shape != beta_shape:
+                raise AssertionError("If init_betas is passed, it needs to have shape [batch_shape,n_feats (+1), 1]")
+            
+        self.register_buffer("beta",init_betas.clone())
 
         # _augment is resolved once at init, mirroring the logit_to_probs
         # pattern in TorchLogistic, to avoid branching at call time.
@@ -808,60 +817,85 @@ class BatchedLogistic(nn.Module):
         torch.device
         """
         return self.beta.device
+    
+    @property
+    def batch_shape(self) -> torch.Size:
+        return self.beta.shape[:-2]
+    
+    @property
+    def p_aug(self) -> int:
+        return self.beta.size(-2)
 
     # ------------------------------------------------------------------
     # Forward / prediction
     # ------------------------------------------------------------------
 
-    def validate_inputs(self, feats: torch.Tensor, lbls: Optional[torch.Tensor]):
-        if lbls is not None:
+    def assert_inputs(self, X: torch.Tensor, y: Optional[torch.Tensor], mask_valid_obs: Optional[torch.Tensor]):
+        if y is not None:
             assert_tensors(
-                feats, lbls, tensor_names="feats, lbls",
+                X, y, tensor_names="X, y",
                 checks=["are_tensors", "same_device"]
             )
-            if feats.shape[:-1] != lbls.shape:
+            if X.shape[:-1] != y.shape:
                 raise AssertionError(
-                    "feats and lbls do not have the right dimensions"
+                    "X and y do not have the right dimensions"
+            )
+        if mask_valid_obs is not None:
+            assert_tensors(
+                X, mask_valid_obs, tensor_names="X, batch_mask",
+                checks=["are_tensors", "same_device"]
+            )
+            if X.shape[:-1] != mask_valid_obs.shape:
+                raise AssertionError(
+                    "X and batch_mask do not have the right dimensions"
             )
         assert_tensors(
-            feats, self.betas, tensor_names="feats, betas",
+            X, self.beta, tensor_names="X, betas",
             checks=["same_dtype", "same_device"]
         )
-        if feats.dim() < self.betas.dim():
+        if X.dim() < self.beta.dim():
             raise AssertionError(
-                "feats does not have enough dimensions"
+                "X does not have enough dimensions"
             )
         
-        if feats.size(-1) != self.betas.size(-2):
-            raise AssertionError("feats has the wrong amount of features")
+        if X.size(-1) != self.n_features:
+            raise AssertionError("X has the wrong amount of features")
         
-        middle_dims_feats_as_tensor = torch.tensor(feats.shape[-self.betas.dim():-2])
+        middle_dims_X_as_tensor = torch.tensor(X.shape[-self.beta.dim():-2])
         
-        middle_feats_dims_ok = (
-            (middle_dims_feats_as_tensor == torch.tensor(self.betas.shape[:-2])) |
-            middle_dims_feats_as_tensor == 1
+        middle_X_dims_ok = (
+            (middle_dims_X_as_tensor == torch.tensor(self.beta.shape[:-2])) |
+            middle_dims_X_as_tensor == 1
         )
         
-        if not torch.all(middle_feats_dims_ok):
+        if not torch.all(middle_X_dims_ok):
             raise AssertionError("Wrong dimensions")
         
-    def handle_shapes(self, feats: torch.Tensor, lbls: Optional[torch.Tensor]):
-        extra_batch_dims_feats = feats.shape[:-betas.dim()]
-        feats = feats.expand(*extra_batch_dims_feats, *betas.shape[:-2], *feats.shape[-2:])
-        lbls = lbls.expand(*extra_batch_dims_feats, *betas.shape[:-2], feats.size(-2))
-        betas = betas.expand(*extra_batch_dims_feats, *betas.shape)
+    def handle_shapes(self, X: torch.Tensor, y: Optional[torch.Tensor] = None, mask_valid_obs: Optional[torch.Tensor] = None):
+        extra_batch_dims_X = X.shape[:-self.beta.dim()]
+        X = X.expand(*extra_batch_dims_X, *self.beta.shape[:-2], *X.shape[-2:])
+        output_shape_X = X.shape
 
-        feats = feats.view(-1, feats.shape[-2:])
-        lbls = feats.view(-1, feats.size(-2), 1)
-        betas = betas.view(-1, betas.shape[-2:])
+        betas = self.beta.expand(*extra_batch_dims_X, *self.beta.shape)
 
-        return feats, lbls, betas, extra_batch_dims_feats
+        X = X.reshape(-1, *X.shape[-2:])
+        betas = betas.reshape(-1, *betas.shape[-2:])
+
+        if y is not None:
+            y = y.expand(*extra_batch_dims_X, *self.beta.shape[:-2], X.size(-2))
+            y = y.reshape(-1, X.size(-2), 1)
+
+        if mask_valid_obs is not None:
+            mask_valid_obs = mask_valid_obs.reshape(-1, X.size(-2))
+
+
+        return X, y, mask_valid_obs, betas, output_shape_X
 
     def forward(
             self, 
-            X: torch.Tensor, 
-            betas_reshaped: Optional[torch.Tensor], 
-            extra_batch_dims_feats: Optional[torch.Size]
+            X: torch.Tensor,
+            betas_reshaped: Optional[torch.Tensor] = None, 
+            output_shape_X: Optional[torch.Size] = None,
         ) -> torch.Tensor:
         r"""
         Compute raw logits for all batch elements.
@@ -889,19 +923,18 @@ class BatchedLogistic(nn.Module):
         flattened batch dimension so that independence across batch elements is
         explicit and verifiable.
         """
-        if (betas_reshaped is None) ^ (extra_batch_dims_feats is None):
+        betas_passed_as_none = betas_reshaped is None
+        if (betas_passed_as_none) ^ (output_shape_X is None):
             raise RuntimeError("Either pass none of betas_reshaped and extra_batch_dims or pass both")
-        X_aug = self._augment(X)               # [..., N, p_aug]
+        if betas_passed_as_none:
+            X, _, betas_reshaped, output_shape_X = self.handle_shapes(
+                X=X,
+                y=None
+            )
+        X_aug = self._augment(X)               # [B, N, p_aug]
 
-        # Flatten all leading batch dims into one axis for bmm.
-        B     = self.beta.shape[:-2].numel()
-        N     = X_aug.shape[-2]
-
-        X_flat    = X_aug.reshape(B, N, self._p_aug)       # [B, N, p_aug]
-        beta_flat = self.beta.reshape(B, self._p_aug, 1)   # [B, p_aug, 1]
-
-        logits_flat = torch.bmm(X_flat, beta_flat)         # [B, N, 1]
-        return logits_flat.reshape(self.batch_shape + (N,))  # [..., N]
+        logits_flat = torch.bmm(X_aug, betas_reshaped)         # [B, N, 1]
+        return logits_flat.reshape(output_shape_X[:-1])  # [..., N]
 
     def predict_proba(self, X: torch.Tensor) -> torch.Tensor:
         r"""
@@ -979,7 +1012,7 @@ class BatchedLogistic(nn.Module):
         self,
         X: torch.Tensor,
         y: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
+        mask_valid_obs: Optional[torch.Tensor] = None,
     ) -> "BatchedLogistic":
         r"""
         Fit all batch elements simultaneously via batched exact Newton-Raphson.
@@ -1043,55 +1076,70 @@ class BatchedLogistic(nn.Module):
         modified after convergence.  The ``min_iter`` guard prevents premature
         freezing near the zero initialisation.
         """
+        self.assert_inputs(X, y, mask_valid_obs)
+
+
         self.reset_beta()
 
-        X_aug = self._augment(X)                           # [..., N, p_aug]
-        y_col = y.unsqueeze(-1).to(self.beta.dtype)        # [..., N, 1]
-
-        # Flatten all leading batch dims into a single axis B for bmm.
-        B     = self.beta.shape[:-2].numel()
-        N     = X_aug.shape[-2]
-        p_aug = self._p_aug
-
-        X_flat = X_aug.reshape(B, N, p_aug)                # [B, N, p_aug]
-        y_flat = y_col.reshape(B, N, 1)                    # [B, N, 1]
+        X, y, mask_valid_obs, beta, output_shape_X = self.handle_shapes(X, y, mask_valid_obs)
+        N = X.size(-2)
+        p_aug = self.p_aug
+        y = y.to(beta.dtype)
+        X_aug = self._augment(X)
+        if mask_valid_obs is None:
+            B = X.size(0)
+            batch_mask = X.new_ones((B,), dtype=bool)
+        else:
+            batch_mask = mask_valid_obs.any(dim=-1) # [B,]
+            B = batch_mask.sum().item()
+            X_aug = X_aug[batch_mask]
+            y = y[batch_mask]
+            beta = beta[batch_mask]
+            mask_valid_obs = mask_valid_obs[batch_mask] # [B_active, N]
+            # Put to zeros the X_aug where unvalid to avoid those observations
+            # playing any role in the matrix multiplications
+            X_aug.masked_fill_(~mask_valid_obs.unsqueeze(-1), value=0)
+            y.masked_fill_(~mask_valid_obs.unsqueeze(-1), -1) # dummy value which will not generate problems in sums like nans
 
         # Tikhonov term: built once, never changes.
         # Shape [B, p_aug, p_aug] — eps * I per batch element.
         tikhonov = self._tikhonov * torch.eye(
-            p_aug, dtype=self.beta.dtype, device=self.beta.device
-        ).unsqueeze(0).expand(B, -1, -1)
+            p_aug, dtype=beta.dtype, device=beta.device
+        ).unsqueeze(0).repeat(B, 1, 1) # repeat instead of expand to ensure contiguous
 
         # active_flat[b] = True  →  element b should still be updated
-        if mask is not None:
-            active_flat = mask.reshape(B).to(device=self.beta.device)  # [B], bool
-        else:
-            active_flat = torch.ones(B, dtype=torch.bool, device=self.beta.device)
+        active = batch_mask.new_ones((B,))
 
         with torch.no_grad():
             for iteration in range(self.max_iter):
+                # Note residuals and logits will be wrong/senseless when multiplying
+                # however through zeroing of the X_aug the mathc multiplication of
+                # X.T @ residual will not result in biased scores. Same logic applies
+                # for calculating H, in this cases those lines just do not go into
+                # the sums of the matrix multiplications.
 
-                beta_flat = self.beta.reshape(B, p_aug, 1)  # [B, p_aug, 1]
 
                 # ---- forward pass ----------------------------------------
-                logits = torch.bmm(X_flat, beta_flat)        # [B, N, 1]
+                logits = torch.bmm(X_aug, beta)        # [B, N, 1]
                 p_hat  = torch.sigmoid(logits)               # [B, N, 1]
 
                 # ---- IRLS weights ----------------------------------------
                 W = p_hat * (1.0 - p_hat)                    # [B, N, 1]
 
                 # ---- score  s = X^T (y - p_hat) --------------------------
-                residual = y_flat - p_hat                     # [B, N, 1]
+                residual = y - p_hat                     # [B, N, 1]
                 score = torch.bmm(
-                    X_flat.transpose(-2, -1), residual
+                    X_aug.transpose(-2, -1), residual
                 )                                            # [B, p_aug, 1]
 
                 # ---- Hessian  H = X^T W X + lambda I ---------------------
                 # Weight rows of X by W then use bmm: avoids the dense
-                # [B, N, N] diagonal weight matrix entirely.
-                X_w = X_flat * W                             # [B, N, p_aug]
+                # [B, N, N] diagonal weight matrix entirely. - This multiplication
+                # would be the same as diagonalizing W and doing a matmul.
+                X_w = X_aug * W                             # [B, N, p_aug]
+
                 H   = torch.bmm(
-                    X_flat.transpose(-2, -1), X_w
+                    X_aug.transpose(-2, -1), X_w
                 ) + tikhonov                                 # [B, p_aug, p_aug]
 
                 # ---- Newton step via Cholesky solve ----------------------
@@ -1112,20 +1160,19 @@ class BatchedLogistic(nn.Module):
 
                 # Honour min_iter: do not freeze before that threshold
                 if iteration >= self.min_iter:
-                    active_flat = active_flat & ~newly_converged
+                    active = active & ~newly_converged
 
-                if not active_flat.any():
+                if not active.any():
                     break
 
                 # ---- masked in-place parameter update --------------------
                 # active_w[b, 0, 0] = 1.0 if active else 0.0
                 # Broadcasts over [B, p_aug, 1] — frozen elements get zero delta.
-                active_w = active_flat.to(self.beta.dtype).reshape(B, 1, 1)
-                masked_delta = (delta_beta * active_w).reshape(
-                    self.batch_shape + (p_aug, 1)
-                )
-                # In-place add preserves the buffer registration.
-                self.beta.add_(masked_delta)
+                masked_delta = delta_beta.masked_fill(~active.reshape(B, 1, 1), 0)
+                # In-place add.
+                beta.add_(masked_delta)
+
+        self.beta[batch_mask.view(self.batch_shape)] = beta
 
         return self
 
@@ -1229,6 +1276,11 @@ class BatchedLogistic(nn.Module):
         self.tol_step      = float(state_dict["tol_step"])
         self.fit_intercept = bool(state_dict["fit_intercept"])
 
+        if self.fit_intercept:
+            self._augment = self._prepend_ones
+        else:
+            self._augment = lambda X: X
+
     @classmethod
     def instantiate_from_state_dict(
         cls,
@@ -1301,11 +1353,10 @@ class BatchedLogistic(nn.Module):
 
     @staticmethod
     def from_torch_logistic(
-        torch_logistic,
+        torch_logistic: TorchLogistic,
         batch_shape: Union[torch.Size, Tuple[int, ...]],
         min_iter: int = 3,
         max_iter: int = 100,
-        device: Optional[torch.device] = None,
     ) -> "BatchedLogistic":
         r"""
         Construct a :class:`BatchedLogistic` from a :class:`TorchLogistic` instance.
@@ -1345,7 +1396,7 @@ class BatchedLogistic(nn.Module):
             f"(n_classes=2), got n_classes={torch_logistic.n_classes}."
         )
 
-        n_features    = torch_logistic.lin_estimator.in_features
+        n_features    = torch_logistic.n_features
         fit_intercept = torch_logistic.lin_estimator.bias is not None
         dtype         = torch_logistic.lin_estimator.weight.dtype
         _eps          = torch.finfo(dtype).eps
@@ -1354,8 +1405,20 @@ class BatchedLogistic(nn.Module):
         tol_score = float(lbfgs_kw.get("tolerance_grad",   _eps ** (2 / 3)))
         tol_step  = float(lbfgs_kw.get("tolerance_change", _eps ** (7 / 8)))
 
-        if device is None:
-            device = torch_logistic.lin_estimator.weight.device
+        device = torch_logistic.lin_estimator.weight.device
+
+        if fit_intercept:
+            init_beta = torch.cat(
+                [torch_logistic.lin_estimator.bias.data.unsqueeze(0), 
+                torch_logistic.lin_estimator.weight.data], 
+                dim=-1
+            ).T
+        else:
+            init_beta = torch_logistic.lin_estimator.weight.data.T
+
+        init_betas = init_beta.reshape(*([1] * len(batch_shape)), *init_beta.shape).repeat(
+            *batch_shape, 1, 1
+        )
 
         return BatchedLogistic(
             n_features    = n_features,
@@ -1367,4 +1430,6 @@ class BatchedLogistic(nn.Module):
             tol_step      = tol_step,
             device        = device,
             dtype         = dtype,
+            init_betas   = init_betas
         )
+    
