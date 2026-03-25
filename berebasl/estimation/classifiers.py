@@ -1,4 +1,5 @@
 from copy import deepcopy
+from contextlib import contextmanager
 import inspect
 from math import sqrt
 
@@ -581,7 +582,22 @@ class TorchLogistic(nn.Module):
 
         return instance
 
-
+@contextmanager
+def _cusolver_context(device: torch.device):
+    """
+    Temporarily set the preferred linalg library to cuSOLVER on CUDA devices.
+    No-op on CPU. Restores the previous setting on exit, even if an exception
+    is raised inside the block.
+    """
+    if device.type != "cuda":
+        yield
+        return
+    prev = torch.backends.cuda.preferred_linalg_library()
+    try:
+        torch.backends.cuda.preferred_linalg_library("cusolver")
+        yield
+    finally:
+        torch.backends.cuda.preferred_linalg_library(prev)
 
 class BatchedLogistic(nn.Module):
     r"""
@@ -1128,6 +1144,7 @@ class BatchedLogistic(nn.Module):
         X: torch.Tensor,
         y: torch.Tensor,
         mask_valid_obs: Optional[torch.Tensor] = None,
+        prefer_cusolver_when_on_cuda: bool = True
     ) -> "BatchedLogistic":
         r"""
         Fit all batch elements simultaneously via batched exact Newton-Raphson.
@@ -1159,6 +1176,13 @@ class BatchedLogistic(nn.Module):
 
         Notes
         -----
+        **Why perfer cusolver backend?**
+        If the used device is cuda then the whole method will be executed
+        on the cuSOLVER backend. The reason is that ``torch.cholesky_solve``
+        gets passed to MAGMA for batches larger than one which for some
+        machines is not supported.
+
+
         **Observation masking**
 
         Zeroing the rows of :math:`\tilde{X}` corresponding to invalid
@@ -1197,48 +1221,48 @@ class BatchedLogistic(nn.Module):
         output buffer.
         """
         self.assert_inputs(X, y, mask_valid_obs)
-        self.reset_beta()
 
-        X, y, mask_valid_obs, beta, _ = self.handle_shapes(
-            X, y, mask_valid_obs
-        )
-        N     = X.size(-2)
-        p_aug = self.p_aug
-        y     = y.to(beta.dtype)
-        X_aug = self._augment(X)                                  # [B_all, N, p_aug]
+        with _cusolver_context(self.device), torch.no_grad():
+            self.reset_beta()
 
-        if mask_valid_obs is None:
-            B          = X.size(0)
-            batch_mask = X.new_ones((B,), dtype=torch.bool)
-        else:
-            # A batch element is active iff it has at least one valid observation.
-            batch_mask     = mask_valid_obs.any(dim=-1)            # [B_all]
-            B              = int(batch_mask.sum().item())
-            X_aug          = X_aug[batch_mask].contiguous()        # [B, N, p_aug]
-            y              = y[batch_mask].contiguous()            # [B, N, 1]
-            beta           = beta[batch_mask].contiguous()         # [B, p_aug, 1]
-            mask_valid_obs = mask_valid_obs[batch_mask]            # [B, N]
+            X, y, mask_valid_obs, beta, _ = self.handle_shapes(
+                X, y, mask_valid_obs
+            )
+            # N     = X.size(-2)
+            p_aug = self.p_aug
+            y     = y.to(beta.dtype)
+            X_aug = self._augment(X)                                  # [B_all, N, p_aug]
 
-            # Zero invalid rows of X_aug — masked rows then contribute nothing
-            # to X^T r or X^T W X regardless of logit or residual values.
-            # Set corresponding y to a dummy; structurally zeroed by X_aug.
-            X_aug.masked_fill_(~mask_valid_obs.unsqueeze(-1), 0.0)
-            y.masked_fill_(~mask_valid_obs.unsqueeze(-1), -1.0)
+            if mask_valid_obs is None:
+                B          = X.size(0)
+                batch_mask = X.new_ones((B,), dtype=torch.bool)
+            else:
+                # A batch element is active iff it has at least one valid observation.
+                batch_mask     = mask_valid_obs.any(dim=-1)            # [B_all]
+                B              = int(batch_mask.sum().item())
+                X_aug          = X_aug[batch_mask].contiguous()        # [B, N, p_aug]
+                y              = y[batch_mask].contiguous()            # [B, N, 1]
+                beta           = beta[batch_mask].contiguous()         # [B, p_aug, 1]
+                mask_valid_obs = mask_valid_obs[batch_mask]            # [B, N]
 
-        # Tikhonov guard: eps * I, built once per fit call.
-        # repeat (not expand) ensures contiguous memory for bmm.
-        tikhonov = (
-            self._tikhonov
-            * torch.eye(p_aug, dtype=beta.dtype, device=beta.device)
-            .unsqueeze(0)
-            .repeat(B, 1, 1)
-        )                                                          # [B, p_aug, p_aug]
+                # Zero invalid rows of X_aug — masked rows then contribute nothing
+                # to X^T r or X^T W X regardless of logit or residual values.
+                # Set corresponding y to a dummy; structurally zeroed by X_aug.
+                X_aug.masked_fill_(~mask_valid_obs.unsqueeze(-1), 0.0)
+                y.masked_fill_(~mask_valid_obs.unsqueeze(-1), -1.0)
 
-        active = torch.ones(B, dtype=torch.bool, device=beta.device)
+            # Tikhonov guard: eps * I, built once per fit call.
+            # repeat (not expand) ensures contiguous memory for bmm.
+            tikhonov = (
+                self._tikhonov
+                * torch.eye(p_aug, dtype=beta.dtype, device=beta.device)
+                .unsqueeze(0)
+                .repeat(B, 1, 1)
+            )                                                          # [B, p_aug, p_aug]
 
-        with torch.no_grad():
+            active = torch.ones(B, dtype=torch.bool, device=beta.device)
+
             for iteration in range(self.max_iter):
-
                 # ---- forward pass ----------------------------------------
                 logits = torch.bmm(X_aug, beta)                   # [B, N, 1]
                 p_hat  = torch.sigmoid(logits)                    # [B, N, 1]
@@ -1288,12 +1312,12 @@ class BatchedLogistic(nn.Module):
                 # avoid in-place mutation of the cholesky_solve output buffer.
                 beta.add_(delta_beta * active.to(beta.dtype).reshape(B, 1, 1))
 
-        # Write fitted betas back into the registered buffer.
-        # batch_mask indexes the flattened batch dimension; reshaping to
-        # batch_shape recovers the correct multi-dimensional boolean index.
-        self.beta[batch_mask.view(self.batch_shape)] = beta
+            # Write fitted betas back into the registered buffer.
+            # batch_mask indexes the flattened batch dimension; reshaping to
+            # batch_shape recovers the correct multi-dimensional boolean index.
+            self.beta[batch_mask.view(self.batch_shape)] = beta
 
-        return self
+            return self
 
     # ------------------------------------------------------------------
     # State dict

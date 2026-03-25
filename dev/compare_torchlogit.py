@@ -199,7 +199,8 @@ def fit_torch(
     begin_torch = time.time()
     torch_lr = TorchLogistic(
         n_features=X_torch.shape[-1],
-        n_classes=int(label_torch.max().item() + 1)
+        n_classes=int(label_torch.max().item() + 1),
+        device=X_torch.device
     )
     torch_lr.fit(X_torch, label_torch, reduction='sum')
     end_torch = time.time()
