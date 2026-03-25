@@ -4,7 +4,7 @@
 import time
 import warnings
 
-from typing import Tuple
+from typing import Tuple, Optional
 
 # ============================
 # Third-party imports
@@ -20,7 +20,7 @@ import torch
 # ============================
 # Local project imports
 # ============================
-from berebasl.estimation.classifiers import TorchLogistic
+from berebasl.estimation.classifiers import BatchedLogistic, TorchLogistic
 
 # ============================
 # Global configuration
@@ -36,7 +36,8 @@ warnings.filterwarnings(
 
 def fit_glm(
     X: np.ndarray,
-    label: np.ndarray
+    label: np.ndarray,
+    X_vali: Optional[np.ndarray] = None
 ) -> Tuple[GLMResults, np.ndarray, float, float]:
     r"""
     Fit a classical GLM logistic regression model using ``statsmodels`` and measure
@@ -91,7 +92,7 @@ def fit_glm(
     train_time = end_glm - begin_glm
 
     begin_inference = time.time()
-    glm_probs = fitted_glm.predict(X_glm)
+    glm_probs = fitted_glm.predict(X_glm if X_vali is None else sm.add_constant(X_vali))
     glm_probs = np.column_stack([1 - glm_probs, glm_probs])
     end_inference = time.time()
     inference_time = end_inference - begin_inference
@@ -154,7 +155,8 @@ def fit_sklearn(
 
 def fit_torch(
     X_torch: torch.Tensor,
-    label_torch: torch.Tensor
+    label_torch: torch.Tensor,
+    X_vali: Optional[torch.Tensor]=None
 ) -> Tuple[TorchLogistic, torch.Tensor, float, float]:
     r"""
     Fit the custom :class:`TorchLogistic` model using full-batch L-BFGS and measure
@@ -206,11 +208,35 @@ def fit_torch(
 
     begin_inference = time.time()
     torch_lr.eval()
-    torch_probs = torch_lr.predict_proba(X_torch)
+    torch_probs = torch_lr.predict_proba(X_torch if X_vali is None else X_vali)
     end_inference = time.time()
     inference_time = end_inference - begin_inference
 
     return torch_lr, torch_probs.detach(), train_time, inference_time
+
+def fit_batched_logistic(
+        Xs_torch: torch.Tensor,
+        labels_torch: torch.Tensor,
+        mask_valid_obs: torch.Tensor,
+        X_vali: Optional[torch.Tensor]=None
+) -> Tuple[BatchedLogistic, torch.Tensor, float, float]:
+    begin_torch = time.time()
+    batched_lr = BatchedLogistic(
+        n_features=Xs_torch.size(-1),
+        batch_shape=labels_torch.shape[:-1]
+    )
+    batched_lr.fit(Xs_torch, labels_torch, mask_valid_obs)
+    end_torch = time.time()
+
+    train_time = end_torch - begin_torch
+
+    begin_inference = time.time()
+    batched_lr.eval()
+    batched_probs = batched_lr.predict_proba(Xs_torch if X_vali is None else X_vali)
+    end_inference = time.time()
+    inference_time = end_inference - begin_inference
+
+    return batched_lr, batched_probs.detach(), train_time, inference_time
 
 
 if __name__ == "__main__":
