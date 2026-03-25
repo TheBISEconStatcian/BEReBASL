@@ -2627,7 +2627,7 @@ class CreditData(Dataset):
                 ``gen_idx`` is found in ``counts[gen_idx]``. The keys
                 of the dict are ``['total', 'accepts', 'rejects']``
         """
-        unique_gen_round_idxs = torch.arange(self.last_gen_round, device=self.device) # [g]
+        unique_gen_round_idxs = torch.arange(self.last_gen_round+1, device=self.device) # [g]
 
         flag_is_from_round = unique_gen_round_idxs.unsqueeze(1) == self.gen_round.unsqueeze(0) # [g, N]
         counts_per_round = flag_is_from_round.sum(dim=-1) # [g]
