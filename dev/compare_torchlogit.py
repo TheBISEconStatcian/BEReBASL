@@ -223,7 +223,8 @@ def fit_batched_logistic(
     begin_torch = time.time()
     batched_lr = BatchedLogistic(
         n_features=Xs_torch.size(-1),
-        batch_shape=labels_torch.shape[:-1]
+        batch_shape=labels_torch.shape[:-1],
+        device=Xs_torch.device
     )
     batched_lr.fit(Xs_torch, labels_torch, mask_valid_obs)
     end_torch = time.time()
