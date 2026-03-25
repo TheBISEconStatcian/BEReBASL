@@ -1044,7 +1044,7 @@ class BatchedLogistic(nn.Module):
                 "Either supply both betas_reshaped and output_shape_X, or neither."
             )
         if betas_passed_as_none:
-            X, _, betas_reshaped, _, output_shape_X = self.handle_shapes(X=X)
+            X, _, _, betas_reshaped, output_shape_X = self.handle_shapes(X=X)
 
         X_aug = self._augment(X)                                  # [B, N, p_aug]
         logits_flat = torch.bmm(X_aug, betas_reshaped)            # [B, N, 1]
@@ -1199,7 +1199,7 @@ class BatchedLogistic(nn.Module):
         self.assert_inputs(X, y, mask_valid_obs)
         self.reset_beta()
 
-        X, y, mask_valid_obs, beta, output_shape_X = self.handle_shapes(
+        X, y, mask_valid_obs, beta, _ = self.handle_shapes(
             X, y, mask_valid_obs
         )
         N     = X.size(-2)
