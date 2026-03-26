@@ -3,7 +3,7 @@ from warnings import warn
 
 import torch
 
-from typing import Optional, Union
+from typing import Optional, Union, Tuple
 
 from berebasl.estimation.classifiers import Classifier
 
@@ -17,7 +17,7 @@ def k_fold_cv_normalized_split(
     nan_feats: Union[float, int] = float('nan'),
     min_bads: int = 4,
     safety_checks: bool = True
-):
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Batched k-fold cross-validation split for 2D data with variable numbers of
     valid observations per batch element.
@@ -191,13 +191,42 @@ def k_fold_cv_normalized_split(
 
     return cv_feats, cv_lbls, cv_mask
 
+def train_folds_from_cv_folds(
+        cv_feats: torch.Tensor, 
+        cv_lbls: torch.Tensor, 
+        cv_mask: torch.Tensor, 
+        make_continuous: bool = False
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    device = cv_lbls.device
+    k_folds = cv_lbls.size(-2)
+    arange_kfold = torch.arange(k_folds, device=device)
+    train_idxs = torch.where(arange_kfold.unsqueeze(0) != arange_kfold.unsqueeze(1))[1].reshape(k_folds,k_folds-1)
+
+    def select_all_train_idxs(d: torch.Tensor, n_feat_dims: int) -> torch.Tensor:
+        selected = (
+            d.movedim(-2,0) # [k, *batch_dims, n_k, *feat_dims]
+            [train_idxs] # [k, k-1, *batch_dims, n_k, *feat_dims] - 2nd dim is the separated train-set per fold k
+            .movedim((0,1), (-2-n_feat_dims,-3-n_feat_dims)) # [*batch_dims, k, k-1, n_k, *feat_dims]
+            .flatten(-2-n_feat_dims,-1-n_feat_dims) # [*batch_dims, k, (k-1)*n_k, *feat_dims]
+        )
+
+        if make_continuous:
+            selected = selected.contiguous()
+
+        return selected
+
+    cv_train_lbls, cv_train_mask = [select_all_train_idxs(d, n_feat_dims=0) for d in (cv_lbls, cv_mask)]
+    cv_train_feats = select_all_train_idxs(cv_feats, n_feat_dims=1)
+
+    return cv_train_feats, cv_train_lbls, cv_train_mask
+
 def train_predict_classifier_fold(
         feats_cv: torch.Tensor, 
         labels_cv: torch.Tensor, 
         mask_valid_cv: torch.Tensor, 
         classif: Classifier, 
         k: int
-    ):
+    ) -> torch.Tensor:
     if not isinstance(feats_cv, torch.Tensor) and feats_cv.dim() == 3:
         raise AssertionError(
             "K-Fold evaluation only implemented for k x 2D feats. "
@@ -232,7 +261,7 @@ def k_fold_evaluate_classifier_on_metric(
         batched_metric : callable,
         metrics_mask_name: str = "mask_valid",
         further_metrics_kwargs: dict = {}
-    ):
+    ) -> torch.Tensor:
     if not isinstance(feats, torch.Tensor) and feats.dim() == 2:
         raise AssertionError(
             "K-Fold evaluation only implemented for 2D feats. "
