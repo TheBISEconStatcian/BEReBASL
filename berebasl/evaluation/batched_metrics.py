@@ -1,9 +1,149 @@
 import torch
 
-from typing import Optional
+from typing import Optional, Tuple
 
 from berebasl.utils.normalized_shape_tensor_ops import masked_batched_trapz
 from berebasl.utils.tensor_validation import assert_tensors
+
+_int_to_float_equiv = {
+    torch.int8 : torch.float16, # float8 may be problematic for ranking which is the reason to use this
+    torch.int16 : torch.float16,
+    torch.int32 : torch.float32,
+    torch.int64 : torch.float64
+}
+
+def batched_roc_points(
+    scores: torch.Tensor,
+    targets: torch.Tensor,
+    mask_valid: Optional[torch.Tensor] = None,
+    dim: int = -1,
+    ) -> Tuple[torch.Tensor, ...]:
+    """
+    Construct ROC curve points in a fully vectorized manner for batched inputs.
+
+    The ROC curve is computed independently for each mini-dataset along
+    dimension ``dim`` (default: last). All remaining dimensions are treated as
+    batch dimensions.
+
+    This function explicitly constructs the cumulative true positives (TPR)
+    and false positives (FPR) after sorting prediction scores in descending
+    order. Invalid entries (as specified by ``mask_valid`` or inferred from
+    ``NaN`` values) are handled explicitly and placed at the end of the sorted
+    sequence.
+
+    **Important semantic note (invalid entries):**
+    Invalid positions do not contribute to TP/FP counts but are retained in the
+    output tensors. As a result, the ROC curve exhibits a **flat tail** after
+    the last valid element, i.e., TPR and FPR remain constant for invalid
+    positions. Downstream consumers (e.g. AUROC integration) are expected to
+    ignore these regions via masking.
+
+    Args:
+        scores (Tensor):
+            Tensor of shape ``(*batch_dims, N)`` containing prediction scores
+            along dimension ``dim``. Must be floating point or integer.
+            If ``mask_valid`` is not provided, ``NaN`` entries are treated as
+            invalid.
+
+        targets (Tensor):
+            Tensor of shape ``(*batch_dims, N)`` with binary labels ``{0, 1}``
+            along dimension ``dim``. Boolean tensors are automatically cast to
+            ``scores.dtype``.
+
+        mask_valid (Tensor, optional):
+            Boolean tensor of shape ``(*batch_dims, N)`` indicating valid
+            entries. If ``None``, validity is inferred as ``~scores.isnan()``.
+
+        dim (int, optional):
+            Dimension along which to compute ROC points. Default: ``-1``.
+
+    Returns:
+        Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+            - **fpr**: False positive rates of shape ``(*batch_dims, N+1)``
+            - **tpr**: True positive rates of shape ``(*batch_dims, N+1)``
+            - **sorted_scores**: Scores sorted in descending order
+            - **sorted_targets**: Targets permuted according to the sort order
+            - **sorted_mask_valid**: Validity mask permuted according to the sort order
+
+            The extra leading point corresponds to the explicit ``(0, 0)``
+            start of the ROC curve.
+
+    Raises:
+        IndexError:
+            If ``dim`` is not a valid dimension.
+
+        AssertionError:
+            If shapes/devices of inputs do not match.
+
+        ValueError:
+            If ``scores`` has unsupported dtype or ``mask_valid`` is not boolean.
+
+    Notes:
+        - Sorting is performed after replacing invalid scores with ``-inf`` to
+          ensure they are placed at the end.
+        - If a valid score is exactly ``-inf``, ordering between valid and
+          invalid entries at the tail is not strictly guaranteed.
+        - Division by zero (e.g. no positives or no negatives) will produce
+          ``NaN`` values in TPR/FPR, matching standard AUROC conventions.
+
+    """
+    if scores.dtype == torch.bool or torch.is_complex(scores):
+        raise ValueError("scores must be a floating point or integer type")
+    scores_ndim = scores.dim()
+    if dim not in range(-scores_ndim, scores_ndim):
+        raise IndexError("dim has to be valid w. r. t. the amount of dims of scores")
+    
+    assert_tensors(scores, targets, tensor_names="scores, targets", 
+                   checks=["same_shape", "same_device"], throw_error=True)
+    
+    if not torch.is_floating_point(scores):
+        scores = scores.to(_int_to_float_equiv[scores.dtype])
+
+    if mask_valid is None:
+        mask_valid = ~scores.isnan()
+    else:
+        if mask_valid.dtype!=torch.bool:
+            raise ValueError("mask_valid has to be bool")
+        
+        assert_tensors(mask_valid, scores, tensor_names="mask_valid_scores, scores",
+                       checks=["same_shape", "same_device"], throw_error=True)
+    
+    if targets.dtype == torch.bool:
+        targets = targets.to(scores.dtype)
+
+    # Normalize dim
+    dim %= scores_ndim
+
+    # Sort by descending score along dim
+    # make sure that the non-valid are at the end (practical for score change)
+    order = scores.masked_fill(~mask_valid, -float('inf')).argsort(dim=dim, descending=True)
+    sorted_scores = scores.gather(dim=dim, index=order)
+    sorted_targets = targets.gather(dim=dim, index=order)
+    sorted_mask_valid = mask_valid.gather(dim=dim, index=order)
+
+    
+
+    # Count positives / negatives
+    sorted_targets_for_ps = sorted_targets.masked_fill(~sorted_mask_valid, 0)
+    P = sorted_targets_for_ps.sum(dim=dim, keepdim=True) # [*batch_dims, 1]
+    N_valid = sorted_mask_valid.sum(dim=dim, keepdim=True)
+    Q = N_valid - P                                    # [*batch_dims, 1]
+
+    # Cumulative true / false positives along dim
+    tps = torch.cumsum(sorted_targets_for_ps, dim=dim)
+    fps = torch.cumsum(sorted_mask_valid.to(scores.dtype) - sorted_targets_for_ps, dim=dim)
+
+
+    # Normalize to TPR / FPR
+    tpr = tps / P
+    fpr = fps / Q
+
+    # Explicit (0,0) start point
+    zero = tps.narrow(dim, 0, 1).clone().zero_() # slice tps, clone it and then make it all zeros - brilliant
+    tpr = torch.cat([zero, tpr], dim=dim)
+    fpr = torch.cat([zero, fpr], dim=dim)
+
+    return fpr, tpr, sorted_scores, sorted_targets, sorted_mask_valid
 
 def batched_auroc(
     scores: torch.Tensor,
@@ -83,80 +223,27 @@ def batched_auroc(
             # Should be (numerically) identical
             assert torch.allclose(aurocs_batched, aurocs_torchmetric)
     """
+    # fpr and tpr have a higher number of dims
+    # along dimension dim than sorted scores and
+    # sorted
+    fpr, tpr, sorted_scores, _, sorted_mask_valid = batched_roc_points(
+        scores, targets, mask_valid, dim
+    )
 
-    if scores.dtype == torch.bool or torch.is_complex(scores):
-        raise ValueError("scores must be a floating point or integer type")
-    scores_ndim = scores.dim()
-    if dim not in range(-scores_ndim, scores_ndim):
-        raise IndexError("dim has to be valid w. r. t. the amount of dims of scores")
-    
-    assert_tensors(scores, targets, tensor_names="scores, targets", 
-                   checks=["same_shape", "same_device"], throw_error=True)
-    
-    
-    if mask_valid is None:
-        mask_valid = ~scores.isnan()
-    else:
-        if mask_valid.dtype!=torch.bool:
-            raise ValueError("mask_valid has to be bool")
-        
-        assert_tensors(mask_valid, scores, tensor_names="mask_valid_scores, scores",
-                       checks=["same_shape", "same_device"], throw_error=True)
-    
-    if targets.dtype == torch.bool:
-        targets = targets.to(scores.dtype)
+    sorted_scores = sorted_scores.movedim(dim, -1)
+    sorted_mask_valid = sorted_mask_valid.movedim(dim, -1)
 
-    # Normalize dim
-    dim %= scores_ndim
+    valid_pair = sorted_mask_valid[..., 1:] & sorted_mask_valid[..., :-1]
+    score_change = (
+        (sorted_scores[..., 1:] != sorted_scores[..., :-1]) &
+        valid_pair
+    )
+    ## Add two "true columns" one for the 0,0 point and one
+    ## for the first valid score which is tautologically "a change"
+    ## -> use thereby preallocated tensor instead of cat for better fusing
+    mask_for_trapz =score_change.new_ones(score_change.shape[:-1] + (score_change.size(-1),))
+    mask_for_trapz[..., 2:] = score_change
 
-    N = scores.size(dim)
-    score_shape_as_list = list(scores.shape)
+    mask_for_trapz = mask_for_trapz.movedim(-1, dim)
 
-    # Sort by descending score along dim
-    order = scores.argsort(dim=dim, descending=True)
-    sorted_scores = scores.gather(dim=dim, index=order)
-    sorted_targets = targets.gather(dim=dim, index=order)
-
-    
-
-    # Count positives / negatives
-    P = sorted_targets.sum(dim=dim, keepdim=True) # [*batch_dims, 1]
-    Q = N - P                                    # [*batch_dims, 1]
-
-    # Cumulative true / false positives along dim
-    tps = torch.cumsum(sorted_targets, dim=dim)
-    fps = torch.cumsum(1 - sorted_targets, dim=dim)
-
-    # Identify score changes (grouped thresholds) along dim.
-    # score_change has size N+1 along dim to accommodate the explicit (0, 0) point.
-    sc_shape = score_shape_as_list
-    sc_shape[dim] = N+1
-    score_change = sorted_scores.new_ones(torch.Size(sc_shape), dtype=bool)
-    if N > 1:
-        sl_score_change = tuple(
-            slice(None) if d_i != dim else slice(2, N+1) 
-            for d_i in range(scores_ndim)
-        )
-
-        sl_next_scores = tuple(
-            slice(None) if d_i != dim else slice(1, N) 
-            for d_i in range(scores_ndim)
-        )
-        sl_prev_scores = tuple(
-            slice(None) if d_i != dim else slice(0, N-1) 
-            for d_i in range(scores_ndim)
-        )
-
-        score_change[sl_score_change] = sorted_scores[sl_next_scores] != sorted_scores[sl_prev_scores] # [*batch_dims, N-1]
-    # Normalize to TPR / FPR
-    tpr = tps / P
-    fpr = fps / Q
-
-    # Explicit (0,0) start point
-    zeros_shape = score_shape_as_list
-    zeros_shape[dim] = 1
-    zero = tps.new_zeros(torch.Size(zeros_shape))
-    tpr = torch.cat([zero, tpr], dim=dim)
-    fpr = torch.cat([zero, fpr], dim=dim)
-
-    return masked_batched_trapz(tpr, fpr, mask=score_change, dim=dim, keepdim=keepdim)
+    return masked_batched_trapz(tpr, fpr, mask=mask_for_trapz, dim=dim, keepdim=keepdim)
