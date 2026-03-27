@@ -49,3 +49,6 @@ For each used chat a link is provided to be called if wished. I always add a sma
     - Understanding of the bayesian error rate as a related measure
     - Calculation and implementation of log probs of gaussian mixture
     - Production of bayes_classifier_math.md
+- [Development of `BatchedLogistic` class](https://claude.ai/share/cc21b148-7308-4b77-ab23-33fe14c38c7c)
+- [Development of `k_fold_cv_normalized_split_batched`](https://claude.ai/share/862fe75b-b334-48ce-b489-5c2e58b5b7cc)
+- [Finding and implementing metric for CV-based threshold](https://claude.ai/share/27b633c3-c6a2-4cba-b540-9158037fdf0d)
