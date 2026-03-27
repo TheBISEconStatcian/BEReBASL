@@ -139,7 +139,7 @@ def batched_roc_points(
     fpr = fps / Q
 
     # Explicit (0,0) start point
-    zero = tps.narrow(dim, 0, 1).clone().zero_() # slice tps, clone it and then make it all zeros - brilliant
+    zero = tps.narrow_copy(dim, start=0, lenght=1).zero_() # slice tps, clone it and then make it all zeros - brilliant
     tpr = torch.cat([zero, tpr], dim=dim)
     fpr = torch.cat([zero, fpr], dim=dim)
 
