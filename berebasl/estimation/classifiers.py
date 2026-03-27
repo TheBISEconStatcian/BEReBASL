@@ -819,7 +819,7 @@ class BatchedLogistic(nn.Module):
         if self.fit_intercept:
             self._augment: Callable[[torch.Tensor], torch.Tensor] = self._prepend_ones
         else:
-            self._augment = lambda X: X
+            self._augment = nn.Identity()
 
     # ------------------------------------------------------------------
     # Static helpers
