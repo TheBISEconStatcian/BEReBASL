@@ -356,10 +356,10 @@ class CreditDataGenerator:
         device = self.device
 
         X_bad = self.bad_mixture.sample(n_bad, deterministic_weights = self.determinstic_mixture_weights) # [n_bad, k] or [b, n_bad, k]
-        y_bad = torch.full(X_bad.shape[:-1], self.bad_good_encoding["bad"], device=device, dtype=dtype) # [n_good] or [b, n_good, k]
+        y_bad = X_bad.new_full(X_bad.shape[:-1], self.bad_good_encoding["bad"]) # [n_good] or [b, n_good, k]
 
         X_good = self.good_mixture.sample(n_good, deterministic_weights = self.determinstic_mixture_weights) # [n_good, k] or [b, n_good, k]
-        y_good = torch.full((n_good,), self.bad_good_encoding["good"], device=device, dtype=dtype) # [n_good] or [b, n_good]
+        y_good = X_good.new_full(X_good.shape[:-1], self.bad_good_encoding["good"]) # [n_good] or [b, n_good]
 
         X = torch.cat([X_bad, X_good], dim=-2) # [n, k] or [b, n, k]
         y = torch.cat([y_bad, y_good], dim=-1) # [n] or [b, n]
