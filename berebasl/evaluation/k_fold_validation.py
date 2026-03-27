@@ -195,7 +195,7 @@ def train_folds_from_cv_folds(
         cv_feats: torch.Tensor, 
         cv_lbls: torch.Tensor, 
         cv_mask: torch.Tensor, 
-        make_continuous: bool = False
+        make_contiguous: bool = False
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     device = cv_lbls.device
     k_folds = cv_lbls.size(-2)
@@ -204,13 +204,13 @@ def train_folds_from_cv_folds(
 
     def select_all_train_idxs(d: torch.Tensor, n_feat_dims: int) -> torch.Tensor:
         selected = (
-            d.movedim(-2,0) # [k, *batch_dims, n_k, *feat_dims]
+            d.movedim(-2-n_feat_dims,0) # [k, *batch_dims, n_k, *feat_dims]
             [train_idxs] # [k, k-1, *batch_dims, n_k, *feat_dims] - 2nd dim is the separated train-set per fold k
-            .movedim((0,1), (-2-n_feat_dims,-3-n_feat_dims)) # [*batch_dims, k, k-1, n_k, *feat_dims]
+            .movedim((0,1), (-3-n_feat_dims, -2-n_feat_dims)) # [*batch_dims, k, k-1, n_k, *feat_dims]
             .flatten(-2-n_feat_dims,-1-n_feat_dims) # [*batch_dims, k, (k-1)*n_k, *feat_dims]
         )
 
-        if make_continuous:
+        if make_contiguous:
             selected = selected.contiguous()
 
         return selected
