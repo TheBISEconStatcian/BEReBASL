@@ -333,3 +333,40 @@ def batched_ks_statistic(
         return max_ks, ks_thresholds
     
     return max_ks
+
+def optimal_roc_thresholds(
+        scores: torch.Tensor, 
+        targets: torch.Tensor,
+        mask: Optional[torch.Tensor]=None,
+        dim: int = -1,
+        keepdim: bool = False
+    ):
+    fpr, tpr, sorted_scores, _, sorted_mask_valid = batched_roc_points(
+        scores,
+        targets,
+        mask,
+        dim
+    )
+
+    fpr_opt, tpr_opt = 0,1 # Optimal point according according to the ROC.
+
+    dim_size = sorted_scores.size(dim)
+    fpr_relevant = fpr.narrow(dim, 1, dim_size-1)
+    tpr_relevant = tpr.narrow(dim, 1, dim_size-1)
+    sq_eucl_dist_to_optimum_rel = (
+        fpr_relevant**2 +           # No need of substracting 0!
+        (tpr_relevant-tpr_opt)**2
+    )
+    sq_eucl_dist_to_optimum_rel.masked_fill_(
+        ~sorted_mask_valid.narrow(dim, 1, dim_size-1), 
+        2 # Makes sure bigger than all valids which are in [0, \sqrt{2}]
+        )
+    
+    idx_min_valid_eucl_dist = sq_eucl_dist_to_optimum_rel.argmin(dim, keepdim=True)
+
+    optimal_roc_scores = sorted_scores.gather(dim, index=idx_min_valid_eucl_dist)
+
+    if not keepdim:
+        optimal_roc_scores.squeeze_(dim)
+
+    return optimal_roc_scores
