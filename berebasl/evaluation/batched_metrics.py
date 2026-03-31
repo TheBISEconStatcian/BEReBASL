@@ -1,6 +1,6 @@
 import torch
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 from berebasl.utils.normalized_shape_tensor_ops import masked_batched_trapz
 from berebasl.utils.tensor_validation import assert_tensors
@@ -247,3 +247,89 @@ def batched_auroc(
     mask_for_trapz = mask_for_trapz.movedim(-1, dim)
 
     return masked_batched_trapz(tpr, fpr, mask=mask_for_trapz, dim=dim, keepdim=keepdim)
+
+def batched_ks_statistic(
+    scores: torch.Tensor,
+    targets: torch.Tensor,
+    mask_valid: Optional[torch.Tensor] = None,
+    dim: int = -1,
+    return_thresholds: bool = False,
+    keepdim: bool = False
+) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    
+    if scores.dtype == torch.bool or torch.is_complex(scores):
+        raise ValueError("scores must be a floating point or integer type")
+    
+    scores_ndim = scores.dim()
+    if dim not in range(-scores_ndim, scores_ndim):
+        raise IndexError("dim has to be valid w. r. t. the amount of dims of scores")
+    
+    assert_tensors(scores, targets, tensor_names="scores, targets", 
+                   checks=["same_shape", "same_device"], throw_error=True)
+    
+    if mask_valid is None:
+        mask_valid = ~scores.isnan()
+    else:
+        if mask_valid.dtype != torch.bool:
+            raise ValueError("mask_valid has to be bool")
+        
+        assert_tensors(mask_valid, scores, tensor_names="mask_valid, scores",
+                       checks=["same_shape", "same_device"], throw_error=True)
+    
+    if targets.dtype == torch.bool:
+        targets = targets.to(scores.dtype)
+    
+    # Normalize dim
+    dim %= scores_ndim
+    
+    # Sort by ascending score along dim (convention: threshold t means "classify as positive if score >= t")
+    order = scores.argsort(dim=dim, descending=False)
+    sorted_scores = scores.gather(dim=dim, index=order)
+    sorted_targets = targets.gather(dim=dim, index=order)
+    sorted_mask = mask_valid.gather(dim=dim, index=order)
+    
+    # Apply mask: only consider valid entries
+    ## avoid too any problems with  the sorted targets because of nan
+    sorted_targets = sorted_targets.nan_to_num(nan=-1, posinf=-1, neginf=-1)
+    sorted_targets = sorted_targets * sorted_mask
+    assert ~(sorted_targets == -1).any(), "Masking still left nans or infs in targets - this breaks the ks-statistic"
+    
+    # Count positives and negatives (only valid entries)
+    P = (sorted_targets * sorted_mask).sum(dim=dim, keepdim=True)  # Total positives
+    N_total = (1 - sorted_targets) * sorted_mask
+    Q = N_total.sum(dim=dim, keepdim=True)  # Total negatives
+    
+    # Cumulative counts along dim
+    cum_pos = torch.cumsum(sorted_targets * sorted_mask, dim=dim)  # TP at each threshold
+    cum_neg = torch.cumsum(N_total, dim=dim)  # FP at each threshold
+    
+    # CDFs: proportion of positives/negatives with score <= threshold
+    # Add small epsilon to avoid division by zero
+    eps = 1e-10
+    cdf_pos = cum_pos / (P + eps)
+    cdf_neg = cum_neg / (Q + eps)
+    
+    # KS statistic: maximum absolute difference between CDFs
+    ks_values = torch.abs(cdf_pos - cdf_neg)
+    
+    # Apply mask to KS values (invalid positions should not be considered)
+    ## Nan to num NOT necessary here, as any source for that was eliminated
+    ## through the eps and the nan_to_num over sorted_targets
+    ks_values = ks_values.nan_to_num(nan=-1, posinf=-1) * sorted_mask
+    
+    # Find maximum KS value along dim
+    max_ks, max_indices = ks_values.max(dim=dim, keepdim=keepdim)
+    
+    if return_thresholds:
+        # Get the score threshold at which max KS occurs
+        if keepdim:
+            ks_thresholds = sorted_scores.gather(dim=dim, index=max_indices)
+        else:
+            # Need to temporarily add dim back to gather, then squeeze
+            max_indices_expanded = max_indices.unsqueeze(dim)
+            ks_thresholds = sorted_scores.gather(dim=dim, index=max_indices_expanded)
+            ks_thresholds = ks_thresholds.squeeze(dim)
+        
+        return max_ks, ks_thresholds
+    
+    return max_ks
