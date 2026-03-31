@@ -255,7 +255,88 @@ def batched_ks_statistic(
     dim: int = -1,
     return_thresholds: bool = False,
     keepdim: bool = False
-) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    r"""
+    Compute the Kolmogorov-Smirnov statistic for binary classification along
+    dimension ``dim``.
+
+    The KS statistic measures the maximum separation between the cumulative
+    distribution functions of the positive and negative classes. It is defined as:
+
+    .. math::
+        \text{KS} = \max_t |F_{\text{pos}}(t) - F_{\text{neg}}(t)|
+
+    where :math:`F_{\text{pos}}(t)` and :math:`F_{\text{neg}}(t)` are the
+    empirical CDFs of scores for positive and negative samples, respectively.
+
+    The computation is performed independently along dimension ``dim``, treating
+    all other dimensions as batch dimensions.
+
+    Args:
+        scores (Tensor):
+            Tensor of shape ``(*batch_dims, N)`` -asuming ``dim=-1``-
+            containing predicted scores or probabilities along 
+            dimension ``dim``. ``N`` denotes the dimension ``dim`` and the
+            tensor can have any permutation of the shape above.
+        targets (Tensor):
+            Binary tensor of same shape as ``scores`` containing ground truth
+            labels (0 or 1, or False/True) along dimension ``dim``.
+        mask_valid (Tensor, optional):
+            Boolean tensor of same shape as ``scores`` indicating which
+            entries are valid. If ``None``, all non-NaN entries in ``scores``
+            are considered valid. Default: ``None``.
+        dim (int, optional):
+            Dimension along which to compute the KS statistic. Must satisfy
+            ``-scores.ndim <= dim < scores.ndim``. Default: ``-1``.
+        return_thresholds (bool, optional):
+            If ``True``, also return the score thresholds at which the maximum
+            KS statistic occurs. Default: ``False``.
+        keepdim (bool, optional):
+            Whether to retain dimension ``dim`` with size 1 in the output.
+            Default: ``False``.
+
+    Returns:
+        Tuple[Tensor, Optional[Tensor]]:
+            Tuple of ``(ks_values, ks_thresholds)``
+
+            If ``return_thresholds=False``: Tensor of shape ``(*batch_dims,)``
+            (or ``(*batch_dims, 1)`` if ``keepdim=True``) containing the KS
+            statistic for each batch element.
+            
+            If ``return_thresholds=True``: Tuple of two tensors:
+            
+            - **ks_values** (*Tensor*): KS statistics, a tensor of shape
+              ``(*batch_dims,)`` if ``keepdim=False`` or ``(*batch_dims, 1)``
+              (in case ``dim=-1``).
+            - **ks_thresholds** (*Tensor* or ``None``): Score values at which
+              the maximum separation occurs if ``return_thresholds=True``, has
+              the same shape as ``ks_values``. If ``return_thresholds=False``
+              it returns ``None``
+
+    Raises:
+        ValueError:
+            If ``scores`` is boolean or complex, or if ``mask_valid`` is not boolean.
+        IndexError:
+            If ``dim`` is not a valid dimension index.
+        AssertionError:
+            If tensors do not have matching shapes or devices.
+
+    Example:
+        .. code-block:: python
+
+            scores = torch.tensor([[0.1, 0.4, 0.35, 0.8],
+                                   [0.2, 0.3, 0.6, 0.7]])
+            targets = torch.tensor([[0, 0, 1, 1],
+                                    [0, 1, 0, 1]])
+            
+            # Compute KS statistic along last dimension
+            ks_stats, _ = batched_ks_statistic(scores, targets, dim=-1)
+            
+            # Also get thresholds
+            ks_stats, ks_thresh = batched_ks_statistic(
+                scores, targets, dim=-1, return_thresholds=True
+            )
+    """
     
     if scores.dtype == torch.bool or torch.is_complex(scores):
         raise ValueError("scores must be a floating point or integer type")
@@ -319,20 +400,21 @@ def batched_ks_statistic(
     
     # Find maximum KS value along dim
     max_ks, max_indices = ks_values.max(dim=dim, keepdim=keepdim)
+
+    if not return_thresholds:
+        return max_ks, None
     
-    if return_thresholds:
-        # Get the score threshold at which max KS occurs
-        if keepdim:
-            ks_thresholds = sorted_scores.gather(dim=dim, index=max_indices)
-        else:
-            # Need to temporarily add dim back to gather, then squeeze
-            max_indices_expanded = max_indices.unsqueeze(dim)
-            ks_thresholds = sorted_scores.gather(dim=dim, index=max_indices_expanded)
-            ks_thresholds = ks_thresholds.squeeze(dim)
-        
-        return max_ks, ks_thresholds
+    # Get the score threshold at which max KS occurs
+    if keepdim:
+        ks_thresholds = sorted_scores.gather(dim=dim, index=max_indices)
+    else:
+        # Need to temporarily add dim back to gather, then squeeze
+        max_indices_expanded = max_indices.unsqueeze(dim)
+        ks_thresholds = sorted_scores.gather(dim=dim, index=max_indices_expanded)
+        ks_thresholds = ks_thresholds.squeeze(dim)
     
-    return max_ks
+    return max_ks, ks_thresholds
+    
 
 def optimal_roc_thresholds(
         scores: torch.Tensor, 
