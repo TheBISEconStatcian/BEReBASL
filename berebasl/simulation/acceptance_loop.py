@@ -5,7 +5,7 @@ import os
 import time
 from warnings import warn
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from sklearn.ensemble import IsolationForest
 import torch
@@ -16,9 +16,9 @@ from berebasl.evaluation.bayesian_evaluation import BayesianMetric
 from berebasl.simulation.credit_data_simulation import CreditDataGenerator, CreditData, CreditDataSample
 from berebasl.estimation.classifiers import Classifier, TorchLogistic
 
-def build_parser_for_loop():
+def build_parser_for_loop(desc: str):
     parser = argparse.ArgumentParser(
-        description="Run an acceptance-feedback simulation (Kozdoi et al. 2025) and store results."
+        description=desc
     )
 
     # Optional positional argument
@@ -86,13 +86,6 @@ def build_parser_for_loop():
              "(Does **not** include the initial sample)"
     )
 
-    parser.add_argument(
-        "--top-percent",
-        type=float,
-        default=0.2,
-        help="Fraction of applicants to accept in each generation "
-             "(e.g., 0.2 means top 20 percent by predicted risk)."
-    )
 
     # Reporting and saving intervals
     parser.add_argument(
@@ -109,7 +102,6 @@ def build_parser_for_loop():
         help="Save simulation checkpoints every N generations."
     )
 
-    # NEW FLAGS
     parser.add_argument(
         "--nondeterministic-weights",
         action="store_true",
@@ -134,7 +126,7 @@ def build_parser_for_loop():
 
     return parser
 
-def process_args_of_loop_parser(args):
+def base_process_loop_args(args: argparse.ArgumentParser) -> dict:
     # Warn if both positional and optional paths are provided
     if args.output_path and args.output_path_opt:
         warn(
@@ -182,6 +174,10 @@ def process_args_of_loop_parser(args):
         "persist_classifiers": not args.no_persist_classifiers,
         "resume": args.resume
     }
+
+def process_args_of_loop_parser(args: argparse.ArgumentParser) -> dict:
+    based_parsed_args = base_process_loop_args(args)
+    based_parsed_args["top_percent"] = args.top_percent
 
 
 def accept_based_on_top_percentent_of_arbitrary_var(
@@ -250,9 +246,8 @@ def generate_initial_and_holdout_population(
     )
 
     return data_gen, credit_data, holdout_data
-    
 
-def acceptance_loop(
+def check_and_save_init_loop(
         sim_dir_path: str,
         data_generator: CreditDataGenerator,
         credit_data: CreditData,
@@ -270,7 +265,7 @@ def acceptance_loop(
         current_gen : int = 1,
         stats: List[Dict[str, Union[float, int]]] = [],
         classifiers_state_dicts: List[Dict[str, Union[Dict[str, Any], str]]] = []
-) -> None:
+    ) -> Tuple[Callable, Callable, str]:
     if num_gens < 0:
         raise ValueError("num_gens needs to be greater than 0")
     elif num_gens==0:
@@ -330,8 +325,49 @@ def acceptance_loop(
             f=init_objs_path
         )
 
-
     results_path = os.path.join(sim_dir_path, "simulation_results.pt")
+
+    return state_of_classifier_accepts, state_of_classifier_oracle, results_path
+    
+
+def acceptance_loop(
+        sim_dir_path: str,
+        data_generator: CreditDataGenerator,
+        credit_data: CreditData,
+        holdout_data: CreditData,
+        classifier_accepts: Classifier,
+        classifier_oracle: Classifier,
+        basl_unbiaser: BASLPartialUnbiaser,
+        base_seed: int = 1807,
+        sample_size: int = 100,
+        num_gens: int = 300,
+        top_percent: float = 200,
+        report_every: int = 10,
+        save_to_disc_every: int = 10,
+        persist_classifiers: bool = True,
+        current_gen : int = 1,
+        stats: List[Dict[str, Union[float, int]]] = [],
+        classifiers_state_dicts: List[Dict[str, Union[Dict[str, Any], str]]] = []
+) -> None:
+    state_of_classifier_accepts, state_of_classifier_oracle, results_path = check_and_save_init_loop(
+        sim_dir_path,
+        data_generator,
+        credit_data,
+        holdout_data,
+        classifier_accepts,
+        classifier_oracle,
+        basl_unbiaser,
+        base_seed,
+        sample_size,
+        num_gens,
+        top_percent,
+        report_every,
+        save_to_disc_every,
+        persist_classifiers,
+        current_gen,
+        stats,
+        classifiers_state_dicts
+    )
 
     simulation_begin = time.time()
     times_needed = []
@@ -577,7 +613,16 @@ def default_classifiers(n_features: int, device: Optional[torch.device]=None) ->
 
 
 if __name__ == "__main__":
-    argparser = build_parser_for_loop()
+    argparser = build_parser_for_loop(
+        desc="Run an acceptance-feedback simulation (Kozdoi et al. 2025) and store results."
+    )
+    argparser.add_argument(
+        "--top-percent",
+        type=float,
+        default=0.2,
+        help="Fraction of applicants to accept in each generation "
+             "(e.g., 0.2 means top 20 percent by predicted risk)."
+    )
     params = process_args_of_loop_parser(argparser.parse_args())
 
     if params.pop("resume"):
