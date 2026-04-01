@@ -1315,7 +1315,8 @@ class BatchedLogistic(nn.Module):
             # Write fitted betas back into the registered buffer.
             # batch_mask indexes the flattened batch dimension; reshaping to
             # batch_shape recovers the correct multi-dimensional boolean index.
-            self.beta[batch_mask.view(self.batch_shape)] = beta
+            if beta.untyped_storage().data_ptr() != self.beta.untyped_storage().data_ptr():
+                self.beta[batch_mask.view(self.batch_shape)] = beta
 
             return self
 
