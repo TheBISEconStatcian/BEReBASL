@@ -179,6 +179,8 @@ def process_args_of_loop_parser(args: argparse.ArgumentParser) -> dict:
     based_parsed_args = base_process_loop_args(args)
     based_parsed_args["top_percent"] = args.top_percent
 
+    return based_parsed_args
+
 
 def accept_based_on_top_percentent_of_arbitrary_var(
         features : torch.Tensor, 
@@ -273,11 +275,18 @@ def check_and_save_init_loop(
     if current_gen < 1 or current_gen > num_gens:
         raise ValueError(f"current_gen must be in [1, num_gens={num_gens}]")
     
-    if not Classifier.obj_has_needed_funs(classifier_accepts):
-        raise AssertionError("classifier_accepts is not a valid Classifier. Check Classifier.obj_has_needed_funs for details")
+    if (classifier_accepts is None) ^ (classifier_oracle is None):
+        raise AssertionError("Either both classifiers need to be None, or both have to be a valid Classifier.")
+    
+    for c in [classifier_accepts, classifier_oracle]:
+        if c is not None and not Classifier.obj_has_needed_funs(c):
+            raise AssertionError("classifier_accepts or classifier_oracle is not a valid Classifier. Check Classifier.obj_has_needed_funs for details")
     
     if persist_classifiers:
         def _get_state_method(classifier, classifier_name):
+            if classifier is None:
+                return
+
             possible_state_dict_names = ["to_state_dict", "state_dict"]
             for fun_name in possible_state_dict_names:
                 get_state_method = getattr(classifier, fun_name, None)
