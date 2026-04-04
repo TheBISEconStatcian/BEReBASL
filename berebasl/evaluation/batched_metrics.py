@@ -139,11 +139,42 @@ def batched_roc_points(
     fpr = fps / Q
 
     # Explicit (0,0) start point
-    zero = tps.narrow_copy(dim, start=0, lenght=1).zero_() # slice tps, clone it and then make it all zeros - brilliant
+    zero = tps.narrow_copy(dim, start=0, length=1).zero_() # slice tps, clone it and then make it all zeros - brilliant
     tpr = torch.cat([zero, tpr], dim=dim)
     fpr = torch.cat([zero, fpr], dim=dim)
 
     return fpr, tpr, sorted_scores, sorted_targets, sorted_mask_valid
+
+def batched_auroc_from_roc_points(
+        fpr: torch.Tensor, 
+        tpr: torch.Tensor,
+        sorted_scores: torch.Tensor,
+        sorted_mask_valid: torch.Tensor,
+        dim: int,
+        keepdim: bool = False
+) -> torch.Tensor:
+    """
+    Computes AU-ROC from output of ``batched_roc_points``,
+    dim needs to be the same as in the call of batched_roc_points
+    """
+    sorted_scores = sorted_scores.movedim(dim, -1)
+    sorted_mask_valid = sorted_mask_valid.movedim(dim, -1)
+
+    valid_pair = sorted_mask_valid[..., 1:] & sorted_mask_valid[..., :-1]
+    score_change = (
+        (sorted_scores[..., 1:] != sorted_scores[..., :-1]) &
+        valid_pair
+    )
+    ## Add two "true columns" one for the 0,0 point and one
+    ## for the first valid score which is tautologically "a change"
+    ## -> use thereby preallocated tensor instead of cat for better fusing
+    mask_for_trapz =score_change.new_ones(score_change.shape[:-1] + (score_change.size(-1)+2,))
+    mask_for_trapz[..., 2:] = score_change
+
+    mask_for_trapz = mask_for_trapz.movedim(-1, dim)
+
+    return masked_batched_trapz(tpr, fpr, mask=mask_for_trapz, dim=dim, keepdim=keepdim)
+    
 
 def batched_auroc(
     scores: torch.Tensor,
@@ -230,23 +261,9 @@ def batched_auroc(
         scores, targets, mask_valid, dim
     )
 
-    sorted_scores = sorted_scores.movedim(dim, -1)
-    sorted_mask_valid = sorted_mask_valid.movedim(dim, -1)
-
-    valid_pair = sorted_mask_valid[..., 1:] & sorted_mask_valid[..., :-1]
-    score_change = (
-        (sorted_scores[..., 1:] != sorted_scores[..., :-1]) &
-        valid_pair
+    return batched_auroc_from_roc_points(
+        fpr, tpr, sorted_scores, sorted_mask_valid, dim, keepdim
     )
-    ## Add two "true columns" one for the 0,0 point and one
-    ## for the first valid score which is tautologically "a change"
-    ## -> use thereby preallocated tensor instead of cat for better fusing
-    mask_for_trapz =score_change.new_ones(score_change.shape[:-1] + (score_change.size(-1),))
-    mask_for_trapz[..., 2:] = score_change
-
-    mask_for_trapz = mask_for_trapz.movedim(-1, dim)
-
-    return masked_batched_trapz(tpr, fpr, mask=mask_for_trapz, dim=dim, keepdim=keepdim)
 
 def batched_ks_statistic(
     scores: torch.Tensor,
@@ -414,22 +431,15 @@ def batched_ks_statistic(
         ks_thresholds = ks_thresholds.squeeze(dim)
     
     return max_ks, ks_thresholds
-    
 
-def optimal_roc_thresholds(
-        scores: torch.Tensor, 
-        targets: torch.Tensor,
-        mask: Optional[torch.Tensor]=None,
-        dim: int = -1,
+def optimal_roc_thresholds_from_roc_points(
+        fpr: torch.Tensor, 
+        tpr: torch.Tensor,
+        sorted_scores: torch.Tensor,
+        sorted_mask_valid: torch.Tensor,
+        dim: int,
         keepdim: bool = False
-    ):
-    fpr, tpr, sorted_scores, _, sorted_mask_valid = batched_roc_points(
-        scores,
-        targets,
-        mask,
-        dim
-    )
-
+    ) -> torch.Tensor:
     fpr_opt, tpr_opt = 0,1 # Optimal point according according to the ROC.
 
     dim_size = sorted_scores.size(dim)
@@ -452,3 +462,24 @@ def optimal_roc_thresholds(
         optimal_roc_scores.squeeze_(dim)
 
     return optimal_roc_scores
+    
+
+def optimal_roc_thresholds(
+        scores: torch.Tensor, 
+        targets: torch.Tensor,
+        mask: Optional[torch.Tensor]=None,
+        dim: int = -1,
+        keepdim: bool = False
+    ) -> torch.Tensor:
+    fpr, tpr, sorted_scores, _, sorted_mask_valid = batched_roc_points(
+        scores,
+        targets,
+        mask,
+        dim
+    )
+
+    return optimal_roc_thresholds_from_roc_points(
+        fpr, tpr, sorted_scores, sorted_mask_valid, dim, keepdim
+    )
+
+    
