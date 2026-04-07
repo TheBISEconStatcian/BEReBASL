@@ -713,6 +713,7 @@ def resume_cv_simulation_from_dir(
 # ──────────────────────────────────────────────────────────────────────────────
 
 # python -O -m experiments.acceptance_loop_cv_based --init-sample 1500  --sample-size 300
+# Takes around 4.8 mins on PC on CPU server took around 1.1 min
 
 if __name__ == "__main__":
     argparser = build_parser_for_loop(
