@@ -557,8 +557,11 @@ def acceptance_loop(
             counts_per_round = credit_data.counts_per_round()
             times_matrix_expl = torch.stack([
                 torch.ones_like(times_tensor),
-                counts_per_round["total"][-times_recorded_current:].to(times_tensor.dtype)
+                #counts_per_round["total"][-times_recorded_current:].cumsum(dim=0).to(times_tensor.dtype),
+                torch.arange(current_gen, current_gen+times_recorded_current, dtype=times_tensor.dtype)
             ], dim=1)
+
+            #print(times_matrix_expl)
 
             times_mat_inv = torch.linalg.inv(times_matrix_expl.mT.matmul(times_matrix_expl))
 
@@ -566,16 +569,20 @@ def acceptance_loop(
             betas_log = times_mat_inv.matmul(times_matrix_expl.mT.matmul(times_tensor.log()))
 
             avg_time = times_tensor.mean().item()
-            data_left_to_produce = gen_rounds_left*sample_size
-            future_times_expl = betas_lin.new_tensor([1, gen_rounds_left])
+            data_until_end = gen_rounds_left*sample_size + credit_data.count_all
+            future_times_expl = betas_lin.new_tensor([
+                1,
+                #data_until_end, 
+                num_gens
+            ])
             time_exp_lin = betas_lin.dot(future_times_expl).item()
-            time_exp_log = betas_log.dot(future_times_expl).item()
+            time_exp_log = betas_log.dot(future_times_expl).exp().item()
 
             print(
                 f"\tRoughly expected time left: "
                 f"{round(avg_time * gen_rounds_left / 60, 2)} min (AVG) or "
-                f"{round(time_exp_lin / 60, 2)} min (lin) or "
-                f"{round(time_exp_log / 60, 2)} min (log) or "
+                f"{round(time_exp_lin / 60, 2)} min (lin, betas = {[round(b.item(),2) for b in betas_lin]}) or "
+                f"{round(time_exp_log / 60, 2)} min (log, betas = {[round(b.item(),2) for b in betas_log]})"
             )
 
     print(
@@ -704,6 +711,8 @@ def resume_cv_simulation_from_dir(
 # ──────────────────────────────────────────────────────────────────────────────
 # ENTRY POINT
 # ──────────────────────────────────────────────────────────────────────────────
+
+# python -O -m experiments.acceptance_loop_cv_based --init-sample 1500  --sample-size 300
 
 if __name__ == "__main__":
     argparser = build_parser_for_loop(
