@@ -41,7 +41,7 @@ from warnings import warn
 
 import torch
 
-from typing import Any, Dict, List, Union, Tuple
+from typing import Any, Dict, List, Optional, Union, Tuple
 
 from berebasl.simulation.acceptance_loop import (
     build_parser_for_loop,
@@ -73,6 +73,8 @@ from berebasl.evaluation.batched_metrics import (
 K_FOLDS: int = 5
 CV_COUNT: int = 10
 MIN_PER_FOLD: int = 128
+THRESHOLD_METHODS: List[str] = ["ks", "roc"]
+# THRESHOLD_METHODS has to be consistent with the _batched_evaluation method
 
 # ──────────────────────────────────────────────────────────────────────────────
 # ARG PROCESSING
@@ -145,7 +147,8 @@ def _batched_evaluation(
     scores_cv: torch.Tensor,
     lbls_cv: torch.Tensor,
     mask_cv: torch.Tensor,
-    return_thresholds: bool = True,
+    calc_thresholds: bool = True,
+    stats_to_calc: Optional[List[str]] = None
 ) -> Dict[str, torch.Tensor]:
     """
     Compute KS and AUC (+ optionally their optimal thresholds) over batched
@@ -155,33 +158,52 @@ def _batched_evaluation(
     ----------
     scores_cv, lbls_cv, mask_cv :
         Tensors whose last dimension is the observation axis.
-    return_thresholds :
+    calc_thresholds :
         When True (default) also return the KS- and ROC-optimal thresholds.
     """
+    # THIS NEEDS TO BE CONSISTENT WITH THE THRESHOLD METHODS
     dim = -1
+    stats_to_calc_is_none = stats_to_calc is None
 
-    ks_vals, ks_thr = batched_ks_statistic(
-        scores_cv, lbls_cv, mask_cv, dim, return_thresholds=True
-    )
-
-    fpr, tpr, sorted_scores, _, sorted_mask = batched_roc_points(
-        scores_cv, lbls_cv, mask_cv, dim
-    )
-    aucs = batched_auroc_from_roc_points(fpr, tpr, sorted_scores, sorted_mask, dim)
-
-    roc_thr = None
-    if return_thresholds:
-        roc_thr = optimal_roc_thresholds_from_roc_points(
-            fpr, tpr, sorted_scores, sorted_mask, dim
+    return_dict = {}
+    if stats_to_calc_is_none or ("ks" in stats_to_calc):   
+        return_dict["ks_stats"], return_dict["ks_thresholds"] = batched_ks_statistic(
+            scores_cv, lbls_cv, mask_cv, dim, return_thresholds=calc_thresholds
         )
 
-    return {
-        "ks_stats":      ks_vals,
-        "ks_thresholds": ks_thr,
-        "roc_stats":     aucs,
-        "roc_thresholds": roc_thr,
-    }
+    if stats_to_calc_is_none or ("roc" in stats_to_calc):  
+        fpr, tpr, sorted_scores, _, sorted_mask = batched_roc_points(
+            scores_cv, lbls_cv, mask_cv, dim
+        )
+        aucs = batched_auroc_from_roc_points(fpr, tpr, sorted_scores, sorted_mask, dim)
+        return_dict["roc_stats"] = aucs
+        return_dict["roc_thresholds"] = (
+            optimal_roc_thresholds_from_roc_points(
+                fpr, tpr, sorted_scores, sorted_mask, dim
+            ) 
+            if calc_thresholds else
+            None
+        )
 
+    return return_dict
+
+def _batch_eval_logit_perf(
+    train_feats: torch.Tensor,
+    train_lbls: torch.Tensor,
+    train_mask: torch.Tensor,
+    val_feats: torch.Tensor,
+    val_lbls: torch.Tensor,
+    val_mask: torch.Tensor,
+    calc_thresholds: bool,
+    k_folds: int,
+    stats_to_calc: Optional[List[str]] = None,
+    dict_keys_prefix: str = ''
+) -> Dict[str, torch.Tensor]:
+    scores = _fit_logit_val_scores(train_feats, train_lbls, train_mask, val_feats)
+    evals = _batched_evaluation(scores, val_lbls, val_mask, calc_thresholds=calc_thresholds, stats_to_calc=stats_to_calc)
+    dict_keys_prefix=str(dict_keys_prefix)
+
+    return {dict_keys_prefix+k: _pad_to_k_folds(v, k_folds) for k, v in evals.items()}
 
 def cross_validate(
     feats: torch.Tensor,
@@ -189,7 +211,9 @@ def cross_validate(
     k_folds: int,
     min_per_fold: int,
     cv_count: int,
+    stats_to_calc: Optional[List[str]] = None,
     rng: torch.Generator = None,
+    dict_keys_prefix: str = ''
 ) -> Dict[str, torch.Tensor]:
     """
     Standard k-fold CV on *feats* / *lbls* repeated *cv_count* times.
@@ -211,11 +235,20 @@ def cross_validate(
 
     train_feats, train_lbls, train_mask = train_folds_from_cv_folds(
         feats_cv, lbls_cv, mask_cv, make_contiguous=True
-    )
-    scores = _fit_logit_val_scores(train_feats, train_lbls, train_mask, feats_cv)
-    evals = _batched_evaluation(scores, lbls_cv, mask_cv)
+    )    
 
-    return {k: _pad_to_k_folds(v, k_folds) for k, v in evals.items()}
+    return _batch_eval_logit_perf(
+        train_feats,
+        train_lbls,
+        train_mask,
+        val_feats=feats_cv,
+        val_lbls=lbls_cv,
+        val_mask=mask_cv,
+        calc_thresholds=True,
+        k_folds=k_folds,
+        stats_to_calc=stats_to_calc,
+        dict_keys_prefix = dict_keys_prefix
+    )
 
 
 def realistic_oracle_cv(
@@ -225,7 +258,9 @@ def realistic_oracle_cv(
     k_folds: int,
     min_per_fold: int,
     cv_count: int,
+    stats_to_calc: Optional[List[str]] = None,
     rng: torch.Generator = None,
+    dict_keys_prefix: str = ''
 ) -> Dict[str, torch.Tensor]:
     """
     "Realistic oracle" CV: trains on *all* data (accepted + rejected) but
@@ -262,13 +297,18 @@ def realistic_oracle_cv(
         )
     ]
 
-    # ── validate only on accepted fold ───────────────────────────────────────
-    scores_acc_cv = _fit_logit_val_scores(
-        train_feats, train_lbls, train_mask, feats_acc_cv
+    return _batch_eval_logit_perf(
+        train_feats,
+        train_lbls,
+        train_mask,
+        val_feats=feats_acc_cv,
+        val_lbls=lbls_acc_cv,
+        val_mask=mask_acc_cv,
+        calc_thresholds=True,
+        k_folds=k_folds,
+        stats_to_calc=stats_to_calc,
+        dict_keys_prefix = dict_keys_prefix
     )
-    evals = _batched_evaluation(scores_acc_cv, lbls_acc_cv, mask_acc_cv)
-
-    return {k: _pad_to_k_folds(v, k_folds) for k, v in evals.items()}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -287,7 +327,6 @@ def _check_and_save_init_cv_loop(
     sim_dir_path: str,
     data_generator: CreditDataGenerator,
     credit_data: CreditData,
-    holdout_data: CreditData,
     base_seed: int,
     sample_size: int,
     num_gens: int,
@@ -322,7 +361,6 @@ def _check_and_save_init_cv_loop(
             {
                 "data_generator": data_generator,
                 "initial_sample": credit_data,
-                "holdout_data":   holdout_data,
                 "configs": {
                     "base_seed":         base_seed,
                     "sample_size":       sample_size,
@@ -342,6 +380,20 @@ def _check_and_save_init_cv_loop(
 
     return _results_path(sim_dir_path)
 
+def _append_real_perf(
+        real_perf: Dict[str, torch.Tensor], 
+        stats: Dict[str, List[torch.Tensor]],
+        perf_name: str,
+        th_method: Optional[str] = None
+    ) -> None:
+    for s_n, s_v in real_perf.items():
+        if s_n.endswith("_stats"):
+            save_name = perf_name
+            if th_method is not None:
+                save_name += "_" + th_method
+            save_name += "_real_" + s_n[:-6]
+            stats[save_name].append(s_v.detach().clone())
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # MAIN LOOP
@@ -351,7 +403,7 @@ def acceptance_loop(
     sim_dir_path: str,
     data_generator: CreditDataGenerator,
     credit_data: CreditData,
-    holdout_data: CreditData,
+    alternative_accepted: Dict[str, torch.Tensor] = None,
     base_seed: int = 1807,
     sample_size: int = 256,
     num_gens: int = 300,
@@ -393,7 +445,6 @@ def acceptance_loop(
         sim_dir_path,
         data_generator,
         credit_data,
-        holdout_data,
         base_seed,
         sample_size,
         num_gens,
@@ -406,6 +457,42 @@ def acceptance_loop(
     if stats is None:
         stats = defaultdict(list)
 
+    all_acc_vector_names = [unb + '_' + m for m in THRESHOLD_METHODS for unb in ["biased", "unbiased"]]
+
+    if alternative_accepted is None:
+        was_called_from_resume = current_gen > 1
+        if was_called_from_resume:
+            raise AssertionError(
+                "The loop was resumed and the alternative accepts were not passed"
+            )
+        credit_data_acc_name = all_acc_vector_names[0]
+        alternative_accepted = {an : credit_data.accepted.clone() for an in all_acc_vector_names[1:]}
+    else:
+        if not isinstance(alternative_accepted, dict):
+            raise AssertionError("alternative_accepted should be a dictionary")
+        
+        set_alternative_accepted_keys = set(alternative_accepted.keys())
+        set_acc_vector_names = set(all_acc_vector_names)
+        
+        if (len(alternative_accepted) != (len(all_acc_vector_names)-1)) or not set_alternative_accepted_keys.issubset(set_acc_vector_names):
+            raise AssertionError(
+                f"alternative_accepted should have all but one key from all_acc_vector_names = {all_acc_vector_names}"
+            )
+        
+        credit_data_acc_name = list(set_acc_vector_names-set_alternative_accepted_keys)[0]
+        for acc_name, acc_vec in alternative_accepted.items():
+            if acc_vec.shape != credit_data.accepted.shape:
+                raise AssertionError(
+                    f"alternative_accepted['{acc_name}'] should have the same the same shape as credit_data.accepted"
+                )
+            
+        if not credit_data_acc_name.startswith("biased"):
+            raise AssertionError(
+                "the accepted ones in credit_data should come from evaluation through a metric calculated on biased accepts"
+            )
+            
+        
+
     simulation_begin = time.time()
     times_needed: List[float] = []
     print("Checks passed — beginning CV-based acceptance loop")
@@ -417,83 +504,118 @@ def acceptance_loop(
         for k, val in credit_data.data_stats().items():
             stats[k].append(val)
 
-        if gen_round_nr < num_gens:
-            # ── 1. Collect data views ─────────────────────────────────────────
-            current_sample: CreditDataSample = credit_data.to_sample_dataset()
-            current_sample.manual_seed(base_seed + gen_round_nr + 1)
+        # ── 1. Collect data views ─────────────────────────────────────────
+        unb_feats, unb_lbls, acc_flag = credit_data.unbiased_obs(
+            include_accepted_status=True
+        )
+        # for rng
+        data_generator.manual_seed(base_seed + gen_round_nr)
 
-            unb_feats, unb_lbls, acc_flag = credit_data.unbiased_obs(
-                include_accepted_status=True
-            )
+        # ── 2. CV for each decision type ──────────────────────────────────
+        # We also keep fully-fitted classifiers for scoring the new batch.
+        classifs: Dict[str, BatchedLogistic] = {}
+        
+        
 
-            # ── 2. CV for each decision type ──────────────────────────────────
-            # We also keep fully-fitted classifiers for scoring the new batch.
-            classifs: Dict[str, BatchedLogistic] = {}
-
-            for c in ["acc_based", "oracle_naive", "oracle_comparable"]:
-                if c == "oracle_comparable":
-                    cv_results = realistic_oracle_cv(
+        for c in ["acc_based", "oracle_naive", "oracle_comparable"]:
+            ## Expectation generation + classifier estimation
+            is_acc_based = c == "acc_based"
+            is_oracle_comparable = c == "oracle_comparable"
+            all_cv_results = {}
+            for m in THRESHOLD_METHODS:
+                if c == "oracle_naive":
+                    all_cv_results = cross_validate(
                         unb_feats,
                         unb_lbls,
-                        acc_flag,
                         K_FOLDS,
                         MIN_PER_FOLD,
                         CV_COUNT,
-                        rng=current_sample.rng,
+                        rng=data_generator.rng,
                     )
-                else:
-                    feats_for_cv = current_sample.features_labeled if c == "acc_based" else unb_feats
-                    lbls_for_cv  = current_sample.labels  if c == "acc_based" else unb_lbls
-                    
+                    break
+
+                if is_oracle_comparable:
+                    feats_full, lbls_full = unb_feats, unb_lbls
+                    cv_results = realistic_oracle_cv(
+                        feats_full,
+                        lbls_full,
+                        acc_flag=alternative_accepted["unbiased_" + m],
+                        k_folds=K_FOLDS,
+                        min_per_fold=MIN_PER_FOLD,
+                        cv_count=CV_COUNT,
+                        stats_to_calc=[m],
+                        rng=data_generator.rng,
+                        #dict_keys_prefix=m+'_'
+                    )
+                elif is_acc_based:
+                    acc_mask = acc_flag if credit_data_acc_name.endswith(m) else alternative_accepted["biased_" + m]
+                    feats_full, lbls_full = unb_feats[acc_mask], unb_lbls[acc_mask]
                     cv_results = cross_validate(
-                        feats_for_cv,
-                        lbls_for_cv,
+                        feats_full,
+                        lbls_full,
                         K_FOLDS,
                         MIN_PER_FOLD,
                         CV_COUNT,
-                        rng=current_sample.rng,
+                        stats_to_calc=[m],
+                        rng=data_generator.rng,
+                        #dict_keys_prefix=m+'_'
                     )
+                all_cv_results |= cv_results
 
-                # Store CV evaluation results
-                for val_name, val in cv_results.items():
-                    stats[c + "_" + val_name].append(val.detach().clone())
+                # Store CV evaluation results, including thresholds
+            
+                for val_name, val in all_cv_results.items():
+                    is_threshold = val_name.endswith("_thresholds")
+                    if is_oracle_comparable and is_threshold:
+                        continue
 
-                # Fit a final classifier on all available data (not CV-split)
-                # for use in scoring the incoming applicant batch.
-                feats_full = current_sample.features_labeled if c == "acc_based" else unb_feats
-                lbls_full  = current_sample.labels  if c == "acc_based" else unb_lbls
+                    stat_key_begin = "oracle" if is_threshold and not is_acc_based else c
+                    stats[stat_key_begin + "_" + val_name].append(val.detach().clone())
+
+                if is_oracle_comparable and not m==THRESHOLD_METHODS[0]: # Make sure we calculate only once
+                    continue
+
                 clf = BatchedLogistic(
                     n_features=data_generator.features_count,
                     batch_shape=torch.Size([]),
-                    device=feats_full.device,
-                    dtype=feats_full.dtype,
+                    device=data_generator.device,
+                    dtype=data_generator.dtype,
                 )
                 clf.fit(feats_full, lbls_full)
-                classifs[c] = clf
+                classifs[(c + '_' + m) if is_acc_based else "oracle"] = clf
 
-            # ── 3. Generate new applicant batch ───────────────────────────────
-            data_generator.manual_seed(base_seed + gen_round_nr)
-            feats_new, lbls_new = data_generator.sample(sample_size)   # [S,F], [S]
+        # ── 3. Generate new applicant batch ───────────────────────────────
+        feats_new, lbls_new = data_generator.sample(sample_size)   # [S,F], [S]
 
-            # Expand labels for all (cv_count+1) threshold variants:
-            #   rows 0…CV_COUNT-1 : per-cv-trial threshold mean
-            #   row  CV_COUNT     : pooled mean (most stable estimate)
-            exp_lbls = lbls_new.unsqueeze(0).expand(CV_COUNT + 1, -1)  # [M, S]
+        # Expand labels for all (cv_count+1) threshold variants:
+        #   rows 0…CV_COUNT-1 : per-cv-trial threshold mean
+        #   row  CV_COUNT     : pooled mean (most stable estimate)
+        exp_lbls = lbls_new.unsqueeze(0).expand(CV_COUNT + 1, -1)  # [M, S]
 
-            # ── 4. Realised performance per (decision_type × method) ──────────
-            # We track the variable that will be used for the actual acceptance
-            # decision so we can set it correctly after the inner loops.
-            final_accept_decision: torch.Tensor = None
+        # ── 4. Realised performance per (decision_type × method) ──────────
+        # We track the variable that will be used for the actual acceptance
+        # decision so we can set it correctly after the inner loops.
+        final_accept_decision: torch.Tensor = None
 
-            for dt in ["oracle_naive", "oracle_comparable", "acc_based"]:
-                # Score new applicants with the fully-fitted classifier
-                scores = classifs[dt].predict_proba(feats_new)[..., 1]  # [S]
-                exp_scores = scores.unsqueeze(0).expand(CV_COUNT + 1, -1)  # [M, S]
-
+        for th in ["acc_based", "oracle"]:
+            scores = classifs[th].predict_proba(feats_new)[..., 1]  # [S]
+            exp_scores = scores.unsqueeze(0).expand(CV_COUNT + 1, -1)  # [M, S]
+            for perf in ["biased_acc", "unbiased_acc", "unbiased_future"]:
+                if perf == "unbiased_future":
+                    real_perf = _batched_evaluation(
+                        scores, lbls_new, mask_cv=torch.ones_like(scores, dtype=torch.bool),
+                        calc_thresholds=False
+                    )
+                    _append_real_perf(
+                        real_perf,
+                        stats,
+                        perf_name=perf,
+                        th_method=None
+                    )
+                    continue
                 for m in ["ks", "roc"]:
                     # cv_thresholds : [CV_COUNT, K_FOLDS]
-                    cv_thresholds: torch.Tensor = stats[dt + "_" + m + "_thresholds"][-1]
-                    # Mean over folds for each CV trial → [CV_COUNT, 1]
+                    cv_thresholds: torch.Tensor = stats[th + "_" + m + "_thresholds"][-1]
                     cv_thr_means = cv_thresholds.nanmean(dim=-1, keepdim=True)
                     # Mean over CV trials → [1, 1]  (pooled / most-stable)
                     pooled_thr = cv_thr_means.nanmean(dim=0, keepdim=True)
@@ -507,24 +629,60 @@ def acceptance_loop(
                     # Realised performance on the new batch under each threshold
                     real_perf = _batched_evaluation(
                         exp_scores, exp_lbls, mask_cv=accept_mask,
-                        return_thresholds=False
+                        calc_thresholds=False
                     )
-                    for s_n, s_v in real_perf.items():
-                        if s_n.endswith("_stats"):
-                            save_name = dt + "_" + m + "_real_" + s_n[:-6]
-                            stats[save_name].append(s_v.detach().clone())
+                    _append_real_perf(
+                        real_perf,
+                        stats,
+                        perf_name=perf,
+                        th_method=None
+                    )
 
-                    # Remember the acc_based / roc pooled decision for data ingestion
-                    if dt == "acc_based" and m == "roc":
-                        # Row CV_COUNT is the pooled (most stable) decision
-                        final_accept_decision = accept_mask[CV_COUNT]  # [S]
 
-            # ── 5. Add new generation using the pooled acc_based/roc decision ─
-            if final_accept_decision is None:
-                raise RuntimeError(
-                    "final_accept_decision was never set — check loop ordering."
+
+
+        for dt in ["oracle_naive", "oracle_comparable", "acc_based"]:
+            # Score new applicants with the fully-fitted classifier
+            is_acc_based = dt == "acc_based"
+            scores = classifs[dt if is_acc_based else "oracle"].predict_proba(feats_new)[..., 1]  # [S]
+            exp_scores = scores.unsqueeze(0).expand(CV_COUNT + 1, -1)  # [M, S]
+
+            for m in ["ks", "roc"]:
+                # cv_thresholds : [CV_COUNT, K_FOLDS]
+                threshold_key = ()
+                cv_thresholds: torch.Tensor = stats[dt + "_" + m + "_thresholds"][-1]
+                # Mean over folds for each CV trial → [CV_COUNT, 1]
+                cv_thr_means = cv_thresholds.nanmean(dim=-1, keepdim=True)
+                # Mean over CV trials → [1, 1]  (pooled / most-stable)
+                pooled_thr = cv_thr_means.nanmean(dim=0, keepdim=True)
+                # Stack: rows 0…CV_COUNT-1 are per-trial, row CV_COUNT is pooled
+                thresholds = torch.cat([cv_thr_means, pooled_thr], dim=0)  # [M, 1]
+
+                # Acceptance: score < threshold means the applicant is scored
+                # as *low risk* → accept.
+                accept_mask = exp_scores < thresholds  # [M, S]
+
+                # Realised performance on the new batch under each threshold
+                real_perf = _batched_evaluation(
+                    exp_scores, exp_lbls, mask_cv=accept_mask,
+                    calc_thresholds=False
                 )
-            credit_data.add_gen(feats_new, lbls_new, accepted_new=final_accept_decision)
+                for s_n, s_v in real_perf.items():
+                    if s_n.endswith("_stats"):
+                        save_name = dt + "_" + m + "_real_" + s_n[:-6]
+                        stats[save_name].append(s_v.detach().clone())
+
+                # Remember the acc_based / roc pooled decision for data ingestion
+                if dt == "acc_based" and m == "roc":
+                    # Row CV_COUNT is the pooled (most stable) decision
+                    final_accept_decision = accept_mask[CV_COUNT]  # [S]
+
+        # ── 5. Add new generation using the pooled acc_based/roc decision ─
+        if final_accept_decision is None:
+            raise RuntimeError(
+                "final_accept_decision was never set — check loop ordering."
+            )
+        credit_data.add_gen(feats_new, lbls_new, accepted_new=final_accept_decision)
 
         # ── 6. Checkpoint ─────────────────────────────────────────────────────
         if (
@@ -667,10 +825,10 @@ def resume_cv_simulation_from_dir(
 
     # Move data objects to device
     data_generator: CreditDataGenerator = init_objs["data_generator"]
-    holdout_data:   CreditData           = init_objs["holdout_data"]
     credit_data:    CreditData           = results["credit_data"]
+    oracle_accepts: torch.Tensor = results["oracle_accepts"]
 
-    for obj in [data_generator, holdout_data, credit_data]:
+    for obj in [data_generator, credit_data, oracle_accepts]:
         if hasattr(obj, "to"):
             obj.to(device)
 
@@ -696,7 +854,7 @@ def resume_cv_simulation_from_dir(
         sim_dir_path    = sim_dir_path,
         data_generator  = data_generator,
         credit_data     = credit_data,
-        holdout_data    = holdout_data,
+        alternative_accepted = oracle_accepts,
         base_seed       = configs["base_seed"],
         sample_size     = configs["sample_size"],
         num_gens        = configs["num_gens"],
@@ -768,7 +926,7 @@ if __name__ == "__main__":
     # Use top_percent=0.2 for the initial population rule (first-generation
     # heuristic accept/reject before CV scores are available).
     
-    data_generator, credit_data, holdout_data = generate_initial_and_holdout_population(
+    data_generator, credit_data, _ = generate_initial_and_holdout_population(
         data_generator,
         params["initial_seed"],
         init_sample  = params.pop("init_sample"),   # default 1000 via --init-sample
@@ -782,6 +940,5 @@ if __name__ == "__main__":
     credit_data, stats = acceptance_loop(
         data_generator = data_generator,
         credit_data    = credit_data,
-        holdout_data   = holdout_data,
         **params,
     )
