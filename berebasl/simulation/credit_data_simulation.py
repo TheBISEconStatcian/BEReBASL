@@ -290,6 +290,10 @@ class CreditDataGenerator:
         self.determinstic_mixture_weights = bool(deterministic_weight_sampling)
 
     @property
+    def add_noise(self) -> bool:
+        return self.noise_std > 0
+
+    @property
     def device(self) -> torch.device:
         """
         The device on which both the good and bad Gaussian mixture parameters reside.
