@@ -23,7 +23,7 @@ from .acceptance_loop_cv_based import build_parser_for_cv_loop, process_args_cv_
 def main():
     # Parse base arguments
     parser = build_parser_for_cv_loop()
-    args = parser.parse_args()
+    args = parser.parse_args([])
     
     # Process base params
     params = process_args_cv_loop(args)
@@ -38,7 +38,7 @@ def main():
     
     # Create timestamped base directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_sim_dir = os.path.join("..", "berebasl", "data", "simulations", f"grid_{timestamp}")
+    base_sim_dir = os.path.abspath(os.path.join("berebasl", "data", "simulations", f"grid_{timestamp}"))
     os.makedirs(base_sim_dir, exist_ok=True)
     
     print(f"Running grid experiments in {base_sim_dir}")
@@ -46,7 +46,7 @@ def main():
     # Run grid
     for noise_std, flip_prob in product(noise_stds, flip_probs):
         # Create subdirectory
-        sub_dir_name = f"noise_{noise_std}_flip_{flip_prob}"
+        sub_dir_name = f"noise_{str(noise_std).replace('.', '_')}_flip_{str(flip_prob).replace('.', '_')}"
         sim_dir_path = os.path.join(base_sim_dir, sub_dir_name)
         os.makedirs(sim_dir_path, exist_ok=True)
         
