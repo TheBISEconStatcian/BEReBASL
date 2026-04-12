@@ -33,10 +33,11 @@ Usage
   python acceptance_loop_cv_based.py /path/to/output --resume --num-gens 500
 """
 
+from datetime import datetime
 from collections import defaultdict
+from math import log
 import os
 import time
-from datetime import datetime
 from warnings import warn
 
 import torch
@@ -76,6 +77,8 @@ MIN_PER_FOLD: int = 128
 METRIC_CATEGORIES: List[str] = ["ks", "roc"]
 # METRIC_CATEGORIES has to be consistent with the _batched_evaluation method
 THRESHOLD_BASIS: List[str] = ["acc_based", "oracle"]
+EXPECTATION_TYPES: List[str] = ["acc_based", "oracle_naive", "oracle_comparable"]
+REAL_PERFORMANCE_TYPES: List[str] = ["biased_acc", "unbiased_acc", "unbiased_future"]
 
 # ──────────────────────────────────────────────────────────────────────────────
 # ARG PROCESSING
@@ -514,7 +517,7 @@ def acceptance_loop(
 
         # ── 2. Expectation Generation + "CV-Threshold calculation" ────────────
 
-        for c in ["acc_based", "oracle_naive", "oracle_comparable"]:
+        for c in EXPECTATION_TYPES:
             ## Expectation generation + classifier estimation
             is_acc_based = c == "acc_based"
             is_oracle_comparable = c == "oracle_comparable"
@@ -567,7 +570,7 @@ def acceptance_loop(
                     continue
 
                 stat_key_begin = "oracle" if is_threshold and not is_acc_based else c
-                if not stat_key_begin in THRESHOLD_BASIS:
+                if is_threshold and not stat_key_begin in THRESHOLD_BASIS:
                     raise AssertionError(
                         "The THRESHOLD_BASIS were changed without updating the expectation generation, loop is corrupted"
                     )
@@ -613,7 +616,10 @@ def acceptance_loop(
                         feats_new, lbls_new, accepted_new=current_accepts[-1] # [S]
                     )
                 else:
-                    alternative_accepted[th_cat] = current_accepts[-1]
+                    alternative_accepted[th_cat] = torch.cat(
+                        [alternative_accepted[th_cat], current_accepts[-1]],
+                        dim=0
+                    )
 
 
         # ── 4. Evaluate realized performance ───────────────────────────────
@@ -627,10 +633,11 @@ def acceptance_loop(
         # decision so we can set it correctly after the inner loops.
 
         for th in THRESHOLD_BASIS:
-            if th == "oracle":
+            th_is_oracle = th == "oracle"
+            if th_is_oracle:
                 current_scores = scores["oracle"]
                 exp_scores = current_scores.unsqueeze(0).expand(CV_COUNT + 1, -1)  # [M, S]
-            for perf in ["biased_acc", "unbiased_acc", "unbiased_future"]:
+            for perf in REAL_PERFORMANCE_TYPES:
                 for m in METRIC_CATEGORIES:
                     if th == "acc_based":
                         current_scores = scores[th + '_' + m]
@@ -638,27 +645,29 @@ def acceptance_loop(
 
                     if perf == "unbiased_future":
                         real_perf = _batched_evaluation(
-                            current_scores, lbls_new, mask_cv=torch.ones_like(scores, dtype=torch.bool),
+                            current_scores, lbls_new, 
+                            mask_cv=torch.ones_like(current_scores, dtype=torch.bool),
                             calc_thresholds=False
                         )
                         _append_real_perf(
                             real_perf,
                             dict_to_append_to=stats,
                             perf_name=perf,
-                            th_method=None # This is wrong
+                            th_method=th if th_is_oracle else th + "_" + m
                         )
-                        if th == "oracle": # As this case is independent from the metric.
+                        if th_is_oracle: # As this case is independent from the metric.
                             break
                     else:
                         real_perf = _batched_evaluation(
                             exp_scores, exp_lbls, mask_cv=accept_decisions[perf + '_' + m],
+                            #stats_to_calc=[m],
                             calc_thresholds=False
                         )
                         _append_real_perf(
                             real_perf,
                             stats,
                             perf_name=perf,
-                            th_method=th
+                            th_method=th + '_' + m
                         )
 
 
@@ -711,7 +720,7 @@ def acceptance_loop(
             future_times_expl = betas_lin.new_tensor([
                 1,
                 data_until_end, 
-                data_until_end.log()
+                log(data_until_end)
             ])
             time_exp_lin = betas_lin.dot(future_times_expl).item()
             time_exp_log = betas_log.dot(future_times_expl).exp().item()
