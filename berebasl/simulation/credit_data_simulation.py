@@ -280,8 +280,6 @@ class CreditDataGenerator:
         self.good_mixture = good_mixture
         self.noise_std = sqrt(float(noise_var))
         self.bad_ratio = float(bad_ratio)
-        
-        self.add_noise = self.noise_std > 0
 
         if seed is not None:
             self.bad_mixture.manual_seed(seed)
