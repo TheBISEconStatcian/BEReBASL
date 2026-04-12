@@ -84,6 +84,28 @@ REAL_PERFORMANCE_TYPES: List[str] = ["biased_acc", "unbiased_acc", "unbiased_fut
 # ARG PROCESSING
 # ──────────────────────────────────────────────────────────────────────────────
 
+def build_parser_for_cv_loop():
+    argparser = build_parser_for_loop(
+        desc=(
+            "Run an acceptance-feedback simulation (Kozdoi et al. 2025) "
+            "based on a CV rule and store results."
+        )
+    )
+    argparser.add_argument(
+        "--noise-std",
+        type=float,
+        default=0.0,
+        help="Standard deviation of spherical white noise to add to covariates"
+    )
+    argparser.add_argument(
+        "--accept-flip-probability",
+        type=float,
+        default=0.0,
+        help="Probability of flipping an acceptance decision"
+    )
+    
+    return argparser
+
 def process_args_cv_loop(args) -> dict:
     """
     Parse CLI args for the CV-based loop.
@@ -97,7 +119,7 @@ def process_args_cv_loop(args) -> dict:
         args.top_percent = 0.2          # dummy — not used by this script
 
     parsed = base_process_loop_args(args)
-    parsed.pop("top_percent", None)     # CV loop does not use a top-percent rule
+    parsed.pop("top_percent", None)     # CV loop does not use a top-percent rul
     return parsed
 
 
@@ -331,6 +353,7 @@ def _check_and_save_init_cv_loop(
     sim_dir_path: str,
     data_generator: CreditDataGenerator,
     credit_data: CreditData,
+    accept_flip_probability: float,
     base_seed: int,
     sample_size: int,
     num_gens: int,
@@ -359,6 +382,9 @@ def _check_and_save_init_cv_loop(
             f"current_gen=1 but {os.path.basename(init_p)} already exists "
             f"in {sim_dir_path}.  Use --resume to continue an existing run."
         )
+    
+    if not isinstance(accept_flip_probability, float) or not (0 <= accept_flip_probability <= 1):
+        raise AssertionError("accept_flip_probability must be bigger equal zero and smaller equal one")
 
     if not os.path.exists(init_p):
         torch.save(
@@ -376,6 +402,7 @@ def _check_and_save_init_cv_loop(
                     "k_folds":    K_FOLDS,
                     "cv_count":   CV_COUNT,
                     "min_per_fold": MIN_PER_FOLD,
+                    "accept_flip_probability" : accept_flip_probability
                 },
             },
             f=init_p,
@@ -408,6 +435,7 @@ def acceptance_loop(
     data_generator: CreditDataGenerator,
     credit_data: CreditData,
     alternative_accepted: Dict[str, torch.Tensor] = None,
+    accept_flip_probability: float = .0,
     base_seed: int = 1807,
     sample_size: int = 256,
     num_gens: int = 300,
@@ -445,11 +473,13 @@ def acceptance_loop(
     stats : defaultdict(list) or None
         Pre-populated stats dict when resuming; created fresh otherwise.
     """
+    accept_flip_probability = float(accept_flip_probability)
     results_path = _check_and_save_init_cv_loop(
         sim_dir_path,
         data_generator,
         credit_data,
         base_seed,
+        accept_flip_probability,
         sample_size,
         num_gens,
         report_every,
@@ -494,6 +524,10 @@ def acceptance_loop(
             raise AssertionError(
                 "the accepted ones in credit_data should come from evaluation through a metric calculated on biased accepts"
             )
+        
+    accept_flip_probability = float(accept_flip_probability)
+    if not (0 <= accept_flip_probability <= 1):
+        raise AssertionError("accept_flip_probability **must** be in [0,1]")
             
         
 
@@ -524,7 +558,6 @@ def acceptance_loop(
             all_cv_results = {}
             for m in METRIC_CATEGORIES:
                 if is_oracle_comparable:
-                    feats_full, lbls_full = unb_feats, unb_lbls
                     cv_results = realistic_oracle_cv(
                         unb_feats,
                         unb_lbls,
@@ -538,7 +571,6 @@ def acceptance_loop(
                     )
                 elif is_acc_based:
                     acc_mask = acc_flag if credit_data_acc_name.endswith(m) else alternative_accepted["acc_based_" + m]
-                    feats_full, lbls_full = unb_feats[acc_mask], unb_lbls[acc_mask]
                     cv_results = cross_validate(
                         unb_feats[acc_mask],
                         unb_lbls[acc_mask],
@@ -608,9 +640,16 @@ def acceptance_loop(
                 # Stack: rows 0…CV_COUNT-1 are per-trial, row CV_COUNT is pooled
                 thresholds = torch.cat([cv_thr_means, pooled_thr], dim=0)  # [M, 1]
 
-                current_accepts = accept_decisions[perf_lbl + '_' + m] = current_scores.unsqueeze(0) < thresholds # [M, S]
+                current_accepts = current_scores.unsqueeze(0) < thresholds # [M, S]
 
-                
+                if accept_flip_probability > 0:
+                    should_flip_mask = torch.bernoulli(
+                        torch.full_like(current_accepts, fill_value=accept_flip_probability, dtype=torch.float32),
+                        generator=data_generator.rng
+                    ).to(bool)
+                    current_accepts[should_flip_mask] = ~current_accepts[should_flip_mask]
+
+                accept_decisions[perf_lbl + '_' + m] = current_accepts
                 if credit_data_acc_name == th_cat:
                     credit_data.add_gen(
                         feats_new, lbls_new, accepted_new=current_accepts[-1] # [S]
@@ -844,6 +883,7 @@ def resume_cv_simulation_from_dir(
         data_generator  = data_generator,
         credit_data     = credit_data,
         alternative_accepted = alternative_accepted,
+        accept_flip_probability= configs["accept_flip_probability"],
         base_seed       = configs["base_seed"],
         sample_size     = configs["sample_size"],
         num_gens        = configs["num_gens"],
@@ -863,12 +903,7 @@ def resume_cv_simulation_from_dir(
 # Takes around 4.8 mins on PC on CPU server took around 1.1 min
 
 if __name__ == "__main__":
-    argparser = build_parser_for_loop(
-        desc=(
-            "Run an acceptance-feedback simulation (Kozdoi et al. 2025) "
-            "based on a CV rule and store results."
-        )
-    )
+    argparser = build_parser_for_cv_loop()
     # We deliberately do NOT add --top-percent here; process_args_cv_loop
     # injects a harmless dummy value so base_process_loop_args does not crash.
 
@@ -922,6 +957,7 @@ if __name__ == "__main__":
         holdout_sample = params.pop("holdout_sample"),
         top_percent  = 0.2,
     )
+    data_generator.noise_std = params.pop("noise_std")
 
     print("\n\n*** Starting CV-based acceptance loop ***\n\n")
     params["base_seed"] = params.pop("initial_seed")
