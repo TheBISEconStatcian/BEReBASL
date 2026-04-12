@@ -120,6 +120,7 @@ def process_args_cv_loop(args) -> dict:
 
     parsed = base_process_loop_args(args)
     parsed.pop("top_percent", None)     # CV loop does not use a top-percent rul
+    parsed["accept_flip_probability"] = args.accept_flip_probability
     return parsed
 
 
@@ -895,6 +896,77 @@ def resume_cv_simulation_from_dir(
     )
 
 
+def run_cv_simulation(params: dict, device: torch.device, dtype: torch.dtype) -> Tuple[CreditData, defaultdict]:
+    """
+    Run the CV-based acceptance simulation based on the provided params dictionary.
+    
+    This function encapsulates the logic for starting fresh runs or resuming simulations,
+    allowing for grid-based experimentation by calling it with different param sets.
+    
+    Parameters
+    ----------
+    params : dict
+        A dictionary containing simulation parameters, equivalent to the output of
+        process_args_cv_loop(args). Must include keys like "sim_dir_path", "resume",
+        "initial_seed", "init_sample", "holdout_sample", "noise_std", "accept_flip_probability",
+        "sample_size", "num_gens", "report_every", "save_to_disc_every", "persist_classifiers",
+        and any others used in the original entry point.
+    """
+    # ── Resume branch ─────────────────────────────────────────────────────────
+    if params.get("resume", False):
+        print("Resuming CV simulation…")
+        resume_cv_simulation_from_dir(
+            sim_dir_path  = params["sim_dir_path"],
+            new_gen_count = params.get("num_gens"),
+        )
+        return
+
+    # ── Fresh run ─────────────────────────────────────────────────────────────
+    print("Begin of CV-based simulation.  Results to be saved in")
+    print(params["sim_dir_path"])
+
+
+    print("Simulation to be run on device:", device)
+    print("Defining data generating process\n")
+
+    data_generator: CreditDataGenerator = default_dgp(
+        seed_credit_data_gen=params["initial_seed"],
+        deterministic_weights_for_mixture_sampling=params.get("deterministic_weights", True),  # Assuming default if not provided
+        device=device,
+        dtype=dtype,
+    )
+
+    print("Generating initial and holdout population")
+    # Use top_percent=0.2 for the initial population rule (first-generation
+    # heuristic accept/reject before CV scores are available).
+    
+    data_generator, credit_data, _ = generate_initial_and_holdout_population(
+        data_generator,
+        params["initial_seed"],
+        init_sample  = params["init_sample"],   # default 1000 via --init-sample
+        holdout_sample = params["holdout_sample"],
+        top_percent  = 0.2,
+    )
+    data_generator.noise_std = params["noise_std"]
+
+    print("\n\n*** Starting CV-based acceptance loop ***\n\n")
+    base_seed = params["initial_seed"]
+
+    credit_data, stats = acceptance_loop(
+        sim_dir_path=params["sim_dir_path"],
+        data_generator=data_generator,
+        credit_data=credit_data,
+        accept_flip_probability=params["accept_flip_probability"],
+        base_seed=base_seed,
+        sample_size=params["sample_size"],
+        num_gens=params["num_gens"],
+        report_every=params["report_every"],
+        save_to_disc_every=params["save_to_disc_every"],
+        persist_classifiers=params["persist_classifiers"],
+    )
+    return credit_data, stats
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # ENTRY POINT
 # ──────────────────────────────────────────────────────────────────────────────
@@ -910,19 +982,6 @@ if __name__ == "__main__":
     args = argparser.parse_args()
     params = process_args_cv_loop(args)
 
-    # ── Resume branch ─────────────────────────────────────────────────────────
-    if params.pop("resume"):
-        print("Resuming CV simulation…")
-        resume_cv_simulation_from_dir(
-            sim_dir_path  = params["sim_dir_path"],
-            new_gen_count = params.get("num_gens"),
-        )
-        exit(0)
-
-    # ── Fresh run ─────────────────────────────────────────────────────────────
-    print("Begin of CV-based simulation.  Results to be saved in")
-    print(params["sim_dir_path"])
-
     dtype = torch.float64
     torch.set_default_dtype(dtype)
     device = torch.device(
@@ -936,34 +995,4 @@ if __name__ == "__main__":
     torch.set_num_threads(24)
     torch.set_num_interop_threads(8)
 
-    print("Simulation to be run on device:", device)
-    print("Defining data generating process\n")
-
-    data_generator: CreditDataGenerator = default_dgp(
-        seed_credit_data_gen=params["initial_seed"],
-        deterministic_weights_for_mixture_sampling=params.pop("deterministic_weights"),
-        device=device,
-        dtype=dtype,
-    )
-
-    print("Generating initial and holdout population")
-    # Use top_percent=0.2 for the initial population rule (first-generation
-    # heuristic accept/reject before CV scores are available).
-    
-    data_generator, credit_data, _ = generate_initial_and_holdout_population(
-        data_generator,
-        params["initial_seed"],
-        init_sample  = params.pop("init_sample"),   # default 1000 via --init-sample
-        holdout_sample = params.pop("holdout_sample"),
-        top_percent  = 0.2,
-    )
-    data_generator.noise_std = params.pop("noise_std")
-
-    print("\n\n*** Starting CV-based acceptance loop ***\n\n")
-    params["base_seed"] = params.pop("initial_seed")
-
-    credit_data, stats = acceptance_loop(
-        data_generator = data_generator,
-        credit_data    = credit_data,
-        **params,
-    )
+    run_cv_simulation(params, device, dtype)
