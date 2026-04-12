@@ -915,11 +915,10 @@ def run_cv_simulation(params: dict, device: torch.device, dtype: torch.dtype) ->
     # ── Resume branch ─────────────────────────────────────────────────────────
     if params.get("resume", False):
         print("Resuming CV simulation…")
-        resume_cv_simulation_from_dir(
+        return resume_cv_simulation_from_dir(
             sim_dir_path  = params["sim_dir_path"],
             new_gen_count = params.get("num_gens"),
         )
-        return
 
     # ── Fresh run ─────────────────────────────────────────────────────────────
     print("Begin of CV-based simulation.  Results to be saved in")
