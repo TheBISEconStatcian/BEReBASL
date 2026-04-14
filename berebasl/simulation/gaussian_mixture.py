@@ -660,31 +660,42 @@ class GaussianMixture:
         Raises:
             AssertionError: If any parameter check fails.
         """
-        assert mean.dim() in (1,2,3), "Means  needs to be of shape (k,), (m, k) or (b, k) or (b, m, k)"
-        assert cov.dim() == mean.dim()+1, "Covs has to have one more dimension than means"
-        assert mean.dtype == cov.dtype, "Means and covs need to have the same dtype"
-        assert mean.device == cov.device, "Means and covs need to have the same device"
+        if not (mean.dim() in (1,2,3)):
+            raise AssertionError("Means  needs to be of shape (k,), (m, k) or (b, k) or (b, m, k)")
+        if not (cov.dim() == mean.dim()+1):
+            raise AssertionError("Covs has to have one more dimension than means")
+        if not (mean.dtype == cov.dtype):
+            raise AssertionError("Means and covs need to have the same dtype")
+        if not (mean.device == cov.device):
+            raise AssertionError("Means and covs need to have the same device")
         
         if weights is not None:
-            assert weights.dim() == mean.dim() - 1, "weights must have one dimension less than means"
-            assert weights.dtype == mean.dtype, "weights must have same dtype as mean and cov"
-            assert weights.device == mean.device, "weights must have the same device as mean and cov"
+            if not (weights.dim() == mean.dim() - 1):
+                raise AssertionError("weights must have one dimension less than means")
+            if not (weights.dtype == mean.dtype):
+                raise AssertionError("weights must have same dtype as mean and cov")
+            if not (weights.device == mean.device):
+                raise AssertionError("weights must have the same device as mean and cov")
 
             size_checks = [
                 (mean.size(-2) == 1) and (cov.size(-3) == weights.size(-1)),
                 (mean.size(-2) == weights.size(-1)) and (cov.size(-3) == 1),
                 mean.size(-2) == cov.size(-3) == weights.size(-1)
             ]
-            assert any(size_checks), "Non constant m-axis"
+            if not any(size_checks):
+                raise AssertionError("Non constant m-axis")
 
             error_from_floating_point_operation = torch.finfo(weights.dtype).eps / 2
             tol = (weights.size(-1) - 1) * error_from_floating_point_operation
             weights_sum = weights.sum(axis=-1)
-            assert torch.allclose(weights_sum, torch.ones(weights_sum.shape, dtype=weights.dtype), 
-                                  atol = tol, rtol = 0), "All weights per batch need to add up to 1"
+            if not torch.allclose(weights_sum, torch.ones(weights_sum.shape, dtype=weights.dtype), 
+                                  atol = tol, rtol = 0):
+                raise AssertionError("All weights per batch need to add up to 1")
         
-        assert mean.size(-1) == cov.size(-1) == cov.size(-2), "Covariate count k is not constant"
-        assert torch.allclose(cov, cov.transpose(-1, -2), *symmetry_rtol_atol), "Covariance matrix not symmetric"
+        if not (mean.size(-1) == cov.size(-1) == cov.size(-2)):
+            raise AssertionError("Covariate count k is not constant")
+        if not torch.allclose(cov, cov.transpose(-1, -2), *symmetry_rtol_atol):
+            raise AssertionError("Covariance matrix not symmetric")
 
 
 if __name__ == "__main__":
