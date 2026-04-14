@@ -245,6 +245,7 @@ class GaussianMixture:
         ):
         if check_params:
             GaussianMixture.dist_params_check(mean, cov, weights, cov_symmetry_rtol_atol)
+        
         self.mean = mean
         self.cov_chol_decomp = torch.linalg.cholesky(cov)
         self.m = 1
@@ -660,8 +661,16 @@ class GaussianMixture:
         Raises:
             AssertionError: If any parameter check fails.
         """
-        if not (mean.dim() in (1,2,3)):
-            raise AssertionError("Means  needs to be of shape (k,), (m, k) or (b, k) or (b, m, k)")
+        if mean.dim() not in (1,2):
+            if mean.dim() == 3:
+                if weights is None:
+                    raise AssertionError(
+                        "mean cannot have 3 dimensions if weights are not given, in "
+                        "this case the mean is assumed to have shape (b, m, k), for "
+                        "which weights are necessary"
+                    )
+            else:
+                    raise AssertionError("Means  needs to be of shape (k,), (m, k) or (b, k) or (b, m, k) - in which case weights are necessary")
         if not (cov.dim() == mean.dim()+1):
             raise AssertionError("Covs has to have one more dimension than means")
         if not (mean.dtype == cov.dtype):
@@ -688,7 +697,7 @@ class GaussianMixture:
             error_from_floating_point_operation = torch.finfo(weights.dtype).eps / 2
             tol = (weights.size(-1) - 1) * error_from_floating_point_operation
             weights_sum = weights.sum(axis=-1)
-            if not torch.allclose(weights_sum, torch.ones(weights_sum.shape, dtype=weights.dtype), 
+            if not torch.allclose(weights_sum, torch.ones_like(weights_sum), 
                                   atol = tol, rtol = 0):
                 raise AssertionError("All weights per batch need to add up to 1")
         
