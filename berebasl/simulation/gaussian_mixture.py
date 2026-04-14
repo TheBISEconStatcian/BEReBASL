@@ -227,6 +227,24 @@ class GaussianMixture:
         - ``m``: number of components in the mixture.
         - ``k``: dimensionality of the multivariate normal.
 
+    Note:
+        - For dimensions ``b`` and ``m``, broadcasting rules apply - so that for that dimension in each
+          parameter either ``1`` or the corresponding size can be passed. ``weights`` must however have size
+          ``m`` in its last dimension. This is a way to allow for flexible specification of mixtures that 
+          are easily readible, e.g. a single set of weights can be shared across batches, or a single Gaussian
+          can be used across mixture components. During initalization the shapes are normalized according to the
+          case implied by the arguments dimensions, i.e:
+            - single gaussian: ``mean.shape=(k,)``
+            - independent gaussian: ``mean.shape=(b, k)``,
+            - mixture: ``mean.shape=(m, k)`` or 
+            - independent mixtures: ``mean.shape=(b, m, k)``.
+          whereby ``b`` and ``m`` are inferred from the dimensions of the provided arguments.
+        - If ``weights`` is not provided and ``mean`` has shape ``(b, k)``, the class represents
+          independent Gaussian sampling with the provided means and covariances, and the sampling 
+          methods will draw from each Gaussian independently.
+        - The ``sample`` method returns samples of shape ``(n, k)`` for unbatched cases and
+          ``(b, n, k)`` for batched cases, where ``n`` is the number of samples drawn per batch.
+
     Example::
 
         gm = GaussianMixture(mean, cov, weights)
@@ -246,23 +264,37 @@ class GaussianMixture:
         if check_params:
             GaussianMixture.dist_params_check(mean, cov, weights, cov_symmetry_rtol_atol)
         
-        self.mean = mean
-        self.cov_chol_decomp = torch.linalg.cholesky(cov)
+        self.mean = mean.clone()
+        self.cov_chol_decomp: torch.Tensor = torch.linalg.cholesky(cov)
         self.m = 1
         is_mixture = weights is not None
         if is_mixture:
+            self.m =  weights.size(-1) # infer number of components from weights or broadcast with mean/cov
             self.weights_are_batched = weights.dim() == 2
             if self.weights_are_batched:
-                self.b = weights.size(0)
+                self.b = max(weights.size(0), self.mean.size(0), self.cov_chol_decomp.size(0))
+                if weights.size(0) == 1 and self.b > 1:
+                    weights = weights.repeat(self.b, 1) # [b, m], making sure contiguous in memory
             else:
                 self.b = 1
-            self.m =  weights.size(-1)
             self.weights_dist = torch.distributions.Categorical(weights)
         else:
             self.weights_dist = None
-            self.b = 1 if self.mean.dim() == 1 else self.mean.size(1)
+            # Here mean is (k,) or (b, k) or (1, k). Cov was then (k,k) or (b, k, k) or (1, k, k)
+            # b is going to be the maximum of the first dimension
+            self.b = 1 if self.mean.dim() == 1 else max(self.mean.size(0), self.cov_chol_decomp.size(0))
 
-        self.is_batched = self.b>1
+        squeeze_norm_if_necessary = lambda p : p
+        if not self.is_batched:
+            if not is_mixture:
+                squeeze_norm_if_necessary = lambda p : p.squeeze_(0).squeeze_(1)
+            else:
+                squeeze_norm_if_necessary = lambda p : p.squeeze_(0)
+        elif not is_mixture:
+            squeeze_norm_if_necessary = lambda p : p.squeeze_(1)
+
+        self.mean, self.cov_chol_decomp = [squeeze_norm_if_necessary(p).contiguous() for p in self._normalized_params()[:2]]
+        
         self.rng = torch.Generator(device=mean.device)
         if seed is not None:
             self.rng.manual_seed(seed)
@@ -311,6 +343,11 @@ class GaussianMixture:
         return self
     
     @property
+    def is_batched(self):
+        is_mixture = self.is_mixture
+        return (not is_mixture and self.mean.dim() == 2) or (is_mixture and len(self.weights_dist.batch_shape) > 0)
+
+    @property
     def is_mixture(self):
         return self.weights_dist is not None
     
@@ -357,13 +394,15 @@ class GaussianMixture:
         change_mask = torch.zeros(self.m, dtype=diff.dtype).scatter_(0, idx, torch.ones(self.m, dtype=diff.dtype))
         return change_mask * diff.sign()
 
-    def deterministic_comp_ids(self, n : int):
+    def _deterministic_comp_ids(self, n : int):
         r"""
         Compute component indices for deterministic mixture sampling.
 
         The number of samples per component is given by ``round(n * weights)`` with
         a correction ensuring the sum equals ``n``. Components are then expanded into
         an index tensor used for gathering means and covariances.
+
+        This assumes that self is a mixture (i.e. weights were provided at __init__)
 
         Args:
             n (int): Number of samples to draw.
@@ -379,21 +418,23 @@ class GaussianMixture:
         """
         rounded_amounts = (n * self.weights_dist.probs).round().to(int)
         diffs_to_total = n - rounded_amounts.sum(dim=-1)
+        is_batched = self.is_batched
+
         if (diffs_to_total != 0).any():
-            if self.weights_are_batched:
+            if is_batched:
                 correction = torch.stack([self._correction_for_diff(d) for d in diffs_to_total])
             else:
                 correction = self._correction_for_diff(diffs_to_total)
             rounded_amounts += correction
 
         comp_ids = torch.repeat_interleave(torch.arange(self.b * self.m, device = self.mean.device), rounded_amounts.flatten())
-        if self.weights_are_batched:
+        if is_batched:
             # Reshape per batch and make indices valid
             comp_ids = comp_ids.reshape(self.b, -1) - torch.arange(0, (self.b-1)*self.m + 1, self.m, device = self.mean.device).unsqueeze(1)
 
         return comp_ids
     
-    def sample_mixture(self, n : int, deterministic_weights : bool = False):
+    def _sample_mixture(self, n : int, deterministic_weights : bool = False):
         r"""
         Sample from the Gaussian mixture model.
 
@@ -409,11 +450,11 @@ class GaussianMixture:
                 - For unbatched mixtures: shape ``(n, k)``
         """
         if deterministic_weights:
-            comp_ids = self.deterministic_comp_ids(n)
+            comp_ids = self._deterministic_comp_ids(n)
         else:
             comp_ids = self.weights_dist.sample((n,)).transpose(-1,0) # Always valid transpose
 
-        if self.weights_are_batched:
+        if self.is_batched:
             k = self.mean.size(-1)
             gathered_means = self.mean.gather(1, comp_ids.unsqueeze(-1).expand(-1, -1, k))
             gathered_decomp_covs = self.cov_chol_decomp.gather(1, comp_ids.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, k, k))
@@ -453,7 +494,7 @@ class GaussianMixture:
 
         """
         if self.is_mixture:
-            return self.sample_mixture(n, deterministic_weights)
+            return self._sample_mixture(n, deterministic_weights)
         
         sample = mvn_random_sample(
             mean = self.mean,
@@ -489,24 +530,20 @@ class GaussianMixture:
                 - weights: ``(b, m)`` if mixture, else ``None``
         """
         k = self.mean.size(-1)
+        mean = self.mean
+        cov_chol = self.cov_chol_decomp
 
         if not self.is_mixture and self.is_batched:
             mean = self.mean.squeeze(1)
             cov_chol = self.cov_chol_decomp.squeeze(1)
-        else:
-            mean = self.mean.expand(self.b, self.m, k)
-            cov_chol = self.cov_chol_decomp.expand(self.b, self.m, k, k)
+
+        mean = self.mean.expand(self.b, self.m, k)
+        cov_chol = self.cov_chol_decomp.expand(self.b, self.m, k, k)
         
 
         weights = None
         if self.is_mixture:
             weights = self.weights_dist.probs.expand(self.b, self.m)
-        else:
-            if self.is_batched:
-                mean = self.mean.squeeze(1)
-                cov_chol = self.cov_chol_decomp.squeeze(1)
-
-
 
         return mean, cov_chol, weights
     
@@ -661,16 +698,10 @@ class GaussianMixture:
         Raises:
             AssertionError: If any parameter check fails.
         """
-        if mean.dim() not in (1,2):
-            if mean.dim() == 3:
-                if weights is None:
-                    raise AssertionError(
-                        "mean cannot have 3 dimensions if weights are not given, in "
-                        "this case the mean is assumed to have shape (b, m, k), for "
-                        "which weights are necessary"
-                    )
-            else:
-                    raise AssertionError("Means  needs to be of shape (k,), (m, k) or (b, k) or (b, m, k) - in which case weights are necessary")
+        weights_is_not_none = weights is not None
+        if mean.dim() in (1, 2) and (mean.dim() == 3 and weights_is_not_none):
+             raise AssertionError("Means  needs to be of shape (k,), (m, k) or (b, k) or (b, m, k) - in which case weights are necessary")
+        
         if not (cov.dim() == mean.dim()+1):
             raise AssertionError("Covs has to have one more dimension than means")
         if not (mean.dtype == cov.dtype):
@@ -678,21 +709,18 @@ class GaussianMixture:
         if not (mean.device == cov.device):
             raise AssertionError("Means and covs need to have the same device")
         
-        if weights is not None:
+        if weights_is_not_none:
             if not (weights.dim() == mean.dim() - 1):
                 raise AssertionError("weights must have one dimension less than means")
             if not (weights.dtype == mean.dtype):
                 raise AssertionError("weights must have same dtype as mean and cov")
             if not (weights.device == mean.device):
                 raise AssertionError("weights must have the same device as mean and cov")
-
-            size_checks = [
-                (mean.size(-2) == 1) and (cov.size(-3) == weights.size(-1)),
-                (mean.size(-2) == weights.size(-1)) and (cov.size(-3) == 1),
-                mean.size(-2) == cov.size(-3) == weights.size(-1)
-            ]
-            if not any(size_checks):
-                raise AssertionError("Non constant m-axis")
+            
+            m = weights.size(-1)
+            size_checks = mean.size(-2) in (1, m) and cov.size(-3) in (1, m)
+            if not size_checks:
+                raise AssertionError("mean or cov size does not match weights size, broadcasting rules violated")
 
             error_from_floating_point_operation = torch.finfo(weights.dtype).eps / 2
             tol = (weights.size(-1) - 1) * error_from_floating_point_operation
