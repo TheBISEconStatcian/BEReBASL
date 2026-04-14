@@ -248,8 +248,8 @@ class GaussianMixture:
         self.mean = mean
         self.cov_chol_decomp = torch.linalg.cholesky(cov)
         self.m = 1
-        self.is_mixture = weights is not None
-        if self.is_mixture:
+        is_mixture = weights is not None
+        if is_mixture:
             self.weights_are_batched = weights.dim() == 2
             if self.weights_are_batched:
                 self.b = weights.size(0)
@@ -258,6 +258,7 @@ class GaussianMixture:
             self.m =  weights.size(-1)
             self.weights_dist = torch.distributions.Categorical(weights)
         else:
+            self.weights_dist = None
             self.b = 1 if self.mean.dim() == 1 else self.mean.size(1)
 
         self.is_batched = self.b>1
@@ -307,6 +308,10 @@ class GaussianMixture:
             self.rng.manual_seed(seed)
 
         return self
+    
+    @property
+    def is_mixture(self):
+        return self.weights_dist is not None
     
     @property
     def cov(self):
