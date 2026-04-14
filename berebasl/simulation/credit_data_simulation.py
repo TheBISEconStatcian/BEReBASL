@@ -19,30 +19,30 @@ from berebasl.simulation.gaussian_mixture import (
 
 def _mix_mean_dif_as_expected(
     mix_mean_dif: Union[torch.Tensor, float],
-    m: int,
     k: int,
+    f: int,
 ) -> bool:
     """
     Checks whether a mean-difference specification for mixture components
     is compatible with the expected shapes.
 
     This helper validates that ``mix_mean_dif`` can be broadcast or adapted
-    into a tensor of shape ``(m - 1, k)``, representing offsets applied to
+    into a tensor of shape ``(k - 1, f)``, representing offsets applied to
     the base mean for each additional mixture component.
 
     Accepted formats:
         - A scalar float or 0-d tensor (shared scaling factor).
-        - A 1D tensor of length ``k`` (per-covariate offsets).
-        - A 1D tensor of length ``m - 1`` (per-component scaling).
-        - A 2D tensor of shape ``(m - 1, k)``.
+        - A 1D tensor of length ``f`` (per-covariate offsets).
+        - A 1D tensor of length ``k - 1`` (per-component scaling).
+        - A 2D tensor of shape ``(k - 1, f)``.
         - Singleton dimensions (size 1) are allowed and broadcastable.
 
     Args:
         mix_mean_dif (Tensor or float):
             Mean difference specification.
-        m (int):
-            Number of mixture components.
         k (int):
+            Number of mixture components.
+        f (int):
             Number of covariates (feature dimension).
 
     Returns:
@@ -57,7 +57,7 @@ def _mix_mean_dif_as_expected(
     if mix_mean_dif.dim() == 0:
         return True
     
-    last_dim_compatible = mix_mean_dif.size(-1) in (k, m-1, 1)
+    last_dim_compatible = mix_mean_dif.size(-1) in (f, k-1, 1)
     if not last_dim_compatible:
         return False
     
@@ -67,12 +67,12 @@ def _mix_mean_dif_as_expected(
     if mix_mean_dif.dim() > 2:
         return False
     
-    return mix_mean_dif.size(0) in (m-1, 1)
+    return mix_mean_dif.size(0) in (k-1, 1)
 
 def _adapt_mix_mean_dif(
     mix_mean_dif: Union[torch.Tensor, float],
-    m: int,
     k: int,
+    f: int,
     security_check: bool = True,
     dtype: torch.dtype = None,
 ) -> torch.Tensor:
@@ -93,9 +93,9 @@ def _adapt_mix_mean_dif(
     Args:
         mix_mean_dif (Tensor or float):
             Mean difference specification.
-        m (int):
-            Number of mixture components.
         k (int):
+            Number of mixture components.
+        f (int):
             Number of covariates.
         security_check (bool, default=True):
             If ``True``, validates the input shape before adaptation.
@@ -105,12 +105,12 @@ def _adapt_mix_mean_dif(
 
     Returns:
         Tensor:
-            A tensor of shape ``(m - 1, k)`` or a compatible shape.
+            A tensor of shape ``(k - 1, f)`` or a compatible shape.
     """
     if dtype is None:
             dtype = torch.get_default_dtype()
     if security_check:
-        assert _mix_mean_dif_as_expected(mix_mean_dif, m, k)
+        assert _mix_mean_dif_as_expected(mix_mean_dif, k, f)
 
     is_float = isinstance(mix_mean_dif, float)
     is_single_element_tensor = not is_float and (mix_mean_dif.numel() == 1)
@@ -121,13 +121,13 @@ def _adapt_mix_mean_dif(
         if is_single_element_tensor:
             mix_mean_dif = mix_mean_dif.flatten()[0]
 
-        return mix_mean_dif.expand(m-1).unsqueeze(-1) * torch.arange(1, m, device=mix_mean_dif.device).unsqueeze(-1)
+        return mix_mean_dif.expand(k-1).unsqueeze(-1) * torch.arange(1, k, device=mix_mean_dif.device).unsqueeze(-1)
     
     if mix_mean_dif.dim() == 1:
         dim_size = mix_mean_dif.size(0)
-        if dim_size == k:
-            return mix_mean_dif.unsqueeze(0).expand(m-1, -1) * torch.arange(1, m, device=mix_mean_dif.device).unsqueeze(-1)
-        if dim_size == m-1:
+        if dim_size == f:
+            return mix_mean_dif.unsqueeze(0).expand(k-1, -1) * torch.arange(1, k, device=mix_mean_dif.device).unsqueeze(-1)
+        if dim_size == k-1:
             return mix_mean_dif.unsqueeze(-1)
         
     if mix_mean_dif.dim() == 2:
@@ -135,8 +135,8 @@ def _adapt_mix_mean_dif(
 
 def _mix_var_dif_as_expected(
     mix_var_dif: Union[torch.Tensor, float],
-    m: int,
     k: int,
+    f: int,
 ) -> bool:
     """
     Checks whether a variance-difference specification for mixture components
@@ -148,17 +148,17 @@ def _mix_var_dif_as_expected(
 
     Accepted formats:
         - Scalar float or singleton tensor.
-        - 1D tensor of length ``m - 1`` (per-component scaling).
-        - 2D tensor of shape ``(k, k)`` or ``(m - 1, 1)``.
-        - 3D tensor of shape ``(m - 1, k, k)`` or ``(1, k, k)``.
+        - 1D tensor of length ``k - 1`` (per-component scaling).
+        - 2D tensor of shape ``(f, f)`` or ``(k - 1, 1)``.
+        - 3D tensor of shape ``(k - 1, f, f)`` or ``(1, f, f)``.
 
     Args:
         mix_var_dif (Tensor or float):
             Variance difference specification.
-        m (int):
-            Number of mixture components.
         k (int):
-            Number of covariates.
+            Number of mixture components.
+        f (int):
+            Number of covariates (feature dimension).
 
     Returns:
         bool:
@@ -177,22 +177,22 @@ def _mix_var_dif_as_expected(
     dim_rank = mix_var_dif.dim()
 
     if dim_rank == 1:
-        return mix_var_dif.size(-1) in (m-1, 1)
+        return mix_var_dif.size(-1) in (k-1, 1)
     
     if dim_rank == 2:
-        return mix_var_dif.shape in (torch.Size([m-1, 1]), torch.Size([k,k]))
+        return mix_var_dif.shape in (torch.Size([k-1, 1]), torch.Size([f, f]))
     
     if dim_rank > 3:
         return False
     
-    last_dims_ok = mix_var_dif.size(1) == mix_var_dif.size(2) == k
-    return last_dims_ok and (mix_var_dif.size(0) in (m-1, 1))
+    last_dims_ok = mix_var_dif.size(1) == mix_var_dif.size(2) == f
+    return last_dims_ok and (mix_var_dif.size(0) in (k-1, 1))
 
 
 def _adapt_mix_var_dif(
     mix_var_dif: Union[torch.Tensor, float],
-    m: int,
     k: int,
+    f: int,
     security_check: bool = True,
     dtype: torch.dtype = None,
 ) -> torch.Tensor:
@@ -211,10 +211,10 @@ def _adapt_mix_var_dif(
     Args:
         mix_var_dif (Tensor or float):
             Variance difference specification.
-        m (int):
-            Number of mixture components.
         k (int):
-            Number of covariates.
+            Number of mixture components.
+        f (int):
+            Number of covariates (feature dimension).
         security_check (bool, default=True):
             If ``True``, validates the input shape before adaptation.
         dtype (torch.dtype, default=torch.get_default_dtype()):
@@ -224,12 +224,12 @@ def _adapt_mix_var_dif(
     Returns:
         Tensor:
             A tensor representing variance adjustments with shape compatible
-            with ``(m - 1, k, k)`` broadcasting.
+            with ``(k - 1, f, f)`` broadcasting.
     """
     if dtype is None:
             dtype = torch.get_default_dtype()
     if security_check:
-        assert _mix_var_dif_as_expected(mix_var_dif, m, k)
+        assert _mix_var_dif_as_expected(mix_var_dif, k, f)
 
     is_float = isinstance(mix_var_dif, float)
     is_single_element_tensor = not is_float and (mix_var_dif.numel() == 1)
@@ -245,9 +245,9 @@ def _adapt_mix_var_dif(
         return mix_var_dif.unsqueeze(-1).unsqueeze(-1)
         
     if mix_var_dif.dim() == 2:
-        if mix_var_dif.size(0) == k:
+        if mix_var_dif.size(0) == f:
             return mix_var_dif.unsqueeze(0)
-        if mix_var_dif.size(0) == (m-1):
+        if mix_var_dif.size(0) == (k-1):
             return mix_var_dif.unsqueeze(-1)
     
     if mix_var_dif.dim() == 3:
@@ -272,7 +272,7 @@ class CreditDataGenerator:
         if not isinstance(bad_mixture, GaussianMixture) or not isinstance(good_mixture, GaussianMixture):
             raise ValueError("Mixtures need to be GaussianMixture classes")
         
-        mixtures_are_compatible = (bad_mixture.k == good_mixture.k) and (bad_mixture.b == good_mixture.b)
+        mixtures_are_compatible = (bad_mixture.F == good_mixture.F) and (bad_mixture.b == good_mixture.b)
         if not mixtures_are_compatible:
             raise AssertionError("Mixtures are not compatible, batch and feature dimension must match")
         
@@ -308,7 +308,7 @@ class CreditDataGenerator:
     
     @property
     def features_count(self):
-        return self.bad_mixture.k
+        return self.bad_mixture.F
     
     def manual_seed(self, seed : int) -> torch.Generator:
         self.rng.manual_seed(seed)
@@ -495,7 +495,7 @@ class CreditDataGenerator:
             - **log_rho_p_good**   ``(n,)``   or ``(b, n)``    — :math:`\log((1-\rho) \cdot p_{\text{good}}(x))`.
         """
         if n_samples is None:
-            n_samples = max(10_000, 500 * self.bad_mixture.m * self.features_count)
+            n_samples = max(10_000, 500 * self.bad_mixture.K * self.features_count)
 
         X, y        = self.sample(n_samples)
         log_p_bad   = self.log_prob_bad(X)
@@ -782,7 +782,7 @@ class CreditDataGenerator:
             
             m = weights_bad.size(-1)
 
-            mix_mean_dif_bad, mix_mean_dif_good = [_adapt_mix_mean_dif(d, m, k=count_covariates, security_check=do_security_checks) 
+            mix_mean_dif_bad, mix_mean_dif_good = [_adapt_mix_mean_dif(d, m, f=count_covariates, security_check=do_security_checks) 
                                                    for d in (mix_mean_dif_bad, mix_mean_dif_good)]
             
             amplify_base_with_dif = lambda param, dif : torch.cat([param.unsqueeze(0), param.unsqueeze(0) + dif],
@@ -791,7 +791,7 @@ class CreditDataGenerator:
             mu_bad, mu_good = [amplify_base_with_dif(mu, dif)
                                for mu, dif in [(mu_bad, mix_mean_dif_bad), (mu_good, mix_mean_dif_good)]]
             
-            sigma_bad, sigma_good = [_adapt_mix_var_dif(d, m, k=count_covariates, security_check=do_security_checks) 
+            sigma_bad, sigma_good = [_adapt_mix_var_dif(d, m, f=count_covariates, security_check=do_security_checks) 
                                                     for d in (mix_var_dif_bad, mix_var_dif_good)]
                 
         mixture_bad = GaussianMixture(

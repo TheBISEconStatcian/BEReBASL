@@ -6,7 +6,7 @@ from typing import Dict, Optional, Tuple, Union
 
 
 def random_vcov_matrix(
-        k: int,
+        f: int,
         generator: Optional[torch.Generator] = None,
         var_range: Tuple[float, float] = (0.0, 1.0),
         prefer_normal_base_sampling: bool = True,
@@ -34,7 +34,7 @@ def random_vcov_matrix(
        lead to unsymmetric results. 
 
     Args:
-        k (int): Dimension of the covariance matrix.
+        f (int): Dimension of the covariance matrix.
         generator (torch.Generator, optional): Random number generator for reproducibility.
         var_range (Tuple[float, float], optional): Range for diagonal variances. Defaults to (0.0, 1.0).
         prefer_normal_base_sampling (bool, optional): If True, use normal distribution for base sampling.
@@ -47,7 +47,7 @@ def random_vcov_matrix(
             Defaults to 1e-6.
 
     Returns:
-        torch.Tensor: A symmetric, positive definite covariance matrix of shape ``(k, k)``.
+        torch.Tensor: A symmetric, positive definite covariance matrix of shape ``(f, f)``.
 
     Raises:
         ValueError: If ``var_range`` is not a valid (min, max) tuple.
@@ -61,9 +61,9 @@ def random_vcov_matrix(
 
     # Step 1: Generate base sampling
     if prefer_normal_base_sampling:
-        A = torch.randn((k, k), generator=generator, dtype=dtype, device=device) # random normal matrix, sparser correlations for high k
+        A = torch.randn((f, f), generator=generator, dtype=dtype, device=device) # random normal matrix, sparser correlations for high k
     else:
-        A = 2*torch.rand((k,k), generator=generator, dtype = dtype, device=device) - 1 # random uniform matrix, correlations closer to 0, the higher k
+        A = 2*torch.rand((f,f), generator=generator, dtype = dtype, device=device) - 1 # random uniform matrix, correlations closer to 0, the higher k
 
     # Step 2: Define correlation matrix from base sampling
     Q = A @ A.T # Make sure of symmetry while using full randomness
@@ -72,17 +72,17 @@ def random_vcov_matrix(
 
     # Step 3: Rescale corr_mat with sampled variances
     ## Variance sampling from uniform distribution
-    variances = torch.rand(k, generator=generator, dtype = dtype, device=device) * (var_range[1] - var_range[0]) + var_range[0]
+    variances = torch.rand(f, generator=generator, dtype = dtype, device=device) * (var_range[1] - var_range[0]) + var_range[0]
     ## Rescaling via outer prouct of standard deviations
     stds = torch.sqrt(variances)
     norm_factors_pearson_corr = torch.outer(stds, stds) # guaranteed to be symmetric, denominators of pearson correlation
     vcov = corr_mat * norm_factors_pearson_corr
 
     # Step 4: Avoid semi positive definitness of the matrix
-    vcov = vcov + eps * torch.eye(k, device=device, dtype=dtype)
+    vcov = vcov + eps * torch.eye(f, device=device, dtype=dtype)
 
     # Step 5: Ensure **exact** symmetry without compromising randomness
-    i, j = torch.tril_indices(k, k, offset=-1)
+    i, j = torch.tril_indices(f, f, offset=-1)
     vcov[i, j] = vcov[j, i]
 
     
@@ -104,14 +104,14 @@ def eigen_decomp_proj_to_pd(
     5. Symmetrizing the result again to avoid numerical drift.
 
     Args:
-        mat (torch.Tensor): Input square matrix of shape ``(k, k)``.
+        mat (torch.Tensor): Input square matrix of shape ``(f, f)``.
         eps (float, optional): Minimum eigenvalue threshold to enforce positive definiteness.
             Defaults to ``1e-6``.
         ensure_symmetry (bool, optional): If True, symmetrize the input before decomposition.
             Defaults to False.
 
     Returns:
-        torch.Tensor: Symmetric positive semidefinite matrix of shape ``(k, k)``.
+        torch.Tensor: Symmetric positive semidefinite matrix of shape ``(f, f)``.
 
     Example:
         >>> M = torch.tensor([[1.0, 2.0], [2.0, -3.0]])
@@ -148,14 +148,14 @@ def mvn_random_sample(
     cholesky-decomposition method.
 
     Args:
-        mean (torch.Tensor): Location parameter of a MVN. Shape ``(k,)`` or ``(b, k)`` or ``(1,5)``.
+        mean (torch.Tensor): Location parameter of a MVN. Shape ``(f,)`` or ``(b, f)`` or ``(1,5)``.
         cov_chol_decomp (torch.Tensor): Variance-Covariance matrix of MVN after cholesky decomposition. 
-            Shape ``(k,k)``` or ``(b, k, k)`` or ``(1, k, k)``, ``cov.dim()==mean.dim()+1`` should hold.
+            Shape ``(f, f)``` or ``(b, f, f)`` or ``(1, f, f)``, ``cov.dim()==mean.dim()+1`` should hold.
         n (int): Count of vectors to be sampled (per batch).
         rng (Optional[torch.Generator]): If passed, sampling is done using this
             generator.
         args_checks (bool): If true, it will be checked whether the shapes of mean and
-            cov are as expected, whether symmetry (w. r. t. to the last wo dims for each beach)
+            cov are as expected, whether symmetry (w. r. t. to the last two dims for each batch)
             is given within the range of ``symmetry_rtol_atol`` for ``cov`` and type checks
             are done for ``n`` and ``rng``.`
         symmetry_rtol_atol (Tuple[float,float]): Corresponds to the (rtol, a_tol) parameters
@@ -163,7 +163,7 @@ def mvn_random_sample(
             ``not args_checks``.
     Returns:
         torch.Tensor:
-            A tensor of shape ``(n, k)`` or ``(n, b, k)`` containing the ``n`` sampled vectors (for each batch).
+            A tensor of shape ``(n, k)`` or ``(n, b, f)`` containing the ``n`` sampled vectors (for each batch).
 
     Example:
         >>> count_covariates = 5
@@ -179,7 +179,7 @@ def mvn_random_sample(
     if args_checks:
         #shape checks
         assert (mean.dim() in [1, 2, 3]) and (cov_chol_decomp.dim()==mean.dim()+1), "mean must be a single vector (rank 1 tensor) and cov a matrix (rank 2 tensor)"
-        assert (mean.size(-1) == cov_chol_decomp.size(-1)) and (cov_chol_decomp.size(-1) == cov_chol_decomp.size(-2)), "mean must have shape [k] and cov shape [k, k]"
+        assert (mean.size(-1) == cov_chol_decomp.size(-1)) and (cov_chol_decomp.size(-1) == cov_chol_decomp.size(-2)), "mean must have shape [k] and cov shape [f, f]"
         #ensure n is an int
         n = int(n)
         assert isinstance(rng, torch.Generator) or rng is None, "rng needs to be None or a rng"
@@ -209,9 +209,9 @@ class GaussianMixture:
     of samples drawn from each component is a rounded version of ``n * weights``.
 
     Args:
-        mean (Tensor): Mean tensor of shape ``(k,)``, ``(m, k)``, ``(b, k)`` or ``(b, m, k)``.
+        mean (Tensor): Mean tensor of shape ``(f,)``, ``(k, f)``, ``(b, f)`` or ``(b, k, f)``.
             Supports both batched and unbatched mixtures.
-        cov (Tensor): Covariance tensor of shape ``(k, k)``, ``(m, k, k)``, ``(b, k, k)`` or ``(b, m, k, k)``.
+        cov (Tensor): Covariance tensor of shape ``(f, f)``, ``(m, f, f)``, ``(b, f, f)`` or ``(b, m, f, f)``.
             Must be symmetric. Its last two dims must match the dimensionality of the means.
         weights (Tensor, optional): Mixture weights of shape ``(m,)`` or ``(b, m)``.
             Must sum to 1 along the last dimension. If not provided, the class represents
@@ -234,12 +234,12 @@ class GaussianMixture:
           are easily readible, e.g. a single set of weights can be shared across batches, or a single Gaussian
           can be used across mixture components. During initalization the shapes are normalized according to the
           case implied by the arguments dimensions, i.e:
-            - single gaussian: ``mean.shape=(k,)``
-            - independent gaussian: ``mean.shape=(b, k)``,
-            - mixture: ``mean.shape=(m, k)`` or 
-            - independent mixtures: ``mean.shape=(b, m, k)``.
+            - single gaussian: ``mean.shape=(f,)``
+            - independent gaussian: ``mean.shape=(b, f)``,
+            - mixture: ``mean.shape=(k, f)`` or 
+            - independent mixtures: ``mean.shape=(b, k, f)``.
           whereby ``b`` and ``m`` are inferred from the dimensions of the provided arguments.
-        - If ``weights`` is not provided and ``mean`` has shape ``(b, k)``, the class represents
+        - If ``weights`` is not provided and ``mean`` has shape ``(b, f)``, the class represents
           independent Gaussian sampling with the provided means and covariances, and the sampling 
           methods will draw from each Gaussian independently.
         - The ``sample`` method returns samples of shape ``(n, k)`` for unbatched cases and
@@ -266,10 +266,10 @@ class GaussianMixture:
         
         self.mean = mean.clone()
         self.cov_chol_decomp: torch.Tensor = torch.linalg.cholesky(cov)
-        self.m = 1
+        self.K = 1
         is_mixture = weights is not None
         if is_mixture:
-            self.m =  weights.size(-1) # infer number of components from weights or broadcast with mean/cov
+            self.K =  weights.size(-1) # infer number of components from weights or broadcast with mean/cov
             self.weights_are_batched = weights.dim() == 2
             if self.weights_are_batched:
                 self.b = max(weights.size(0), self.mean.size(0), self.cov_chol_decomp.size(0))
@@ -280,7 +280,7 @@ class GaussianMixture:
             self.weights_dist = torch.distributions.Categorical(weights)
         else:
             self.weights_dist = None
-            # Here mean is (k,) or (b, k) or (1, k). Cov was then (k,k) or (b, k, k) or (1, k, k)
+            # Here mean is (f,) or (b, f) or (1, f). Cov was then (f, f) or (b, f, f) or (1, f, f)
             # b is going to be the maximum of the first dimension
             self.b = 1 if self.mean.dim() == 1 else max(self.mean.size(0), self.cov_chol_decomp.size(0))
 
@@ -356,7 +356,10 @@ class GaussianMixture:
         return self.cov_chol_decomp @ self.cov_chol_decomp.mT
 
     @property
-    def k(self):
+    def F(self):
+        """
+        Feature dimensionality of the Gaussian components, i.e. the size of the last dimension of the mean tensor.
+        """
         return self.mean.size(-1)
     
     @property
@@ -390,8 +393,8 @@ class GaussianMixture:
         Note:
             This is used only for deterministic mixture sampling.
         """
-        idx = torch.randperm(self.m, generator=self.rng, device=diff.device)[:diff.abs()]
-        change_mask = torch.zeros(self.m, dtype=diff.dtype).scatter_(0, idx, torch.ones(self.m, dtype=diff.dtype))
+        idx = torch.randperm(self.K, generator=self.rng, device=diff.device)[:diff.abs()]
+        change_mask = torch.zeros(self.K, dtype=diff.dtype).scatter_(0, idx, torch.ones(self.K, dtype=diff.dtype))
         return change_mask * diff.sign()
 
     def _deterministic_comp_ids(self, n : int):
@@ -427,10 +430,10 @@ class GaussianMixture:
                 correction = self._correction_for_diff(diffs_to_total)
             rounded_amounts += correction
 
-        comp_ids = torch.repeat_interleave(torch.arange(self.b * self.m, device = self.mean.device), rounded_amounts.flatten())
+        comp_ids = torch.repeat_interleave(torch.arange(self.b * self.K, device = self.mean.device), rounded_amounts.flatten())
         if is_batched:
             # Reshape per batch and make indices valid
-            comp_ids = comp_ids.reshape(self.b, -1) - torch.arange(0, (self.b-1)*self.m + 1, self.m, device = self.mean.device).unsqueeze(1)
+            comp_ids = comp_ids.reshape(self.b, -1) - torch.arange(0, (self.b-1)*self.K + 1, self.K, device = self.mean.device).unsqueeze(1)
 
         return comp_ids
     
@@ -457,7 +460,7 @@ class GaussianMixture:
         if self.is_batched:
             k = self.mean.size(-1)
             gathered_means = self.mean.gather(1, comp_ids.unsqueeze(-1).expand(-1, -1, k))
-            gathered_decomp_covs = self.cov_chol_decomp.gather(1, comp_ids.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, k, k))
+            gathered_decomp_covs = self.cov_chol_decomp.gather(1, comp_ids.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, f, f))
         else:
             gathered_means = self.mean[comp_ids]
             gathered_decomp_covs = self.cov_chol_decomp[comp_ids]
@@ -525,8 +528,8 @@ class GaussianMixture:
 
         Returns:
             Tuple of:
-                - mean:       ``(b, m, k)``
-                - cov_chol:   ``(b, m, k, k)``
+                - mean:       ``(b, k, f)``
+                - cov_chol:   ``(b, m, f, f)``
                 - weights: ``(b, m)`` if mixture, else ``None``
         """
         k = self.mean.size(-1)
@@ -537,13 +540,13 @@ class GaussianMixture:
             mean = self.mean.squeeze(1)
             cov_chol = self.cov_chol_decomp.squeeze(1)
 
-        mean = self.mean.expand(self.b, self.m, k)
-        cov_chol = self.cov_chol_decomp.expand(self.b, self.m, k, k)
+        mean = self.mean.expand(self.b, self.f, f)
+        cov_chol = self.cov_chol_decomp.expand(self.b, self.f, f, k)
         
 
         weights = None
         if self.is_mixture:
-            weights = self.weights_dist.probs.expand(self.b, self.m)
+            weights = self.weights_dist.probs.expand(self.b, self.K)
 
         return mean, cov_chol, weights
     
@@ -585,9 +588,9 @@ class GaussianMixture:
         Raises:
             AssertionError: If ``check_input=True`` and any shape or value check fails.
         """
-        k = self.k
+        f = self.F
         if check_input:
-            if x.size(-1) != k:
+            if x.size(-1) != f:
                 raise AssertionError("x cannot come from current mixture, wrong amount of covariates")
             if x.dim() not in [2,3]:
                 raise AssertionError("x has to have shape (b, n, k) or (n, k)")
@@ -598,46 +601,46 @@ class GaussianMixture:
                 raise AssertionError("white_noise_var has to be greater equal 0")
             
         mean, cov_chol, weights = self._normalized_params()
-        # mean:     (b, m, k)
-        # cov_chol: (b, m, k, k)
+        # mean:     (b, k, f)
+        # cov_chol: (b, k, f, f)
 
-        # Normalize x to (b, n, k)
+        # Normalize x to (b, n, f)
         n = x.size(-2)
-        x = x.expand(self.b, n, k)
-        # x is now (b, n, k)
+        x = x.expand(self.b, n, f)
+        # x is now (b, n, f)
 
-        # Residuals: (b, n, m, k)
-        # x: (b, n, 1, k),  mean: (b, 1, m, k)
-        residuals = x.unsqueeze(2) - mean.unsqueeze(1)  # (b, n, m, k)
+        # Residuals: (b, n, k, f)
+        # x: (b, n, 1, f),  mean: (b, 1, k, f)
+        residuals = x.unsqueeze(2) - mean.unsqueeze(1)  # (b, n, k, f)
 
         # Solve L v = residual for v, then Mahalanobis = ||v||^2
-        # L:          (b, m, k, k) -> (b, 1, m, k, k)
-        # residuals:  (b, n, m, k) -> (b, n, m, k, 1)
+        # L:          (b, m, f, f) -> (b, 1, m, f, f)
+        # residuals:  (b, n, k, f) -> (b, n, k, f, 1)
         # Note (x-\mu)^T \Sigma^{-1}(x-\mu) = \|L^{-1}(x-\mu)\|^2_2 =: \|v\|^2_2
 
         if white_noise_var == 0.0:
             # Simple case: no white noise
-            L = cov_chol.unsqueeze(1)                                       # (b, 1, m, k, k)
+            L = cov_chol.unsqueeze(1)                                       # (b, 1, m, f, f)
         else:
             # Harder case: need to add the noise manually
-            cov_normalized = cov_chol @ cov_chol.mT # (b, m, k, k)
-            cov_white_noise = white_noise_var * torch.eye(k, device=self.device, dtype=self.dtype) # [k, k]
-            cov_wn_normalized = cov_white_noise.expand(1,1,k,k) # [1,1, k, k]
-            cov_inflated = cov_normalized + cov_wn_normalized # (b, m, k, k)
+            cov_normalized = cov_chol @ cov_chol.mT # (b, m, f, f)
+            cov_white_noise = white_noise_var * torch.eye(f, device=self.device, dtype=self.dtype) # [f, f]
+            cov_wn_normalized = cov_white_noise.expand(1,1,f,f) # [1,1, f, f]
+            cov_inflated = cov_normalized + cov_wn_normalized # (b, m, f, f)
             cov_chol = torch.linalg.cholesky(cov_inflated) # rewrite cov_chol to the inflated version
-            L = cov_chol.unsqueeze(1) # (b, 1, m, k, k)
+            L = cov_chol.unsqueeze(1) # (b, 1, m, f, f)
 
-        r = residuals.unsqueeze(-1)                                     # (b, n, m, k, 1)
-        v = torch.linalg.solve_triangular(L, r, upper=False)           # (b, n, m, k, 1)
-        mahal = v.squeeze(-1).pow(2).sum(dim=-1)                       # (b, n, m)
+        r = residuals.unsqueeze(-1)                                     # (b, n, k, f, 1)
+        v = torch.linalg.solve_triangular(L, r, upper=False)           # (b, n, k, f, 1)
+        mahal = v.squeeze(-1).pow(2).sum(dim=-1)                       # (b, n, k)
 
 
         # Log determinant of Sigma from Cholesky diagonal: (b, m)
-        log_det = 2.0 * cov_chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)  # (b, m)
+        log_det = 2.0 * cov_chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)  # (b, k)
 
-        # Per-component log-probs: (b, n, m)
-        log_norm = -0.5 * (k * log(2 * torch.pi) + log_det)       # (b, m)
-        comp_log_probs = log_norm.unsqueeze(1) - 0.5 * mahal           # (b, n, m)
+        # Per-component log-probs: (b, n, k)
+        log_norm = -0.5 * (f * log(2 * torch.pi) + log_det)       # (b, k)
+        comp_log_probs = log_norm.unsqueeze(1) - 0.5 * mahal           # (b, n, k)
 
         if self.is_mixture:
             # log_weights: (b, m) -> (b, 1, m)
@@ -690,8 +693,8 @@ class GaussianMixture:
             - matching Gaussian dimensionality ``k``
 
         Args:
-            mean (Tensor): Mean tensor of shape ``(k,)``, ``(m, k)``, ``(b, k)`` or ``(b, m, k)``.
-            cov (Tensor): Covariance tensor of shape ``(..., k, k)``.
+            mean (Tensor): Mean tensor of shape ``(f,)``, ``(k, f)``, ``(b, f)`` or ``(b, k, f)``.
+            cov (Tensor): Covariance tensor of shape ``(..., f, f)``.
             weights (Tensor, optional): Mixture weights of shape ``(m,)`` or ``(b, m)``.
             symmetry_rtol_atol (Tuple[float]): Tolerances for symmetry check.
 
@@ -700,7 +703,7 @@ class GaussianMixture:
         """
         weights_is_not_none = weights is not None
         if mean.dim() in (1, 2) and (mean.dim() == 3 and weights_is_not_none):
-             raise AssertionError("Means  needs to be of shape (k,), (m, k) or (b, k) or (b, m, k) - in which case weights are necessary")
+             raise AssertionError("Means  needs to be of shape (f,), (k, f) or (b, f) or (b, k, f) - in which case weights are necessary")
         
         if not (cov.dim() == mean.dim()+1):
             raise AssertionError("Covs has to have one more dimension than means")
@@ -761,7 +764,7 @@ if __name__ == "__main__":
     torch.set_default_dtype(torch.float32)
     rng = torch.Generator(device)
 
-    all_covs = torch.stack([torch.stack([random_vcov_matrix(k=count_covariates, generator=rng) for _ in range(count_mixtures)]) for _ in range(batch_size)])
+    all_covs = torch.stack([torch.stack([random_vcov_matrix(f=count_covariates, generator=rng) for _ in range(count_mixtures)]) for _ in range(batch_size)])
     functionality_checks.append(all_covs.shape == torch.Size([batch_size, count_mixtures, count_covariates, count_covariates]))
     print("\tall_covs.size is as expected:", functionality_checks[-1])
     functionality_checks.append((all_covs.transpose(-1,-2) == all_covs).all().item())
