@@ -264,36 +264,42 @@ class GaussianMixture:
         if check_params:
             GaussianMixture.dist_params_check(mean, cov, weights, cov_symmetry_rtol_atol)
         
+        ## From here assume all variables being as if they pass dist_params_check
         self.mean = mean.clone()
+        F = mean.size(-1)
         self.cov_chol_decomp: torch.Tensor = torch.linalg.cholesky(cov)
-        self.K = 1
         is_mixture = weights is not None
+
         if is_mixture:
-            self.K =  weights.size(-1) # infer number of components from weights or broadcast with mean/cov
-            self.weights_are_batched = weights.dim() == 2
-            if self.weights_are_batched:
-                self.b = max(weights.size(0), self.mean.size(0), self.cov_chol_decomp.size(0))
-                if weights.size(0) == 1 and self.b > 1:
-                    weights = weights.repeat(self.b, 1) # [b, m], making sure contiguous in memory
-            else:
-                self.b = 1
-            self.weights_dist = torch.distributions.Categorical(weights)
+            is_batched = weights.dim() == 2
+            B = max(weights.size(0), mean.size(0), cov.size(0)) if is_batched else 1
+            K = weights.size(-1)
         else:
-            self.weights_dist = None
-            # Here mean is (f,) or (b, f) or (1, f). Cov was then (f, f) or (b, f, f) or (1, f, f)
-            # b is going to be the maximum of the first dimension
-            self.b = 1 if self.mean.dim() == 1 else max(self.mean.size(0), self.cov_chol_decomp.size(0))
+            is_batched = mean.dim() == 2
+            B = max(mean.size(0), cov.size(0)) if is_batched else 1
+            K = 1
+        
 
         squeeze_norm_if_necessary = lambda p : p
-        if not self.is_batched:
+        if not is_batched:
             if not is_mixture:
-                squeeze_norm_if_necessary = lambda p : p.squeeze_(0).squeeze_(1)
+                squeeze_norm_if_necessary = lambda p : p.squeeze_(0, 1)
             else:
                 squeeze_norm_if_necessary = lambda p : p.squeeze_(0)
         elif not is_mixture:
             squeeze_norm_if_necessary = lambda p : p.squeeze_(1)
 
-        self.mean, self.cov_chol_decomp = [squeeze_norm_if_necessary(p).contiguous() for p in self._normalized_params()[:2]]
+        self.mean, self.cov_chol_decomp, weights = [
+            squeeze_norm_if_necessary(p).contiguous() if p is not None else p 
+            for p in self.normalize_params(
+                self.mean, self.cov_chol_decomp, weights,
+                B, K, F, is_mixture, is_batched
+            )
+        ]
+        if is_mixture:
+            self.weights_dist = torch.distributions.Categorical(weights)
+        else:
+            self.weights_dist = None
         
         self.rng = torch.Generator(device=mean.device)
         if seed is not None:
@@ -343,24 +349,32 @@ class GaussianMixture:
         return self
     
     @property
-    def is_batched(self):
+    def is_batched(self) -> bool:
         is_mixture = self.is_mixture
         return (not is_mixture and self.mean.dim() == 2) or (is_mixture and len(self.weights_dist.batch_shape) > 0)
 
     @property
-    def is_mixture(self):
+    def is_mixture(self) -> bool:
         return self.weights_dist is not None
     
     @property
-    def cov(self):
+    def cov(self) -> torch.Tensor:
         return self.cov_chol_decomp @ self.cov_chol_decomp.mT
 
     @property
-    def F(self):
+    def F(self) -> int:
         """
         Feature dimensionality of the Gaussian components, i.e. the size of the last dimension of the mean tensor.
         """
         return self.mean.size(-1)
+
+    @property
+    def K(self) -> int:
+        return self.weights_dist.probs.size(-1) if self.is_mixture else 1
+
+    @property
+    def B(self) -> int:
+        return self.mean.size(0) if self.is_batched else 1
     
     @property
     def device(self) -> torch.device:
@@ -430,10 +444,10 @@ class GaussianMixture:
                 correction = self._correction_for_diff(diffs_to_total)
             rounded_amounts += correction
 
-        comp_ids = torch.repeat_interleave(torch.arange(self.b * self.K, device = self.mean.device), rounded_amounts.flatten())
+        comp_ids = torch.repeat_interleave(torch.arange(self.B * self.K, device = self.mean.device), rounded_amounts.flatten())
         if is_batched:
             # Reshape per batch and make indices valid
-            comp_ids = comp_ids.reshape(self.b, -1) - torch.arange(0, (self.b-1)*self.K + 1, self.K, device = self.mean.device).unsqueeze(1)
+            comp_ids = comp_ids.reshape(self.B, -1) - torch.arange(0, (self.B-1)*self.K + 1, self.K, device = self.mean.device).unsqueeze(1)
 
         return comp_ids
     
@@ -458,8 +472,8 @@ class GaussianMixture:
             comp_ids = self.weights_dist.sample((n,)).transpose(-1,0) # Always valid transpose
 
         if self.is_batched:
-            k = self.mean.size(-1)
-            gathered_means = self.mean.gather(1, comp_ids.unsqueeze(-1).expand(-1, -1, k))
+            f = self.F
+            gathered_means = self.mean.gather(1, comp_ids.unsqueeze(-1).expand(-1, -1, f))
             gathered_decomp_covs = self.cov_chol_decomp.gather(1, comp_ids.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, f, f))
         else:
             gathered_means = self.mean[comp_ids]
@@ -507,7 +521,7 @@ class GaussianMixture:
             args_checks=False
         )
 
-        if self.b > 1:
+        if self.B > 1:
             sample = sample.transpose(0,1)
 
         return sample
@@ -521,9 +535,13 @@ class GaussianMixture:
         """
         self.rng.manual_seed(seed)
 
-    def _normalized_params(self) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    @staticmethod
+    def normalize_params(
+        mean: torch.Tensor, cov_chol: torch.Tensor, weights: Optional[torch.Tensor],
+        B: int, K: int, F: int, is_mixture: bool, is_batched: bool
+    ) -> tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         r"""
-        Return mean, cov_chol (and optionally log_weights) expanded to a
+        Return mean, cov_chol or cov (and optionally weights) expanded to a
         consistent ``(b, m, ...)`` shape, using ``expand`` (no data copy).
 
         Returns:
@@ -532,23 +550,39 @@ class GaussianMixture:
                 - cov_chol:   ``(b, m, f, f)``
                 - weights: ``(b, m)`` if mixture, else ``None``
         """
-        k = self.mean.size(-1)
-        mean = self.mean
-        cov_chol = self.cov_chol_decomp
+        if not is_mixture and is_batched:
+            mean = mean.unsqueeze(1)
+            cov_chol = cov_chol.unsqueeze(1)
 
-        if not self.is_mixture and self.is_batched:
-            mean = self.mean.squeeze(1)
-            cov_chol = self.cov_chol_decomp.squeeze(1)
+        mean = mean.expand(B, K, F)
+        cov_chol = cov_chol.expand(B, K, F, F)
 
-        mean = self.mean.expand(self.b, self.f, f)
-        cov_chol = self.cov_chol_decomp.expand(self.b, self.f, f, k)
+        if is_mixture:
+            assert weights is not None, "Weights cannot be none if is_mixture"
+            weights = weights.expand(B, K)
+        
+        return mean, cov_chol, weights
+
         
 
-        weights = None
-        if self.is_mixture:
-            weights = self.weights_dist.probs.expand(self.b, self.K)
+    def _normalized_params(self) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+        r"""
+        Return mean, cov_chol (and optionally weights) expanded to a
+        consistent ``(b, m, ...)`` shape, using ``expand`` (no data copy).
 
-        return mean, cov_chol, weights
+        Returns:
+            Tuple of:
+                - mean:       ``(b, k, f)``
+                - cov_chol:   ``(b, m, f, f)``
+                - weights: ``(b, m)`` if mixture, else ``None``
+        """
+        is_mixture = self.is_mixture
+        return self.normalize_params(
+            self.mean, self.cov_chol_decomp, self.weights_dist.probs if is_mixture else None, 
+            self.B, self.K, self.F, 
+            is_mixture, self.is_batched
+        )
+
     
     def log_prob(self, x: torch.Tensor, check_input: bool = True, white_noise_var: float = 0.0) -> torch.Tensor:
         r"""
@@ -594,7 +628,7 @@ class GaussianMixture:
                 raise AssertionError("x cannot come from current mixture, wrong amount of covariates")
             if x.dim() not in [2,3]:
                 raise AssertionError("x has to have shape (b, n, k) or (n, k)")
-            if x.dim() == 3 and x.size(0) != self.b:
+            if x.dim() == 3 and x.size(0) != self.B:
                 raise AssertionError("Wrong batch dimension")
             
             if white_noise_var < 0:
@@ -606,7 +640,7 @@ class GaussianMixture:
 
         # Normalize x to (b, n, f)
         n = x.size(-2)
-        x = x.expand(self.b, n, f)
+        x = x.expand(self.B, n, f)
         # x is now (b, n, f)
 
         # Residuals: (b, n, k, f)
@@ -674,6 +708,8 @@ class GaussianMixture:
             params_str += '\n' + spacing_before + f"weights.size = {self.weights_dist.probs.shape}"
 
         return params_str
+
+    ####### Utilities ######## 
         
     @staticmethod
     def dist_params_check(
@@ -702,7 +738,7 @@ class GaussianMixture:
             AssertionError: If any parameter check fails.
         """
         weights_is_not_none = weights is not None
-        if mean.dim() in (1, 2) and (mean.dim() == 3 and weights_is_not_none):
+        if not (mean.dim() in (1, 2) or (mean.dim() == 3 and weights_is_not_none)):
              raise AssertionError("Means  needs to be of shape (f,), (k, f) or (b, f) or (b, k, f) - in which case weights are necessary")
         
         if not (cov.dim() == mean.dim()+1):
@@ -736,6 +772,85 @@ class GaussianMixture:
             raise AssertionError("Covariate count k is not constant")
         if not torch.allclose(cov, cov.transpose(-1, -2), *symmetry_rtol_atol):
             raise AssertionError("Covariance matrix not symmetric")
+
+    def univariate_mixture_as_tex(
+        self, 
+        suffix: str, 
+        letter_for_data: str = 'X', 
+        start_idx_mixtures: int = 0,
+        weights_iter_symbol: str = "k"
+    ) -> str:
+        mus, covs_chol_decomp, weights = self._normalized_params()
+        covs = covs_chol_decomp @ covs_chol_decomp.mT
+        is_mixture = self.is_mixture
+        is_batched = self.is_batched
+
+        tex_objs = []
+        s = suffix
+
+        def letter_maker(suffix, add_to_s = ""):
+            full_subind = suffix + add_to_s
+            if len(full_subind) > 0:
+                return letter_for_data + "_{" + full_subind + r"}"
+            
+            return letter_for_data
+
+        def mvn_latex(mu, cov, add_to_s = ""):
+            mu_vec = (
+                "\\begin{bmatrix}\n\t" +
+                "\\\\\n\t".join([f"{mu_k:.1f}" for mu_k in mu]) +
+                "\n\\end{bmatrix}"
+            )
+            Sigma_vcov = (
+                "\\begin{bmatrix}\n\t" +
+                "\\\\\n\t".join([" & ".join([f"{c:.1f}" for c in row]) for row in cov]) +
+                "\n\\end{bmatrix}"
+            )
+
+            return (
+                letter_maker(s, add_to_s) + r" \sim" + 
+                r"\mathcal{N}\left(\mu_{" + s + add_to_s + "} = " + mu_vec +
+                r", \Sigma_{" + s + add_to_s + "} = " + Sigma_vcov + r"\right)"
+            )
+        
+        wi = weights_iter_symbol
+
+        for b_idx, (mu_b, cov_b) in enumerate(zip(mus, covs)):
+            if is_mixture:
+                tex_objs.append([])
+                current_weights = []
+            for m_idx, (mu_m, cov_m) in enumerate(zip(mu_b, cov_b)):
+                if is_mixture:
+                    current_weights.append(weights[b_idx, m_idx] if is_batched else weights[0, m_idx])
+                    m_idx += start_idx_mixtures
+                    tex_objs[b_idx].append(mvn_latex(mu_m, cov_m, add_to_s=f"_{{{m_idx}}}"))
+                else:
+                    tex_objs.append(mvn_latex(mu_m, cov_m))
+                    #break - not necessary, there will be only one iteration
+
+            if is_mixture:
+                subind = s + '_{' + wi + '}'
+                tex_objs[b_idx].append(
+                    letter_maker(s) + rf" \mid \{{Z = {wi} \}}  \sim \mathcal{{N}}\left(\mu_{{{subind}}}, \Sigma_{{{subind}}}\right)," +
+                    r" \, Z \sim \text{{Categorical}}\left(" +
+                        ", ".join([fr"\pi_{{{k}}}={w:.2f}" for k, w in zip(range(start_idx_mixtures, start_idx_mixtures+self.K), current_weights)]) +
+                    r"\right)"
+                )
+
+                
+        dist_strs = []
+        for text_obj in tex_objs:
+            if is_mixture:
+                vars_dist_str = "$$\n" + r", \;".join(text_obj[:-1]) + "\n$$"
+                gm_dist_str = "$$\n" + text_obj[-1] + "\n$$"
+
+                dist_strs.append(gm_dist_str + "\nwith\n" + vars_dist_str)
+            else:
+                dist_strs.append("$$\n" + text_obj + "\n$$")
+
+        
+
+        return text_obj, dist_strs
 
 
 if __name__ == "__main__":

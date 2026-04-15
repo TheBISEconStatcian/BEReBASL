@@ -272,7 +272,11 @@ class CreditDataGenerator:
         if not isinstance(bad_mixture, GaussianMixture) or not isinstance(good_mixture, GaussianMixture):
             raise ValueError("Mixtures need to be GaussianMixture classes")
         
-        mixtures_are_compatible = (bad_mixture.F == good_mixture.F) and (bad_mixture.b == good_mixture.b)
+        mixtures_are_compatible = (
+            (bad_mixture.F == good_mixture.F) and 
+            (bad_mixture.B == good_mixture.B) and
+            (bad_mixture.is_batched == good_mixture.is_batched)
+        )
         if not mixtures_are_compatible:
             raise AssertionError("Mixtures are not compatible, batch and feature dimension must match")
         
@@ -307,8 +311,12 @@ class CreditDataGenerator:
         return self.bad_mixture.rng
     
     @property
-    def features_count(self):
+    def features_count(self) -> int:
         return self.bad_mixture.F
+
+    @property
+    def is_batched(self) -> bool:
+        return self.bad_mixture.is_batched
     
     def manual_seed(self, seed : int) -> torch.Generator:
         self.rng.manual_seed(seed)
@@ -820,6 +828,66 @@ class CreditDataGenerator:
             bad_ratio=bad_ratio,
             deterministic_weight_sampling=deterministic_weights_for_mixture_sampling
         )
+    
+    def dgp_tex_report(self) -> str:
+        r"""
+        Generates a LaTeX-formatted report of the data generating process parameters.
+
+        This method produces a comprehensive summary of the Gaussian mixture parameters
+        for both the "bad" and "good" classes, including means, covariances, and
+        mixture weights. The output is formatted as a LaTeX table for easy inclusion
+        in academic papers or presentations.
+
+        Returns:
+            str: A string containing the LaTeX code for the report.
+        """
+        is_batched = self.is_batched
+        gb_list = ["bad", "good"]
+
+        
+
+        dgp_descr = [
+            "The " + gb + f"s represent {(self.bad_ratio if gb == 'bad' else 1 - self.bad_ratio)*100:.1f}% of the data and its covariates DGP of is a "+ 
+            (f"batched (b={getattr(self, gb + '_mixture').B})" if is_batched else "") + 
+            "Gaussian " + (
+                "Mixture with " + ("deterministic" if self.determinstic_mixture_weights else "random") + " weights"
+                if getattr(self, gb + "_mixture").is_mixture
+                else "Distribution"
+            ) + 
+            " characterized by:\n\n"
+            for gb in gb_list
+        ]
+
+        dist_descr = [
+            getattr(self, gb + "_mixture").univariate_mixture_as_tex(suffix = gb[0], letter_for_data='X', start_idx_mixtures=1)[1] # the dist_str
+            for gb in gb_list
+        ]
+
+        report = (
+            "The credit data DGP contains " + 
+            (f"additive white noise with variance {self.noise_std ** 2:.2f}" if self.add_noise else "no noise") + 
+            f" and samples with a bad ratio of {self.bad_ratio*100:.1f}%."
+        )
+
+        bayes_error_rates_per: torch.Tensor = self.bayes_error_rate(100_000) * 100
+
+        if not is_batched:
+            report += f"It's bayes error rate is {bayes_error_rates_per:.2f}%."
+
+        report += " The " + " and ".join(gb_list) + " populations are defined as follows:\n\n"
+
+        for dgp_d, dist_d in zip(dgp_descr, dist_descr):
+             report += dgp_d 
+
+             if not is_batched:
+                 report += dist_d[0] + "\n\n\n\n"
+                 continue
+             
+             for b_idx, dist_d_b in enumerate(dist_d):
+                 report += f"**Batch {b_idx}**: Bayes error rate is {bayes_error_rates_per[b_idx].item():.2f}%\n"
+                 report += dist_d_b + "\n\n"
+             
+        return report
     
 def _mask2d_to_int_idxs(mask : torch.Tensor, correction_last_idx : Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
     mask_int = mask.to(torch.int32)
