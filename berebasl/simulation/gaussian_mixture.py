@@ -451,7 +451,7 @@ class GaussianMixture:
 
         return comp_ids
     
-    def _sample_mixture(self, n : int, deterministic_weights : bool = False):
+    def _sample_mixture(self, n : int, deterministic_weights : bool = False, reveal_mixture_components : bool = False) -> torch.Tensor:
         r"""
         Sample from the Gaussian mixture model.
 
@@ -460,6 +460,8 @@ class GaussianMixture:
             deterministic_weights (bool): If ``True``, use deterministic component
                 assignments based on rounded mixture weights. Otherwise use multinomial
                 sampling via ``Categorical`` distribution.
+            reveal_mixture_components (bool): If ``True``, return the component indices
+                used for sampling.
 
         Returns:
             Tensor:
@@ -467,9 +469,12 @@ class GaussianMixture:
                 - For unbatched mixtures: shape ``(n, k)``
         """
         if deterministic_weights:
-            comp_ids = self._deterministic_comp_ids(n)
+            comp_ids = self._deterministic_comp_ids(n)     # [B, N] or [N]
         else:
-            comp_ids = self.weights_dist.sample((n,)).transpose(-1,0) # Always valid transpose
+            comp_ids = (
+                self.weights_dist.sample((n,)) # [N, B] or [N]
+                .transpose(-1,0) # [B, N] or [N] - Always valid transpose
+            ) 
 
         if self.is_batched:
             f = self.F
@@ -488,10 +493,12 @@ class GaussianMixture:
             args_checks=False
         )
 
-        return gaussian_mixture_sample.squeeze(0)
+        mixture_components = comp_ids if reveal_mixture_components else None
+
+        return gaussian_mixture_sample.squeeze(0), mixture_components
 
 
-    def sample(self, n : int, deterministic_weights : bool = False):
+    def sample(self, n : int, deterministic_weights : bool = False, reveal_mixture_components : bool = False) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         r"""
         Draw samples from the distribution represented by this instance.
 
@@ -501,6 +508,8 @@ class GaussianMixture:
         Args:
             n (int): Number of samples.
             deterministic_weights (bool): Whether to use deterministic mixture weights.
+            reveal_mixture_components (bool): If ``True``, return the component indices
+                used for sampling.
 
         Returns:
             Tensor:
@@ -511,7 +520,7 @@ class GaussianMixture:
 
         """
         if self.is_mixture:
-            return self._sample_mixture(n, deterministic_weights)
+            return self._sample_mixture(n, deterministic_weights, reveal_mixture_components)
         
         sample = mvn_random_sample(
             mean = self.mean,
@@ -524,7 +533,7 @@ class GaussianMixture:
         if self.B > 1:
             sample = sample.transpose(0,1)
 
-        return sample
+        return sample, None
     
     def manual_seed(self, seed : int) -> None:
         r"""
