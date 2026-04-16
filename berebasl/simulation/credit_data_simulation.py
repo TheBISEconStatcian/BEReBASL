@@ -317,6 +317,10 @@ class CreditDataGenerator:
     @property
     def is_batched(self) -> bool:
         return self.bad_mixture.is_batched
+
+    @property
+    def B(self) -> int:
+        return self.bad_mixture.B
     
     def manual_seed(self, seed : int) -> torch.Generator:
         self.rng.manual_seed(seed)
@@ -387,8 +391,15 @@ class CreditDataGenerator:
             X = X + torch.randn(X.shape, generator=self.rng, device=device, dtype=dtype) * self.noise_std
 
         if reveal_mixture_components:
-            K_idxs = torch.cat([K_idxs_bad, K_idxs_good], dim=-1) # [n] or [b, n]
-            return X, y, K_idxs
+            at_least_one_is_mixture = False
+            K_idxs = torch.full_like(y, fill_value=-1, dtype=torch.int32)
+            if self.bad_mixture.is_mixture:
+                K_idxs[..., :n_bad] = K_idxs_bad.to(K_idxs.dtype)
+                at_least_one_is_mixture = True
+            if self.good_mixture.is_mixture:
+                K_idxs[..., -n_good:] = K_idxs_good.to(K_idxs.dtype)
+                at_least_one_is_mixture = True
+            return X, y, (K_idxs if at_least_one_is_mixture else None)
 
         return X, y
     
