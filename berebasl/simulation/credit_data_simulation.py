@@ -351,8 +351,9 @@ class CreditDataGenerator:
     
     def sample(
             self, 
-            n : int
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+            n : int,
+            reveal_mixture_components : bool = False
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         n_bad = round(self.bad_ratio * n)
         n_good = round((1-self.bad_ratio) * n)
         if (n_bad + n_good) != n:
@@ -365,17 +366,29 @@ class CreditDataGenerator:
         dtype = self.dtype
         device = self.device
 
-        X_bad = self.bad_mixture.sample(n_bad, deterministic_weights = self.determinstic_mixture_weights) # [n_bad, k] or [b, n_bad, k]
-        y_bad = X_bad.new_full(X_bad.shape[:-1], self.bad_good_encoding["bad"]) # [n_good] or [b, n_good, k]
+        X_bad, K_idxs_bad = self.bad_mixture.sample(
+            n_bad, 
+            deterministic_weights = self.determinstic_mixture_weights,
+            reveal_mixture_components=reveal_mixture_components
+        ) # [n_bad, k] or [b, n_bad, k]
+        y_bad = X_bad.new_full(X_bad.shape[:-1], self.bad_good_encoding["bad"]) # [n_good] or [b, n_good, f]
 
-        X_good = self.good_mixture.sample(n_good, deterministic_weights = self.determinstic_mixture_weights) # [n_good, k] or [b, n_good, k]
+        X_good, K_idxs_good = self.good_mixture.sample(
+            n_good, 
+            deterministic_weights = self.determinstic_mixture_weights,
+            reveal_mixture_components=reveal_mixture_components
+        ) # [n_good, k] or [b, n_good, f]
         y_good = X_good.new_full(X_good.shape[:-1], self.bad_good_encoding["good"]) # [n_good] or [b, n_good]
 
-        X = torch.cat([X_bad, X_good], dim=-2) # [n, k] or [b, n, k]
+        X = torch.cat([X_bad, X_good], dim=-2) # [n, f] or [b, n, f]
         y = torch.cat([y_bad, y_good], dim=-1) # [n] or [b, n]
 
         if self.add_noise:
             X = X + torch.randn(X.shape, generator=self.rng, device=device, dtype=dtype) * self.noise_std
+
+        if reveal_mixture_components:
+            K_idxs = torch.cat([K_idxs_bad, K_idxs_good], dim=-1) # [n] or [b, n]
+            return X, y, K_idxs
 
         return X, y
     
@@ -545,7 +558,7 @@ class CreditDataGenerator:
         true_bad = y == self.bad_good_encoding["bad"]        # (n,) or (b, n)
         errors   = pred_bad ^ true_bad                       # (n,) or (b, n)
 
-        result = errors.float().mean(dim=-1)                 # scalar or (b,)
+        result = errors.to(self.good_mixture.dtype).mean(dim=-1) # scalar or (b,)
         return result.item() if result.dim() == 0 else result
 
 
@@ -847,7 +860,7 @@ class CreditDataGenerator:
         
 
         dgp_descr = [
-            "The " + gb + f"s represent {(self.bad_ratio if gb == 'bad' else 1 - self.bad_ratio)*100:.1f}% of the data and its covariates DGP of is a "+ 
+            "The " + gb + f"s represent {(self.bad_ratio if gb == 'bad' else 1 - self.bad_ratio)*100:.1f}% of the data and its covariates' DGP is a "+ 
             (f"batched (b={getattr(self, gb + '_mixture').B})" if is_batched else "") + 
             "Gaussian " + (
                 "Mixture with " + ("deterministic" if self.determinstic_mixture_weights else "random") + " weights"
