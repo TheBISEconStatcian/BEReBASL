@@ -593,13 +593,13 @@ class GaussianMixture:
         )
 
     @staticmethod
-    def _effective_cov(cov: torch.Tensor, noise_var: float) -> torch.Tensor:
+    def _effective_cov_additive(cov: torch.Tensor, noise_var: float) -> torch.Tensor:
         cov_wn = torch.eye(cov.shape[0], device=cov.device, dtype=cov.dtype) * noise_var
         cov_wn = cov_wn.broadcast_to(cov.shape)
         return cov + cov_wn
 
-    def effective_cov(self, noise_var: float) -> torch.Tensor:
-        return self._effective_cov(self.cov, noise_var)
+    def effective_cov_additive(self, noise_var: float) -> torch.Tensor:
+        return self._effective_cov_additive(self.cov, noise_var)
 
     
     def log_prob(self, x: torch.Tensor, check_input: bool = True, white_noise_var: float = 0.0) -> torch.Tensor:
@@ -673,9 +673,9 @@ class GaussianMixture:
         if white_noise_var > 0:
             # Consider the effective covariance including the white noise term: Sigma + sigma^2 I
             cov_normalized = cov_chol @ cov_chol.mT # (b, m, f, f)
-            cov_inflated = self._effective_cov(cov_normalized, white_noise_var) # (b, m, f, f)
+            cov_inflated = self._effective_cov_additive(cov_normalized, white_noise_var) # (b, m, f, f)
             cov_chol = torch.linalg.cholesky(cov_inflated) # rewrite cov_chol to the inflated version
-            
+
         L = cov_chol.unsqueeze(1) # (b, 1, m, f, f)
 
         r = residuals.unsqueeze(-1)                                     # (b, n, k, f, 1)
