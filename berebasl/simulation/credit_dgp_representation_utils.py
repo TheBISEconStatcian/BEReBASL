@@ -179,18 +179,44 @@ def place_legend_below_axis(
         columnspacing=1.2
     )
 
-def plot_credit_dgp(
+def plot_credit_dgp_pairwise(
         data_gen: CreditDataGenerator, 
         sample_size: int, 
         cmap_dict: Optional[Dict[str, Callable[[int], Tuple[float, float, float]]]] = None,
         axes: Optional[List[Dict[str, plt.Axes]]] = None,
         plotting_order = ["good", "bad"],
+        fig_title: Optional[str] = None,
         transparency_alpha = 0.08,
         legend_y_offset = -0.09,
         width_per_axcol: float = 5.0,
         height_per_axrow: float = 3.0,
-        vspace_title_and_legend: float = 0.2
-    ) -> None:
+        vspace_title_and_legend: float = 0.2,
+        return_figures: bool = False
+    ) -> Optional[List[plt.Figure]]:
+    """
+    Visualize all pairwise feature relationships for bad/good classes.
+    
+    Plots samples and Gaussian mixture components for each pair of features.
+    When ``axes`` is ``None``, figures are auto-created; pass ``return_figures=True``
+    to get them for composition instead of calling ``plt.show()``.
+    
+    Args:
+        data_gen: CreditDataGenerator instance to visualize
+        sample_size: Number of samples to draw for visualization
+        cmap_dict: Optional color mapping for classes; auto-generated if None
+        axes: List of axis dicts (one per batch); if None, creates figures
+        plotting_order: Order to plot classes (default: ["good", "bad"])
+        fig_title: Optional custom figure title; auto-generated if None
+        transparency_alpha: Scatter plot transparency (default: 0.08)
+        legend_y_offset: Vertical offset for legend below figure (default: -0.09)
+        width_per_axcol: Width per axis column in inches (default: 5.0)
+        height_per_axrow: Height per axis row in inches (default: 3.0)
+        vspace_title_and_legend: Vertical spacing for title/legend (default: 0.2)
+        return_figures: If ``True`` and ``axes is None``, return figures instead of showing
+    
+    Returns:
+        ``List[plt.Figure]`` if ``return_figures=True`` and ``axes is None``, else ``None``
+    """
     nrows_per_F = {
         2: 1,
         3: 1,
@@ -221,6 +247,8 @@ def plot_credit_dgp(
     if not is_batched:
         plot_dicts = [plot_dicts]
 
+    created_figures = [] if (axes is None and return_figures) else None
+    
     for b, plot_dict_list, aes_dict in zip(range(B), plot_dicts, [None]*len(plot_dicts) if axes is None else axes):
         if aes_dict is None:
             ncols = comb(F, 2) / nrows_per_F[F]
@@ -232,17 +260,22 @@ def plot_credit_dgp(
                     height_per_axrow*nrows + vspace_title_and_legend
                 )
             )
+            if created_figures is not None:
+                created_figures.append(fig)
+            
             aes_dict = {}
             for (f1, f2), a in zip(combinations(range(F), 2), aes.flatten() if F>2 else [aes]):
                 a.set_xlabel(f"$x_{{{f1}}}$")
                 a.set_ylabel(f"$x_{{{f2}}}$")
                 aes_dict[f"{f1:02}{f2:02}"] = a
 
-            fig_title = r"Visualization of $\left\{ X_i"
-            if is_batched:
-                fig_title += f"^{{B={b}}}"
+            if fig_title is None:
+                fig_title = r"Visualization of $\left\{ X_i"
+                if is_batched:
+                    fig_title += f"^{{B={b}}}"
+                
+                fig_title += r" \right\}_{i=0}^{" + str(F-1) + "}$"
             
-            fig_title += r" \right\}_{i=0}^{" + str(F-1) + "}$"
             fig.suptitle(fig_title)
 
         # Plot all data into the appropriate axes
@@ -279,8 +312,13 @@ def plot_credit_dgp(
                 columnspacing=1.2
             )
 
-        if axes is None:
+        if axes is None and not return_figures:
             plt.show()
+    
+    if return_figures:
+        return created_figures
+
+    return None
 
 
 def credit_dgp_tex_report(credit_dgp: CreditDataGenerator) -> str:

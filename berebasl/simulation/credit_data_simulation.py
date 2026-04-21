@@ -7,6 +7,7 @@ from warnings import warn
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 ##### Third Party libraries
+from matplotlib.axes import Axes
 from torch.utils.data import Dataset
 import torch
 
@@ -15,6 +16,10 @@ from berebasl.simulation.gaussian_mixture import (
     eigen_decomp_proj_to_pd,
     GaussianMixture,
     random_vcov_matrix
+)
+from .credit_dgp_representation_utils import (
+    credit_dgp_tex_report,
+    plot_credit_dgp_pairwise
 )
 
 def _mix_mean_dif_as_expected(
@@ -865,53 +870,36 @@ class CreditDataGenerator:
         Returns:
             str: A string containing the LaTeX code for the report.
         """
-        is_batched = self.is_batched
-        gb_list = ["bad", "good"]
-
-        
-
-        dgp_descr = [
-            "The " + gb + f"s represent {(self.bad_ratio if gb == 'bad' else 1 - self.bad_ratio)*100:.1f}% of the data and its covariates' DGP is a "+ 
-            (f"batched (b={getattr(self, gb + '_mixture').B})" if is_batched else "") + 
-            "Gaussian " + (
-                "Mixture with " + ("deterministic" if self.determinstic_mixture_weights else "random") + " weights"
-                if getattr(self, gb + "_mixture").is_mixture
-                else "Distribution"
-            ) + 
-            " characterized by:\n\n"
-            for gb in gb_list
-        ]
-
-        dist_descr = [
-            getattr(self, gb + "_mixture").univariate_mixture_as_tex(suffix = gb[0], letter_for_data='X', start_idx_mixtures=1)[1] # the dist_str
-            for gb in gb_list
-        ]
-
-        report = (
-            "The credit data DGP contains " + 
-            (f"additive white noise with variance {self.noise_std ** 2:.2f}" if self.add_noise else "no noise") + 
-            f" and samples with a bad ratio of {self.bad_ratio*100:.1f}%."
+        return credit_dgp_tex_report(self)
+    
+    def pairwise_plot_dgp(
+            self, 
+            sample_size: int, 
+            cmap_dict: Optional[Dict[str, Callable[[int], Tuple[float, float, float]]]] = None,
+            axes: Optional[List[Dict[str, Axes]]] = None,
+            plotting_order = ["good", "bad"],
+            fig_title: Optional[str] = None,
+            transparency_alpha = 0.08,
+            legend_y_offset = -0.09,
+            width_per_axcol: float = 5.0,
+            height_per_axrow: float = 3.0,
+            vspace_title_and_legend: float = 0.2,
+            return_figures: bool = False
+        ):
+        return plot_credit_dgp_pairwise(
+            data_gen=self,
+            sample_size=sample_size,
+            cmap_dict=cmap_dict,
+            axes=axes,
+            plotting_order=plotting_order,
+            fig_title=fig_title,
+            transparency_alpha=transparency_alpha,
+            legend_y_offset=legend_y_offset,
+            width_per_axcol=width_per_axcol,
+            height_per_axrow=height_per_axrow,
+            vspace_title_and_legend=vspace_title_and_legend,
+            return_figures=return_figures
         )
-
-        bayes_error_rates_per: torch.Tensor = self.bayes_error_rate(100_000) * 100
-
-        if not is_batched:
-            report += f"It's bayes error rate is {bayes_error_rates_per:.2f}%."
-
-        report += " The " + " and ".join(gb_list) + " populations are defined as follows:\n\n"
-
-        for dgp_d, dist_d in zip(dgp_descr, dist_descr):
-             report += dgp_d 
-
-             if not is_batched:
-                 report += dist_d[0] + "\n\n\n\n"
-                 continue
-             
-             for b_idx, dist_d_b in enumerate(dist_d):
-                 report += f"**Batch {b_idx}**: Bayes error rate is {bayes_error_rates_per[b_idx].item():.2f}%\n"
-                 report += dist_d_b + "\n\n"
-             
-        return report
     
 def _mask2d_to_int_idxs(mask : torch.Tensor, correction_last_idx : Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
     mask_int = mask.to(torch.int32)
