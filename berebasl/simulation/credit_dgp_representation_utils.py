@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import Ellipse
 import torch
 
-from berebasl.simulation.credit_data_simulation import CreditDataGenerator
+from berebasl.simulation.credit_data_simulation import CreditDataGenerator, GaussianMixture
 
 from typing import Any, Callable, Dict, List, Literal, Optional, Union, Tuple
 
@@ -179,7 +179,7 @@ def place_legend_below_axis(
         columnspacing=1.2
     )
 
-def plot_dgp(
+def plot_credit_dgp(
         data_gen: CreditDataGenerator, 
         sample_size: int, 
         cmap_dict: Optional[Dict[str, Callable[[int], Tuple[float, float, float]]]] = None,
@@ -187,7 +187,9 @@ def plot_dgp(
         plotting_order = ["good", "bad"],
         transparency_alpha = 0.08,
         legend_y_offset = -0.09,
-        legend_modus: Literal['none', 'below', 'default'] = "below"
+        width_per_axcol: float = 5.0,
+        height_per_axrow: float = 3.0,
+        vspace_title_and_legend: float = 0.2
     ) -> None:
     nrows_per_F = {
         2: 1,
@@ -223,8 +225,13 @@ def plot_dgp(
         if aes_dict is None:
             ncols = comb(F, 2) / nrows_per_F[F]
             nrows = nrows_per_F[F]
-            fig, aes = plt.subplots(nrows=nrows, ncols=int(ncols),
-                                    figsize=(5*ncols, 3*nrows))
+            fig, aes = plt.subplots(
+                nrows=nrows, ncols=int(ncols),
+                figsize=(
+                    width_per_axcol*ncols, 
+                    height_per_axrow*nrows + vspace_title_and_legend
+                )
+            )
             aes_dict = {}
             for (f1, f2), a in zip(combinations(range(F), 2), aes.flatten() if F>2 else [aes]):
                 a.set_xlabel(f"$x_{{{f1}}}$")
@@ -255,7 +262,7 @@ def plot_dgp(
                     all_labels.append(l)
 
         # Place shared legend below the figure
-        if legend_modus == "below" and all_handles:
+        if all_handles:
             ncol = max(max(data_gen.good_mixture.K, round((data_gen.good_mixture.K + data_gen.bad_mixture.K)/2)), 4) if data_gen.good_mixture.is_mixture else None
             if ncol is None:
                 ncol = len(all_handles)
@@ -274,3 +281,143 @@ def plot_dgp(
 
         if axes is None:
             plt.show()
+
+
+def credit_dgp_tex_report(credit_dgp: CreditDataGenerator) -> str:
+    r"""
+    Generates a LaTeX-formatted report of the data generating process parameters.
+
+    This method produces a comprehensive summary of the Gaussian mixture parameters
+    for both the "bad" and "good" classes, including means, covariances, and
+    mixture weights. The output is formatted as a LaTeX table for easy inclusion
+    in academic papers or presentations.
+
+    Returns:
+        str: A string containing the LaTeX code for the report.
+    """
+    is_batched = credit_dgp.is_batched
+    gb_list = ["bad", "good"]
+
+    
+
+    dgp_descr = [
+        "The " + gb + f"s represent {(credit_dgp.bad_ratio if gb == 'bad' else 1 - credit_dgp.bad_ratio)*100:.1f}% of the data and its covariates' DGP is a "+ 
+        (f"batched (b={getattr(credit_dgp, gb + '_mixture').B})" if is_batched else "") + 
+        "Gaussian " + (
+            "Mixture with " + ("deterministic" if credit_dgp.determinstic_mixture_weights else "random") + " weights"
+            if getattr(credit_dgp, gb + "_mixture").is_mixture
+            else "Distribution"
+        ) + 
+        " characterized by:\n\n"
+        for gb in gb_list
+    ]
+
+    dist_descr = [
+        getattr(credit_dgp, gb + "_mixture").univariate_mixture_as_tex(suffix = gb[0], letter_for_data='X', start_idx_mixtures=1)[1] # the dist_str
+        for gb in gb_list
+    ]
+
+    report = (
+        "The credit data DGP contains " + 
+        (f"additive white noise with variance {credit_dgp.noise_std ** 2:.2f}" if credit_dgp.add_noise else "no noise") + 
+        f" and samples with a bad ratio of {credit_dgp.bad_ratio*100:.1f}%."
+    )
+
+    bayes_error_rates_per: torch.Tensor = credit_dgp.bayes_error_rate(100_000) * 100
+
+    if not is_batched:
+        report += f"It's bayes error rate is {bayes_error_rates_per:.2f}%."
+
+    report += " The " + " and ".join(gb_list) + " populations are defined as follows:\n\n"
+
+    for dgp_d, dist_d in zip(dgp_descr, dist_descr):
+            report += dgp_d 
+
+            if not is_batched:
+                report += dist_d[0] + "\n\n\n\n"
+                continue
+            
+            for b_idx, dist_d_b in enumerate(dist_d):
+                report += f"**Batch {b_idx}**: Bayes error rate is {bayes_error_rates_per[b_idx].item():.2f}%\n"
+                report += dist_d_b + "\n\n"
+            
+    return report
+
+def gaussian_mixture_tex_report(
+        gm: GaussianMixture, 
+        suffix: str, 
+        letter_for_data: str = 'X', 
+        start_idx_mixtures: int = 0,
+        weights_iter_symbol: str = "k"
+    ) -> Tuple[List[str], List[str]]:
+        mus, covs_chol_decomp, weights = gm._normalized_params()
+        covs = covs_chol_decomp @ covs_chol_decomp.mT
+        is_mixture = gm.is_mixture
+        is_batched = gm.is_batched
+
+        tex_objs = []
+        s = suffix
+
+        def letter_maker(suffix, add_to_s = ""):
+            full_subind = suffix + add_to_s
+            if len(full_subind) > 0:
+                return letter_for_data + "_{" + full_subind + r"}"
+            
+            return letter_for_data
+
+        def mvn_latex(mu, cov, add_to_s = ""):
+            mu_vec = (
+                "\\begin{bmatrix}\n\t" +
+                "\\\\\n\t".join([f"{mu_k:.1f}" for mu_k in mu]) +
+                "\n\\end{bmatrix}"
+            )
+            Sigma_vcov = (
+                "\\begin{bmatrix}\n\t" +
+                "\\\\\n\t".join([" & ".join([f"{c:.1f}" for c in row]) for row in cov]) +
+                "\n\\end{bmatrix}"
+            )
+
+            return (
+                letter_maker(s, add_to_s) + r" \sim" + 
+                r"\mathcal{N}\left(\mu_{" + s + add_to_s + "} = " + mu_vec +
+                r", \Sigma_{" + s + add_to_s + "} = " + Sigma_vcov + r"\right)"
+            )
+        
+        wi = weights_iter_symbol
+
+        for b_idx, (mu_b, cov_b) in enumerate(zip(mus, covs)):
+            if is_mixture:
+                tex_objs.append([])
+                current_weights = []
+            for m_idx, (mu_m, cov_m) in enumerate(zip(mu_b, cov_b)):
+                if is_mixture:
+                    current_weights.append(weights[b_idx, m_idx] if is_batched else weights[0, m_idx])
+                    m_idx += start_idx_mixtures
+                    tex_objs[b_idx].append(mvn_latex(mu_m, cov_m, add_to_s=f"_{{{m_idx}}}"))
+                else:
+                    tex_objs.append(mvn_latex(mu_m, cov_m))
+                    #break - not necessary, there will be only one iteration
+
+            if is_mixture:
+                subind = s + '_{' + wi + '}'
+                tex_objs[b_idx].append(
+                    letter_maker(s) + rf" \mid \{{Z = {wi} \}}  \sim \mathcal{{N}}\left(\mu_{{{subind}}}, \Sigma_{{{subind}}}\right)," +
+                    r" \, Z \sim \text{{Categorical}}\left(" +
+                        ", ".join([fr"\pi_{{{k}}}={w:.2f}" for k, w in zip(range(start_idx_mixtures, start_idx_mixtures+gm.K), current_weights)]) +
+                    r"\right)"
+                )
+
+                
+        dist_strs = []
+        for text_obj in tex_objs:
+            if is_mixture:
+                vars_dist_str = "$$\n" + r", \;".join(text_obj[:-1]) + "\n$$"
+                gm_dist_str = "$$\n" + text_obj[-1] + "\n$$"
+
+                dist_strs.append(gm_dist_str + "\nwith\n" + vars_dist_str)
+            else:
+                dist_strs.append("$$\n" + text_obj + "\n$$")
+
+        
+
+        return text_obj, dist_strs
