@@ -11,11 +11,12 @@ import numpy as np
 from matplotlib import colormaps
 from matplotlib import pyplot as plt
 from matplotlib.patches import Ellipse
+from scipy.stats import chi2
 import torch
 
 from berebasl.simulation.credit_data_simulation import CreditDataGenerator, GaussianMixture
 
-from typing import Any, Callable, Dict, List, Literal, Optional, Union, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Union, Tuple
 
 def make_plot_dicts_to_show_dgp(
         data_gen: CreditDataGenerator, 
@@ -91,34 +92,34 @@ def make_plot_dicts_to_show_dgp(
 
     return plot_dicts
 
-def plot_cov_ellipse(mean, cov, ax, color_alpha: float = 0.2):
-    # Eigen-decomposition
+def plot_cov_ellipses(mean, cov, ax, probs: Iterable[float] = (0.5, 0.8, 0.95),
+                      edgecolor="k", facecolor="none",
+                      linewidth=0.8, alpha=0.6):
     eigvals, eigvecs = np.linalg.eigh(cov)
-
-    # Sort eigenvalues (largest first for consistency)
     order = eigvals.argsort()[::-1]
     eigvals = eigvals[order]
     eigvecs = eigvecs[:, order]
 
-    # Compute angle (in degrees) of the ellipse
     angle = np.degrees(np.arctan2(eigvecs[1, 0], eigvecs[0, 0]))
 
-    # Width and height = 2 * sqrt(eigenvalues)
-    # (factor 2 because matplotlib expects full width, not radius)
-    width, height = 2 * np.sqrt(eigvals)
+    for p in probs:
+        r = np.sqrt(chi2.ppf(p, df=2))
+        width, height = 2 * r * np.sqrt(eigvals)
 
-    ellipse = Ellipse(
-        xy=mean,
-        width=width,
-        height=height,
-        angle=angle,
-        edgecolor=(0,0,0,color_alpha),  # Semi-transparent black
-        facecolor='none',
-        linewidth=1.5,
-        zorder = 10.0
-    )
+        ell = Ellipse(
+            xy=mean,
+            width=width,
+            height=height,
+            angle=angle,
+            edgecolor=edgecolor,
+            facecolor=facecolor,
+            linewidth=linewidth,
+            alpha=alpha,
+            zorder=10,
+        )
+        ax.add_patch(ell)
 
-    ax.add_patch(ellipse)
+    return ax
 
 def plot_population_sample(
         sample: torch.Tensor,
@@ -127,7 +128,10 @@ def plot_population_sample(
         color: Tuple[int, int, int],
         label_suffix: str,
         ax: plt.Axes = None,
-        transparency_alpha: float = 0.08
+        transparency_alpha: float = 0.08,
+        ellipses_probs: Iterable[float] = (0.5,0.8,.95),
+        ellipses_width: float = .8,
+        ellipses_alpha: float = .6
 ) -> None:
     if ax is None:
         ax = plt.gca()
@@ -136,10 +140,13 @@ def plot_population_sample(
     ax.scatter(mixture_mean[0].item(), mixture_mean[1].item(), s=20, color = color,
                 facecolor='white', edgecolor=color,
                 label=f"$\\mathbb{{E}}\\,[X_{{{label_suffix}}}]$", zorder = 10.0)
-    plot_cov_ellipse(
+    plot_cov_ellipses(
         mixture_mean.cpu().numpy(), 
         mixture_cov.cpu().numpy(),
-        ax
+        ax,
+        probs=ellipses_probs,
+        linewidth=ellipses_width,
+        alpha=ellipses_alpha
     )
 
 def place_legend_below_axis(
@@ -191,7 +198,10 @@ def plot_credit_dgp_pairwise(
         width_per_axcol: float = 5.0,
         height_per_axrow: float = 3.0,
         vspace_title_and_legend: float = 0.2,
-        return_figures: bool = False
+        return_figures: bool = False,
+        ellipses_probs: Iterable[float] = (.5,.8,.95),
+        ellipses_width: float = .8,
+        ellipses_alpha: float = .6
     ) -> Optional[List[plt.Figure]]:
     """
     Visualize all pairwise feature relationships for bad/good classes.
@@ -283,7 +293,14 @@ def plot_credit_dgp_pairwise(
             for plot_dict in plot_dict_list[current_key]:
                 f1, f2 = plot_dict.pop("var_idxs")
                 #print(plot_dict["sample"].mean(dim=0), plot_dict["mixture_mean"])
-                plot_population_sample(ax=aes_dict[f"{f1:02}{f2:02}"], transparency_alpha=transparency_alpha, **plot_dict)
+                plot_population_sample(
+                    ax=aes_dict[f"{f1:02}{f2:02}"],
+                    transparency_alpha=transparency_alpha,
+                    ellipses_probs=ellipses_probs,
+                    ellipses_width=ellipses_width,
+                    ellipses_alpha=ellipses_alpha,
+                    **plot_dict
+                )
 
         # Collect handles and labels from all axes for shared legend
         all_handles, all_labels = [], []

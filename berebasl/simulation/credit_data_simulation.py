@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 ##### Third Party libraries
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from torch.utils.data import Dataset
 import torch
 
@@ -16,10 +17,6 @@ from berebasl.simulation.gaussian_mixture import (
     eigen_decomp_proj_to_pd,
     GaussianMixture,
     random_vcov_matrix
-)
-from .credit_dgp_representation_utils import (
-    credit_dgp_tex_report,
-    plot_credit_dgp_pairwise
 )
 
 def _mix_mean_dif_as_expected(
@@ -257,7 +254,6 @@ def _adapt_mix_var_dif(
     
     if mix_var_dif.dim() == 3:
         return mix_var_dif
-    
 
 class CreditDataGenerator:
     bad_good_encoding = {
@@ -870,6 +866,7 @@ class CreditDataGenerator:
         Returns:
             str: A string containing the LaTeX code for the report.
         """
+        from .credit_dgp_representation_utils import credit_dgp_tex_report
         return credit_dgp_tex_report(self)
     
     def pairwise_plot_dgp(
@@ -884,8 +881,12 @@ class CreditDataGenerator:
             width_per_axcol: float = 5.0,
             height_per_axrow: float = 3.0,
             vspace_title_and_legend: float = 0.2,
-            return_figures: bool = False
+            return_figures: bool = False,
+            ellipses_probs: List[float] = [.5,.8,.95],
+            ellipses_width: float = .8,
+            ellipses_alpha: float = .6
         ):
+        from .credit_dgp_representation_utils import plot_credit_dgp_pairwise
         return plot_credit_dgp_pairwise(
             data_gen=self,
             sample_size=sample_size,
@@ -898,7 +899,10 @@ class CreditDataGenerator:
             width_per_axcol=width_per_axcol,
             height_per_axrow=height_per_axrow,
             vspace_title_and_legend=vspace_title_and_legend,
-            return_figures=return_figures
+            return_figures=return_figures,
+            ellipses_probs=ellipses_probs,
+            ellipses_width=ellipses_width,
+            ellipses_alpha=ellipses_alpha
         )
     
 def _mask2d_to_int_idxs(mask : torch.Tensor, correction_last_idx : Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
