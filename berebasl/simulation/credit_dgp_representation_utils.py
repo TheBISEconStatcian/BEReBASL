@@ -63,7 +63,7 @@ def make_plot_dicts_to_show_dgp(
     F = data_gen.features_count
     for b, (B_feats, B_lbls, B_K_idxs, B_gm_bad_mean, B_gm_bad_cov, B_gm_good_mean, B_gm_good_cov) in enumerate(batch_iter):
         plot_dict = plot_dicts[b]
-        batch_add_suffix = f"^{{b={b}}}" if is_batched else ""
+        batch_add_suffix = f"^{{B={b}}}" if is_batched else ""
         for f1, f2 in combinations(range(F), 2):
             for gb in gb_vals:
                 gb_add_suffix = gb[0] + batch_add_suffix
@@ -93,6 +93,78 @@ def make_plot_dicts_to_show_dgp(
 
     return plot_dicts
 
+
+def make_plot_dicts_to_show_dgp_3d(
+        data_gen: CreditDataGenerator,
+        sample_size: int,
+        cmap_dict: Optional[Dict[str, Callable[[int], Tuple[float, float, float]]]]
+    ) -> Union[List[Dict[str, List[Dict[str, Any]]]]]:
+    sampled_feats, sampled_labels, sampled_K_idxs = data_gen.sample(sample_size, reveal_mixture_components=True)
+
+    gb_vals = ["bad", "good"]
+    plot_dicts = [{gb: [] for gb in gb_vals} for _ in range(data_gen.B)]
+
+    is_batched = data_gen.is_batched
+    is_mixture: Dict[str, bool] = {gb: getattr(data_gen, gb + '_mixture').is_mixture for gb in gb_vals}
+    is_mixture["any"] = any(is_mixture.values())
+    noise_var = data_gen.noise_std ** 2
+
+    mixtures_K: Dict[str, Optional[int]] = {gb: getattr(data_gen, gb + '_mixture').K if is_mixture[gb] else None for gb in gb_vals}
+
+    gm_params = sum([
+        [gm.mean, gm.effective_cov_additive(noise_var) if data_gen.add_noise else gm.cov]
+        for gm in (data_gen.bad_mixture, data_gen.good_mixture)
+    ], [])
+
+    batch_iter = (
+        (feats, lbls, K_idxs, gm_bad_mean, gm_bad_cov, gm_good_mean, gm_good_cov)
+        for feats, lbls, K_idxs, gm_bad_mean, gm_bad_cov, gm_good_mean, gm_good_cov
+        in (
+            zip(
+                sampled_feats,
+                sampled_labels,
+                sampled_K_idxs if is_mixture["any"] else [None] * data_gen.B,
+                *gm_params
+            )
+            if is_batched else
+            [(
+                sampled_feats,
+                sampled_labels,
+                sampled_K_idxs,
+                *gm_params
+            )]
+        )
+    )
+
+    for b, (B_feats, B_lbls, B_K_idxs, B_gm_bad_mean, B_gm_bad_cov, B_gm_good_mean, B_gm_good_cov) in enumerate(batch_iter):
+        plot_dict = plot_dicts[b]
+        batch_add_suffix = f"^{{b={b}}}" if is_batched else ""
+        for gb in gb_vals:
+            gb_add_suffix = gb[0] + batch_add_suffix
+            for k in range(mixtures_K[gb]) if is_mixture[gb] else [0]:
+                mask = B_lbls == data_gen.bad_good_encoding[gb]
+                mean, cov = (B_gm_bad_mean, B_gm_bad_cov) if gb == "bad" else (B_gm_good_mean, B_gm_good_cov)
+                if is_mixture[gb]:
+                    mask &= B_K_idxs == k
+                    mean, cov = [p[k] for p in (mean, cov)]
+                    suffix = gb_add_suffix + "_{k=" + str(k) + '}'
+                else:
+                    suffix = gb_add_suffix
+
+                plot_dict[gb].append({
+                    "sample": B_feats[mask],
+                    "mixture_mean": mean,
+                    "mixture_cov": cov,
+                    "color": cmap_dict[gb](k),
+                    "label_suffix": suffix
+                })
+
+    if not is_batched:
+        plot_dicts = plot_dicts[0]
+
+    return plot_dicts
+
+
 def plot_cov_ellipses(mean, cov, ax, probs: Iterable[float] = (0.5, 0.8, 0.95),
                       edgecolor="k", facecolor="none",
                       linewidth=0.8, alpha=0.6):
@@ -104,8 +176,8 @@ def plot_cov_ellipses(mean, cov, ax, probs: Iterable[float] = (0.5, 0.8, 0.95),
     angle = np.degrees(np.arctan2(eigvecs[1, 0], eigvecs[0, 0]))
     legend_handle = None
     coverage_label = (
-        r"Coverage prob. "
-        + r"$p \in \{" + ", ".join([(f"{pr:.2f}")[1:] for pr in probs]) + r"\}$"
+        r"Coverage prob."
+        + r"$\in \{" + ", ".join([(f"{pr:.2f}")[1:] for pr in probs]) + r"\}$"
     )
     for p in probs:
         r = np.sqrt(chi2.ppf(p, df=2))
@@ -130,10 +202,11 @@ def plot_cov_ellipses(mean, cov, ax, probs: Iterable[float] = (0.5, 0.8, 0.95),
                 [], [],
                 color=edgecolor,
                 marker='o',
-                linestyle='-',
+                linestyle='None',
                 linewidth=linewidth,
                 alpha=alpha,
                 markerfacecolor='none',
+                markeredgewidth=linewidth,
                 markersize=8,
                 label=coverage_label
             )
@@ -169,6 +242,197 @@ def plot_population_sample(
     )
     if coverage_handle is not None and not hasattr(ax, '_coverage_legend_handle'):
         ax._coverage_legend_handle = coverage_handle
+
+
+def plot_cov_ellipsoid(mean, cov, ax, probs: Iterable[float] = (0.8,),
+                       edgecolor="k", linewidth=0.8, alpha=0.18,
+                       n_points: int = 24):
+    """Plot a 3D ellipsoid at a given covariance level and return a legend handle."""
+    eigvals, eigvecs = np.linalg.eigh(cov)
+    order = eigvals.argsort()[::-1]
+    eigvals = eigvals[order]
+    eigvecs = eigvecs[:, order]
+
+    legend_handle = None
+    coverage_label = (
+        r"Coverage prob. "
+        + r"$p \in \{" + ", ".join([(f"{pr:.2f}")[1:] for pr in probs]) + r"\}$"
+    )
+
+    u = np.linspace(0, 2 * np.pi, n_points)
+    v = np.linspace(0, np.pi, n_points)
+    x = np.outer(np.cos(u), np.sin(v))
+    y = np.outer(np.sin(u), np.sin(v))
+    z = np.outer(np.ones_like(u), np.cos(v))
+    sphere = np.stack([x.flatten(), y.flatten(), z.flatten()], axis=0)
+
+    for p in probs:
+        r = np.sqrt(chi2.ppf(p, df=3))
+        radii = r * np.sqrt(eigvals)
+        ellipsoid = eigvecs @ np.diag(radii) @ sphere
+        xs = ellipsoid[0].reshape(x.shape) + mean[0]
+        ys = ellipsoid[1].reshape(x.shape) + mean[1]
+        zs = ellipsoid[2].reshape(x.shape) + mean[2]
+
+        ax.plot_wireframe(
+            xs, ys, zs,
+            color=edgecolor,
+            alpha=alpha,
+            linewidth=linewidth,
+            rstride=max(1, n_points // 12),
+            cstride=max(1, n_points // 12)
+        )
+
+        if legend_handle is None:
+            legend_handle = Line2D(
+                [], [],
+                color=edgecolor,
+                marker='o',
+                linestyle='None',
+                linewidth=linewidth,
+                alpha=alpha,
+                markerfacecolor='none',
+                markeredgewidth=linewidth,
+                markersize=8,
+                label=coverage_label
+            )
+
+    return legend_handle
+
+
+def plot_population_sample_3d(
+        sample: torch.Tensor,
+        mixture_mean: torch.Tensor,
+        mixture_cov: torch.Tensor,
+        color: Tuple[int, int, int],
+        label_suffix: str,
+        ax: plt.Axes = None,
+        transparency_alpha: float = 0.08,
+        ellipsoid_probs: Iterable[float] = (0.8,),
+        ellipsoid_width: float = .8,
+        ellipsoid_alpha: float = .18
+) -> None:
+    if ax is None:
+        ax = plt.gca()
+
+    ax.scatter(sample[:, 0], sample[:, 1], sample[:, 2], s=5,
+               color=color + (transparency_alpha,), marker='o')
+    ax.scatter(mixture_mean[0].item(), mixture_mean[1].item(), mixture_mean[2].item(),
+               s=30, color=color, facecolor='white', edgecolor=color,
+               label=f"$\\mathbb{{E}}\\,[X_{{{label_suffix}}}]$", zorder=10.0)
+
+    coverage_handle = plot_cov_ellipsoid(
+        mixture_mean.cpu().numpy(),
+        mixture_cov.cpu().numpy(),
+        ax,
+        probs=ellipsoid_probs,
+        edgecolor=color,
+        linewidth=ellipsoid_width,
+        alpha=ellipsoid_alpha,
+        n_points=18
+    )
+    if coverage_handle is not None and not hasattr(ax, '_coverage_legend_handle'):
+        ax._coverage_legend_handle = coverage_handle
+
+
+def plot_credit_dgp_3d(
+        data_gen: CreditDataGenerator,
+        sample_size: int,
+        cmap_dict: Optional[Dict[str, Callable[[int], Tuple[float, float, float]]]] = None,
+        axes: Optional[List[plt.Axes]] = None,
+        plotting_order = ["good", "bad"],
+        fig_title: Optional[str] = None,
+        transparency_alpha = 0.08,
+        legend_y_offset = -0.09,
+        width: float = 8.0,
+        height: float = 6.0,
+        return_figures: bool = False,
+        ellipsoid_probs: Iterable[float] = (0.8,),
+        ellipsoid_width: float = .8,
+        ellipsoid_alpha: float = .18
+    ) -> Optional[List[plt.Figure]]:
+    """Visualize a 3D MVN or Gaussian mixture for F=3 using the same colour and legend semantics as 2D."""
+    if cmap_dict is None:
+        cmap_dict = _default_cmap_dict(
+            K_good=data_gen.good_mixture.K,
+            K_bad=data_gen.bad_mixture.K
+        )
+    plot_dicts = make_plot_dicts_to_show_dgp_3d(data_gen, sample_size, cmap_dict)
+    if data_gen.features_count != 3:
+        raise ValueError("plot_credit_dgp_3d only supports F=3")
+
+    is_batched = data_gen.is_batched
+    B = data_gen.B
+    if not is_batched:
+        plot_dicts = [plot_dicts]
+
+    created_figures = [] if (axes is None and return_figures) else None
+    axes_list = [None] * len(plot_dicts) if axes is None else axes
+
+    for b, plot_dict_list, ax in zip(range(B), plot_dicts, axes_list):
+        if ax is None:
+            fig = plt.figure(figsize=(width, height))
+            ax = fig.add_subplot(111, projection='3d')
+            if created_figures is not None:
+                created_figures.append(fig)
+            if fig_title is None:
+                fig_title = r"3D visualization of $\{X_i"
+                if is_batched:
+                    fig_title += f"^{{B={b}}}"
+                fig_title += r"\}_{i=0}^{2}$"
+            fig.suptitle(fig_title)
+        else:
+            fig = ax.figure
+
+        for current_key in plotting_order:
+            for plot_dict in plot_dict_list[current_key]:
+                plot_population_sample_3d(
+                    sample=plot_dict["sample"],
+                    mixture_mean=plot_dict["mixture_mean"],
+                    mixture_cov=plot_dict["mixture_cov"],
+                    color=plot_dict["color"],
+                    label_suffix=plot_dict["label_suffix"],
+                    ax=ax,
+                    transparency_alpha=transparency_alpha,
+                    ellipsoid_probs=ellipsoid_probs,
+                    ellipsoid_width=ellipsoid_width,
+                    ellipsoid_alpha=ellipsoid_alpha
+                )
+
+        ax.set_xlabel(r"$x_{0}$")
+        ax.set_ylabel(r"$x_{1}$")
+        ax.set_zlabel(r"$x_{2}$")
+        ax.view_init(elev=20, azim=35)
+
+        all_handles, all_labels = [], []
+        for handle, label in zip(*ax.get_legend_handles_labels()):
+            if label not in all_labels:
+                all_handles.append(handle)
+                all_labels.append(label)
+
+        coverage_handle = getattr(ax, '_coverage_legend_handle', None)
+        if coverage_handle is not None and coverage_handle.get_label() not in all_labels:
+            all_handles.append(coverage_handle)
+            all_labels.append(coverage_handle.get_label())
+
+        if all_handles:
+            fig.legend(
+                all_handles,
+                all_labels,
+                loc='lower center',
+                bbox_to_anchor=(0.5, legend_y_offset),
+                ncol=max(1, min(len(all_handles), 4)),
+                frameon=False,
+                fontsize=9,
+                handlelength=1.5,
+                columnspacing=1.2
+            )
+
+        if axes is None and not return_figures:
+            plt.show()
+
+    return created_figures
+
 
 def place_legend_below_axis(
     ax: plt.Axes,
@@ -206,6 +470,21 @@ def place_legend_below_axis(
         handlelength=1.5,
         columnspacing=1.2
     )
+
+def _default_cmap_dict(K_good: int, K_bad: int) -> Dict[str, Callable[[int], Tuple[float, float, float]]]:
+    if max(K_good, K_bad) > 5:
+        raise AssertionError("Too many mixtures - plotting only possible by passing cmap_dict, also consider using other method")
+    tab10_good_bad_idxs = {
+        "bad" : [1, 3, 4, 5, 7],
+        "good" : [0, 2, 6, 8, 9]
+    }
+
+    cmap_dict: Dict[str, Callable[[int], Tuple[float, float, float]]] = {
+        "bad" : lambda idx : colormaps["tab10"](tab10_good_bad_idxs["bad"][idx])[:3],
+        "good" : lambda idx : colormaps["tab10"](tab10_good_bad_idxs["good"][idx])[:3]
+    }
+
+    return cmap_dict
 
 def plot_credit_dgp_pairwise(
         data_gen: CreditDataGenerator, 
@@ -258,17 +537,10 @@ def plot_credit_dgp_pairwise(
         8: 7
     }
     if cmap_dict is None:
-        if max(data_gen.good_mixture.K, data_gen.bad_mixture.K) > 5:
-            raise AssertionError("Too many mixtures - plotting only possible by passing cmap_dict, also consider using other method")
-        tab10_good_bad_idxs = {
-            "bad" : [1, 3, 4, 5, 7],
-            "good" : [0, 2, 6, 8, 9]
-        }
-
-        cmap_dict: Dict[str, Callable[[int], Tuple[float, float, float]]] = {
-            "bad" : lambda idx : colormaps["tab10"](tab10_good_bad_idxs["bad"][idx])[:3],
-            "good" : lambda idx : colormaps["tab10"](tab10_good_bad_idxs["good"][idx])[:3]
-        }
+        cmap_dict = _default_cmap_dict(
+            K_good=data_gen.good_mixture.K,
+            K_bad=data_gen.bad_mixture.K
+        )
     
     plot_dicts = make_plot_dicts_to_show_dgp(data_gen, sample_size, cmap_dict)
     is_batched = data_gen.is_batched
@@ -390,7 +662,7 @@ def credit_dgp_tex_report(credit_dgp: CreditDataGenerator) -> str:
 
     dgp_descr = [
         "The " + gb + f"s represent {(credit_dgp.bad_ratio if gb == 'bad' else 1 - credit_dgp.bad_ratio)*100:.1f}% of the data and its covariates' DGP is a "+ 
-        (f"batched (b={getattr(credit_dgp, gb + '_mixture').B})" if is_batched else "") + 
+        (f"batched (B={getattr(credit_dgp, gb + '_mixture').B})" if is_batched else "") + 
         "Gaussian " + (
             "Mixture with " + ("deterministic" if credit_dgp.determinstic_mixture_weights else "random") + " weights"
             if getattr(credit_dgp, gb + "_mixture").is_mixture
