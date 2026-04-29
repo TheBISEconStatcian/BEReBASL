@@ -10,6 +10,7 @@ from itertools import combinations
 import numpy as np
 from matplotlib import colormaps
 from matplotlib import pyplot as plt
+from matplotlib.lines import Line2D
 from matplotlib.patches import Ellipse
 from scipy.stats import chi2
 import torch
@@ -101,7 +102,11 @@ def plot_cov_ellipses(mean, cov, ax, probs: Iterable[float] = (0.5, 0.8, 0.95),
     eigvecs = eigvecs[:, order]
 
     angle = np.degrees(np.arctan2(eigvecs[1, 0], eigvecs[0, 0]))
-
+    legend_handle = None
+    coverage_label = (
+        r"Coverage prob. "
+        + r"$p \in \{" + ", ".join([(f"{pr:.2f}")[1:] for pr in probs]) + r"\}$"
+    )
     for p in probs:
         r = np.sqrt(chi2.ppf(p, df=2))
         width, height = 2 * r * np.sqrt(eigvals)
@@ -116,10 +121,24 @@ def plot_cov_ellipses(mean, cov, ax, probs: Iterable[float] = (0.5, 0.8, 0.95),
             linewidth=linewidth,
             alpha=alpha,
             zorder=10,
+            label=None
         )
         ax.add_patch(ell)
 
-    return ax
+        if legend_handle is None:
+            legend_handle = Line2D(
+                [], [],
+                color=edgecolor,
+                marker='o',
+                linestyle='-',
+                linewidth=linewidth,
+                alpha=alpha,
+                markerfacecolor='none',
+                markersize=8,
+                label=coverage_label
+            )
+
+    return legend_handle
 
 def plot_population_sample(
         sample: torch.Tensor,
@@ -140,7 +159,7 @@ def plot_population_sample(
     ax.scatter(mixture_mean[0].item(), mixture_mean[1].item(), s=20, color = color,
                 facecolor='white', edgecolor=color,
                 label=f"$\\mathbb{{E}}\\,[X_{{{label_suffix}}}]$", zorder = 10.0)
-    plot_cov_ellipses(
+    coverage_handle = plot_cov_ellipses(
         mixture_mean.cpu().numpy(), 
         mixture_cov.cpu().numpy(),
         ax,
@@ -148,6 +167,8 @@ def plot_population_sample(
         linewidth=ellipses_width,
         alpha=ellipses_alpha
     )
+    if coverage_handle is not None and not hasattr(ax, '_coverage_legend_handle'):
+        ax._coverage_legend_handle = coverage_handle
 
 def place_legend_below_axis(
     ax: plt.Axes,
@@ -303,6 +324,9 @@ def plot_credit_dgp_pairwise(
                 )
 
         # Collect handles and labels from all axes for shared legend
+        # and Add coverage legend handle last if present
+        coverage_handle = None
+        coverage_label = None
         all_handles, all_labels = [], []
         for ax in aes_dict.values():
             handles, labels = ax.get_legend_handles_labels()
@@ -310,6 +334,15 @@ def plot_credit_dgp_pairwise(
                 if l not in all_labels:  # Avoid duplicates
                     all_handles.append(h)
                     all_labels.append(l)
+                    
+            if coverage_handle is None and hasattr(ax, '_coverage_legend_handle'):
+                coverage_handle = ax._coverage_legend_handle
+                coverage_label = coverage_handle.get_label()
+
+        if coverage_handle is not None and coverage_label is not None:
+            if coverage_label not in all_labels:
+                all_handles.append(coverage_handle)
+                all_labels.append(coverage_label)
 
         # Place shared legend below the figure
         if all_handles:
