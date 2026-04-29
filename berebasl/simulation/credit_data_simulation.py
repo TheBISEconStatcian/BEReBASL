@@ -4,7 +4,7 @@ from types import FunctionType
 from math import isnan, log, sqrt
 from warnings import warn
 
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Union
 
 ##### Third Party libraries
 from matplotlib.axes import Axes
@@ -903,6 +903,44 @@ class CreditDataGenerator:
             ellipses_probs=ellipses_probs,
             ellipses_width=ellipses_width,
             ellipses_alpha=ellipses_alpha
+        )
+    
+    def plot_credit_dgp_3d(
+            self,
+            sample_size: int,
+            cmap_dict: Optional[Dict[str, Callable[[int], Tuple[float, float, float]]]] = None,
+            axes: Optional[List[Axes]] = None,
+            plotting_order = ["good", "bad"],
+            fig_title: Optional[str] = None,
+            transparency_alpha = 0.08,
+            legend_y_offset = -0.09,
+            width: float = 8.0,
+            height: float = 6.0,
+            return_figures: bool = False,
+            ellipsoid_probs: Iterable[float] = (0.8,),
+            ellipsoid_width: float = .8,
+            ellipsoid_alpha: float = .18,
+            elev: int = 20,
+            azim: int = 35
+        ) -> Optional[List[Figure]]:
+        from .credit_dgp_representation_utils import plot_credit_dgp_3d
+        return plot_credit_dgp_3d(
+            self,
+            sample_size=sample_size,
+            cmap_dict=cmap_dict,
+            axes=axes,
+            plotting_order = plotting_order,
+            fig_title=fig_title,
+            transparency_alpha=transparency_alpha,
+            legend_y_offset=legend_y_offset,
+            width=width,
+            height=height,
+            return_figures=return_figures,
+            ellipsoid_probs=ellipsoid_probs,
+            ellipsoid_width=ellipsoid_width,
+            ellipsoid_alpha=ellipsoid_alpha,
+            elev=elev,
+            azim=azim
         )
     
 def _mask2d_to_int_idxs(mask : torch.Tensor, correction_last_idx : Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:

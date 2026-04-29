@@ -244,7 +244,7 @@ def plot_population_sample(
         ax._coverage_legend_handle = coverage_handle
 
 
-def plot_cov_ellipsoid(mean, cov, ax, probs: Iterable[float] = (0.8,),
+def plot_cov_ellipsoid_3d(mean, cov, ax, probs: Iterable[float] = (0.8,),
                        edgecolor="k", linewidth=0.8, alpha=0.18,
                        n_points: int = 24):
     """Plot a 3D ellipsoid at a given covariance level and return a legend handle."""
@@ -321,7 +321,7 @@ def plot_population_sample_3d(
                s=30, color=color, facecolor='white', edgecolor=color,
                label=f"$\\mathbb{{E}}\\,[X_{{{label_suffix}}}]$", zorder=10.0)
 
-    coverage_handle = plot_cov_ellipsoid(
+    coverage_handle = plot_cov_ellipsoid_3d(
         mixture_mean.cpu().numpy(),
         mixture_cov.cpu().numpy(),
         ax,
@@ -349,17 +349,20 @@ def plot_credit_dgp_3d(
         return_figures: bool = False,
         ellipsoid_probs: Iterable[float] = (0.8,),
         ellipsoid_width: float = .8,
-        ellipsoid_alpha: float = .18
+        ellipsoid_alpha: float = .18,
+        elev: int = 20,
+        azim: int = 35
     ) -> Optional[List[plt.Figure]]:
     """Visualize a 3D MVN or Gaussian mixture for F=3 using the same colour and legend semantics as 2D."""
+    if data_gen.features_count != 3:
+        raise ValueError("plot_credit_dgp_3d only supports F=3")
+    
     if cmap_dict is None:
         cmap_dict = _default_cmap_dict(
             K_good=data_gen.good_mixture.K,
             K_bad=data_gen.bad_mixture.K
         )
     plot_dicts = make_plot_dicts_to_show_dgp_3d(data_gen, sample_size, cmap_dict)
-    if data_gen.features_count != 3:
-        raise ValueError("plot_credit_dgp_3d only supports F=3")
 
     is_batched = data_gen.is_batched
     B = data_gen.B
@@ -402,7 +405,7 @@ def plot_credit_dgp_3d(
         ax.set_xlabel(r"$x_{0}$")
         ax.set_ylabel(r"$x_{1}$")
         ax.set_zlabel(r"$x_{2}$")
-        ax.view_init(elev=20, azim=35)
+        ax.view_init(elev=elev, azim=azim)
 
         all_handles, all_labels = [], []
         for handle, label in zip(*ax.get_legend_handles_labels()):
