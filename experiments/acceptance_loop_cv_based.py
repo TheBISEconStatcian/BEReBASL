@@ -634,12 +634,12 @@ def acceptance_loop(
                     perf_lbl = "biased_acc"
 
                 th_cat = th + '_' + m
-                cv_thresholds: torch.Tensor = stats[th_cat + "_thresholds"][-1]
-                cv_thr_means = cv_thresholds.nanmean(dim=-1, keepdim=True)
+                cv_thresholds: torch.Tensor = stats[th_cat + "_thresholds"][-1] # [CV, k_folds]
+                cv_thr_means = cv_thresholds.nanmean(dim=-1, keepdim=True) # [CV, 1]
                 # Mean over CV trials → [1, 1]  (pooled / most-stable)
-                pooled_thr = cv_thr_means.nanmean(dim=0, keepdim=True)
+                pooled_thr = cv_thr_means.nanmean(dim=0, keepdim=True) # [1, 1]
                 # Stack: rows 0…CV_COUNT-1 are per-trial, row CV_COUNT is pooled
-                thresholds = torch.cat([cv_thr_means, pooled_thr], dim=0)  # [M, 1]
+                thresholds = torch.cat([cv_thr_means, pooled_thr], dim=0)  # [M:= CV+1, 1]
 
                 current_accepts = current_scores.unsqueeze(0) < thresholds # [M, S]
 
