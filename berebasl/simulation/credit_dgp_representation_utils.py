@@ -366,14 +366,15 @@ def plot_credit_dgp_3d(
 
     is_batched = data_gen.is_batched
     B = data_gen.B
+    F = data_gen.features_count
     if not is_batched:
         plot_dicts = [plot_dicts]
 
     created_figures = [] if (axes is None and return_figures) else None
-    axes_list = [None] * len(plot_dicts) if axes is None else axes
+    axes_list = [None] * B if axes is None else axes
 
     for b, plot_dict_list, ax in zip(range(B), plot_dicts, axes_list):
-        if ax is None:
+        if axes is None:
             fig = plt.figure(figsize=(width, height))
             ax = fig.add_subplot(111, projection='3d')
             if created_figures is not None:
@@ -382,7 +383,7 @@ def plot_credit_dgp_3d(
                 fig_title = r"3D visualization of $\{X_i"
                 if is_batched:
                     fig_title += f"^{{B={b}}}"
-                fig_title += r"\}_{i=0}^{2}$"
+                fig_title += r"\}_{i=0}^"+f"{{{F-1}}}$"
             fig.suptitle(fig_title)
         else:
             fig = ax.figure
