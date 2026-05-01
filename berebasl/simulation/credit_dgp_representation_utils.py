@@ -19,7 +19,7 @@ from berebasl.simulation.credit_data_simulation import CreditDataGenerator, Gaus
 
 from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Union, Tuple
 
-def make_plot_dicts_to_show_dgp(
+def make_plot_dicts_to_show_dgp_pairwise(
         data_gen: CreditDataGenerator, 
         sample_size: int, 
         cmap_dict: Optional[Dict[str, Callable[[int], Tuple[float, float, float]]]]
@@ -545,7 +545,7 @@ def plot_credit_dgp_pairwise(
             K_bad=data_gen.bad_mixture.K
         )
     
-    plot_dicts = make_plot_dicts_to_show_dgp(data_gen, sample_size, cmap_dict)
+    plot_dicts = make_plot_dicts_to_show_dgp_pairwise(data_gen, sample_size, cmap_dict)
     is_batched = data_gen.is_batched
     B = data_gen.B
     F = data_gen.features_count
