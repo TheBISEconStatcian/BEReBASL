@@ -1,6 +1,31 @@
-### Formalization of the Reject inference problem
+## Formalization of the Reject inference problem
 
-Let $X_o, X_h, Y, \widetilde{Y}_o$ and $Z$ be random variables on the probability space $(\Omega, \mathcal{F}, \mathbb{P})$. Define 
+The RI problem is a specific case of missing data and it gets handled
+as such in the literature. However as other authors have noted, a robust
+assesment of the validity of the RI-methodology and its limits requires
+a good definition of the kind of missigness assumed in the data. Although
+many examples exist on some approaches how to formalize the missigness,
+like Ehrhardt et. al (2020), they often fall short in the measure-theoretical
+formality. This section aims to propose a new way to describe the RL-problem
+closing this gap, as even if it looks convoluted it helps to be more
+transparent on the assumptions of the DGP and to more easily describe
+the used simulation framework. Furthermore such level of formality might
+result helpful in future work to derive mathematical results from it, as
+stochastics from a measure theoretic perspective is the literature standard
+for new (influential) results.
+
+Before starting with the mathematical notation, it is helpful to describe in
+words how the missigness mechanism occurs, to be very precise on the meaning
+of each concept which will be later translated as random variables, their realizations and measurable functions.
+
+Considering the heavy focus on measure theory of this section, it makes sense
+to start by characterizing the random variables through which the credit data
+generating process could be described. To avoid the need of further notation
+I assume that all information that all information of an applicant that has any
+dependence with its future repayment status and the accepta can be represented as a real number.
+
+
+Let $X_o, X_h, Y, Y_o$ and $Z$ be random variables on the probability space $(\Omega, \mathcal{F}, \mathbb{P})$. Define 
 $$
 X_i : (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f_i}, \mathcal{B}(\mathbb{R}^{f_i}) \right), f_i \in \mathbb{N}, i \in \{o, h\}
 $$
@@ -50,7 +75,7 @@ $$
 as the scorecard and
 $$
 d : \mathbb{R} \times \mathbb{R}^{f_h} \to \{a, r\}, \;
-    \left(\mathcal{B}\left(\mathbb{R}\right) 
+    \left(\mathcal{B}\left(\mathbb{R}\right)
     \otimes
     \mathcal{B}\left(\mathbb{R}^{f_i}\right)\right) - 2^{\{a, r\}}
     \text{ measurable}
