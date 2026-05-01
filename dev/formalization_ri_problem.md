@@ -1,9 +1,9 @@
 ## Formalization of the Reject inference problem
 
 The RI problem is a specific case of missing data and it gets handled
-as such in the literature. However as other authors have noted, a robust
-assesment of the validity of the RI-methodology and its limits requires
-a good definition of the kind of missigness assumed in the data. Although
+as such in the literature, as rejecting an applicant results in generating
+missing labels. However as other authors have noted, a robust assesment of
+the validity of the RI-methodology and its limits requires a comprehensive definition of the kind of missigness assumed in the data. Although
 many examples exist on some approaches how to formalize the missigness,
 like Ehrhardt et. al (2020), they often fall short in the measure-theoretical
 formality. This section aims to propose a new way to describe the RL-problem
@@ -14,9 +14,23 @@ result helpful in future work to derive mathematical results from it, as
 stochastics from a measure theoretic perspective is the literature standard
 for new (influential) results.
 
-Before starting with the mathematical notation, it is helpful to describe in
-words how the missigness mechanism occurs, to be very precise on the meaning
-of each concept which will be later translated as random variables, their realizations and measurable functions.
+For the notation and definitions to be meaningful and comprehensive it needs to be a good representation of reality. I. e. it should be as simple as possible to facilitate the reading but it must stay precise enough to avoid confusions. Therefore it makes sense to describe how the label-missingness in credit data
+occurs - as far as my understanding from the praxis and the literature goes:
+
+When a financial institution (FI) is going to grant a credit, it has recieven
+first some information related to an applicant.
+
+\footnote{This information comprehends both
+characteristics of the applicant as well as the perception of the applicant by
+the FI(-employees), which is not necessarily directly linked with the person applying. E. g. if the employee knows he will be fired, he might manually
+approve every loan.}
+
+Based on this information the FI decides whether to approve the loan. Almost
+always this decision will be dependent on a scorecard, which based on some
+encodable characteristics of the applicant returns a score. These characteristics will be called "model features".
+
+On FI's approval a financing contract can be concluded leading to disbursement. A credit-agreement after drawdown is called here "accepted" (as both parties accepted for the contract to be concluded). If an application does not lead to the FI's payout, it is called "rejected" (note: no differentiation on whether rejection came from the FI or the applicant).
+
 
 Considering the heavy focus on measure theory of this section, it makes sense
 to start by characterizing the random variables through which the credit data
