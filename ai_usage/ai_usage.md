@@ -1,6 +1,6 @@
 # Transparency on AI usage
 
-For the master's thesis two AI's have been used
+For the master's thesis the following AI's have been used
 
 * ChatGPT (Version 5 - free usage)
 * Copilot by Bing powered with ChatGPT5.
@@ -8,7 +8,14 @@ For the master's thesis two AI's have been used
 * Claude
 * GitHub Copilot
 
-For each used chat a link is provided to be called if wished. I always add a small description on the general topic of the chat. When I see it necessary/sensible I also add some more notes on the purpose/themes of the chat as sub-bullet points.
+For each used chat a link is provided to be called if wished. I always add a small description on the general topic of the chat. When I see it necessary/sensible I also add some more notes on the purpose/themes of the chat as sub-bullet points. Further small chats have been used regarding variable
+naming, small refactoring, synonym finding, reformulation of single sentences or asking small and
+general statistics/stochastics/ML/programming questions which have not been documented as I
+do not see them as neither important nor anywhere near critical contributions of AI in the
+master's thesis project. Thereby I mean that AI was used for purposes where a couple of year's
+ago I would've used a dictionary, searched my lecture notes, read in a book, looked in the
+official documentation, serached in some forum like stack overflow or just asked a friend for his
+opinion on naming.
 
 ## Links to `ChatGPT` usage
 
@@ -19,6 +26,12 @@ For each used chat a link is provided to be called if wished. I always add a sma
     - [Chat with the full problem](https://chatgpt.com/share/69872f18-124c-8008-b645-dc2cf54764f5)
     - [To refine a step that was wrong in the first proof.](https://chatgpt.com/share/69874c4c-c3f8-8008-967b-5b31b597956b)
 - [Help on defining RI's set up random variables](https://chatgpt.com/share/69f5ba4b-4324-83eb-ba3b-8cf1575aca87)
+- [Start developing what would end up being the pairwise plotting of CreditDataGenerator](https://chatgpt.com/share/69f5c1bb-9838-83eb-9ec2-2d82c088bab3)
+- [Questions on Coverage probability of MVN](https://chatgpt.com/share/69f5c191-2498-83eb-94e0-71de16de3448)
+- [Stochastically clean understanding of Gaussian Mixtures](https://chatgpt.com/share/69f5c234-3f70-83eb-9caf-2663da7039b9)
+- [Adapting the CV-Based acceptance loop script into a CLI ready script following the original base acceptance loop](https://chatgpt.com/share/69f5c2c3-30fc-83eb-8420-c413d840d6eb)
+- [Weight the option of tensorizing AU-ROC calculation](https://chatgpt.com/share/69f5c31f-8198-83eb-8ce5-ee4925f22b88)
+- [Help with index gymnastics in batched au-roc development](https://chatgpt.com/share/69f5c364-7318-83eb-8813-2239f056b40f)
 
 ## Links to `Copilot` usage
 
@@ -55,9 +68,18 @@ For each used chat a link is provided to be called if wished. I always add a sma
 - [Development of `BatchedLogistic` class](https://claude.ai/share/cc21b148-7308-4b77-ab23-33fe14c38c7c)
 - [Development of `k_fold_cv_normalized_split_batched`](https://claude.ai/share/862fe75b-b334-48ce-b489-5c2e58b5b7cc)
 - [Finding and implementing metric for CV-based threshold](https://claude.ai/share/27b633c3-c6a2-4cba-b540-9158037fdf0d)
+- [Update CV-Acceptance loop CLI as ChatGPT was unable](https://claude.ai/share/9e4ef49a-6346-46f4-9237-f9080d0c845d)
 
 ## `Github-Copilot`
 
 Most of the help used with Github copilot was done solely with the chat function.
 However while developing in some cases the auto-fill function was activated, which
-constitutes AI usage. The latest has not been documented.
+constitutes AI usage. The latest has not been documented. The chats have been saved
+under `./gihub_copilot_chats` and have self explaining names. Only for chats which
+seem to need a small clarification a small description is added here:
+
+* `help_developing_simulation_diagnostics_functions.md`: With diagnostics functions
+  are meant the graphics shown in `~/path_to_repo/dev/hypothesis_development.ipynb`
+  depicting the comparision of expectation vs realized performance and the diagnos-
+  tics on accepts and rejects (rates or counts) + the respective functions saving
+  the grid of all experiments.
