@@ -87,3 +87,7 @@ seem to need a small clarification a small description is added here:
 One chat was lost which helped developing further the 3D representation of the
 CreditDataGenerator DGP, it contained refinements to the worked done by the saved
 chat.
+
+## Links to `Gemini`
+
+* [Decide which rendering tool to use and set up quarto project](https://gemini.google.com/share/c73006f0efb8)
