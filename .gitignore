@@ -174,3 +174,5 @@ R_implementation/.Rhistory
 ## Jupyter / Quarto intermediate files
 **/*.quarto_ipynb
 **/.jupyter_snapshots/
+thesis/thesis.tex
+thesis/.gitignore
