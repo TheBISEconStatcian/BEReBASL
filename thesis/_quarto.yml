@@ -12,15 +12,16 @@ execute:
 
 format:
   pdf:
-    documentclass: report    # Good for longer works like a thesis
+    documentclass: article    # Good for longer works like a thesis
     number-sections: true     # 1, 1.1, 1.1.1
     toc: true                # Table of Contents
     cite-method: biblatex    # Use this for high-quality citations
-    geometry:                # Standard thesis margins
-      - top=30mm
-      - left=30mm
-      - height=240mm
-      - width=150mm
+    biblio-style: apa
+    geometry:
+      - margin=2.5cm
+      - bottom=3cm
+    include-in-header: preamble.tex
+    fontsize: 12pt
 
 # If you want to keep the others just in case:
   html: default
