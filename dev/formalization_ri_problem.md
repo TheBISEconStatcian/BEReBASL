@@ -29,8 +29,11 @@ Based on this information the FI decides whether to approve the loan. Almost
 always this decision will be dependent on a scorecard, which based on some
 encodable characteristics of the applicant returns a score. These characteristics will be called "model features".
 
-On FI's approval a financing contract can be concluded leading to disbursement. A credit-agreement after drawdown is called here "accepted" (as both parties accepted for the contract to be concluded). If an application does not lead to the FI's payout, it is called "rejected" (note: no differentiation on whether rejection came from the FI or the applicant).
-
+On FI's approval a financing contract can be concluded leading to disbursement. A credit-agreement after drawdown is called here "accepted".
+\footnote{As both parties accepted for the contract to be concluded}
+If an application does not lead to the FI's payout, it is called "rejected".
+\footnote{Note: no differentiation on whether rejection came from the FI or the applicant}
+ (note: no differentiation on whether rejection came from the FI or the applicant).
 
 Considering the heavy focus on measure theory of this section, it makes sense
 to start by characterizing the random variables through which the credit data
