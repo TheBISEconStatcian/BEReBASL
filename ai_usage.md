@@ -6,6 +6,7 @@ For the master's thesis two AI's have been used
 * Copilot by Bing powered with ChatGPT5.
 * Perplexity
 * Claude
+* GitHub Copilot
 
 For each used chat a link is provided to be called if wished. I always add a small description on the general topic of the chat. When I see it necessary/sensible I also add some more notes on the purpose/themes of the chat as sub-bullet points.
 
@@ -17,6 +18,7 @@ For each used chat a link is provided to be called if wished. I always add a sma
 - On the proof for the train-splitting over valid entries and normalized shapes
     - [Chat with the full problem](https://chatgpt.com/share/69872f18-124c-8008-b645-dc2cf54764f5)
     - [To refine a step that was wrong in the first proof.](https://chatgpt.com/share/69874c4c-c3f8-8008-967b-5b31b597956b)
+- [Help on defining RI's set up random variables](https://chatgpt.com/share/69f5ba4b-4324-83eb-ba3b-8cf1575aca87)
 
 ## Links to `Copilot` usage
 
@@ -41,6 +43,7 @@ For each used chat a link is provided to be called if wished. I always add a sma
 ## Link to `perplexity` usage
 
 - [Designing logic for handling "batched CreditDataSamples" (labels.dim() > 1)](https://www.perplexity.ai/search/in-this-function-i-want-to-kee-hISfZ3XFQ6KMTW1Kyy6h2w#2)
+- [Small literature research and help understanding MAR vs MNAR](https://www.perplexity.ai/search/261ac5f8-71b6-4520-b949-ca2e1ea6b741)
 
 ## Links to `Claude` usage
 
@@ -52,3 +55,9 @@ For each used chat a link is provided to be called if wished. I always add a sma
 - [Development of `BatchedLogistic` class](https://claude.ai/share/cc21b148-7308-4b77-ab23-33fe14c38c7c)
 - [Development of `k_fold_cv_normalized_split_batched`](https://claude.ai/share/862fe75b-b334-48ce-b489-5c2e58b5b7cc)
 - [Finding and implementing metric for CV-based threshold](https://claude.ai/share/27b633c3-c6a2-4cba-b540-9158037fdf0d)
+
+## `Github-Copilot`
+
+Most of the help used with Github copilot was done solely with the chat function.
+However while developing in some cases the auto-fill function was activated, which
+constitutes AI usage. The latest has not been documented.
