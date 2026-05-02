@@ -160,3 +160,17 @@ cython_debug/
 #.idea/
 R_implementation/.Rhistory
 /berebasl/data
+
+# Quarto-specific ignores
+/thesis/.quarto/
+/thesis/*_files/
+/thesis/*_cache/
+/thesis/site_libs/
+
+## Manuscript scpecifics
+/thesis/_manuscript/
+/thesis/_publish.yml
+
+## Jupyter / Quarto intermediate files
+**/*.quarto_ipynb
+**/.jupyter_snapshots/
