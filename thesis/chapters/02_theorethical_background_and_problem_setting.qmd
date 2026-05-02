@@ -1,0 +1,21 @@
+# Theoretical background and problem setting
+
+Following the spirit of @ehrhardt2021rejectReview, I begin by formally
+presenting the Reject Inference Problem in Credit Risk as understood and
+approached in this thesis, so that the hypothesis formulation and the
+theoretical properties of the proposed solution can be precisely formulated.
+First and also following the approach of @ehrhardt2021rejectReview a detailed
+description in natural language of the biasing mechanism in FIs is done, so
+that each concept used can be defined properly avoiding confusions. Second a
+measure theoretic characterization of the biasing process through its assumed
+underlying random variables is given. Finally a characterization of the available
+data for the FI is done as observed realizations of this process and its random
+variables. Although the main focus of this thesis is not bettering the formalization
+approaches, I find it important to be thorough so that future work can properly
+criticise this thesis.
+
+## Concepts definition
+
+When a financial institution (FI) is going to grant a credit, it has recieven
+first some information related to an applicant.
+

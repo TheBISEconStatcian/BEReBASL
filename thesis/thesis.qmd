@@ -2,17 +2,15 @@
 title: Making Reject Inference history aware
 subtitle: Translating the bias generation process into a useful reward signal for a reinforcement learning approach
 date: today
-date-format: "DD.MM.YYYY"
+date-format: "[DD.MM](http://DD.MM).YYYY"
 authors:
   - name: Mateo Ordóñez Serna
-    # affiliation: The University
-    # roles: writing
     corresponding: true
-abstract: 
-  text: {{< include chapters/abstract.qmd >}}
+abstract: |
+  {{< include chapters/abstract.qmd >}}
 bibliography: references.bib
-#csl: apa.csl # just in case University has it
+format: pdf
+#csl: apa.csl
 ---
 
-## Section
-This is a simple placeholder for the manuscript's main document [@knuth84].
+{{< include chapters/02_theorethical_background_and_problem_setting.qmd >}}
