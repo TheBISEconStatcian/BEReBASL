@@ -83,3 +83,7 @@ seem to need a small clarification a small description is added here:
   depicting the comparision of expectation vs realized performance and the diagnos-
   tics on accepts and rejects (rates or counts) + the respective functions saving
   the grid of all experiments.
+
+One chat was lost which helped developing further the 3D representation of the
+CreditDataGenerator DGP, it contained refinements to the worked done by the saved
+chat.
