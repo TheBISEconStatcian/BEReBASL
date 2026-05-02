@@ -1,11 +1,17 @@
 ---
-title: thesis
+title: Making Reject Inference history aware
+subtitle: Translating the bias generation process into a useful reward signal for a reinforcement learning approach
+date: today
+date-format: "DD.MM.YYYY"
 authors:
-  - name: Norah Jones
-    affiliation: The University
-    roles: writing
+  - name: Mateo Ordóñez Serna
+    # affiliation: The University
+    # roles: writing
     corresponding: true
+abstract: 
+  text: {{< include chapters/abstract.qmd >}}
 bibliography: references.bib
+#csl: apa.csl # just in case University has it
 ---
 
 ## Section
