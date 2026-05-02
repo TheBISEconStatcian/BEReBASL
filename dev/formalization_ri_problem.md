@@ -41,29 +41,30 @@ generating process could be described. To avoid the need of further notation
 I assume that all information that all information of an applicant that has any
 dependence with its future repayment status and the accepta can be represented as a real number.
 
+Let $X_m, X_h, Y, Y_m$ and $Z$ be random variables on the probability space $(\Omega, \mathcal{F}, \mathbb{P})$. Define with $f_o, f_i \in \mathbb{N}$
+$$
+X_o: (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f_o}, \mathcal{B}(\mathbb{R}^{f_o}) \right), \quad
+X_h: (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f_h}, \mathcal{B}(\mathbb{R}^{f_h}) \right)
+$$
 
-Let $X_o, X_h, Y, Y_o$ and $Z$ be random variables on the probability space $(\Omega, \mathcal{F}, \mathbb{P})$. Define 
+be the random variables generating the applicant's model and hidden features. The joint distribution of both features sets is characterized by
 $$
-X_i : (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f_i}, \mathcal{B}(\mathbb{R}^{f_i}) \right), f_i \in \mathbb{N}, i \in \{o, h\}
-$$
-be the random variables from which the observed (i. e. information that was asked and saved for score-card estimation in the data-base of a financial institution) and hidden (i. e. information not used for score-card estimation) features from an applicant come from. The joint distribution from the full features vector is characterized by
-$$
-X : (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f}, \mathcal{B}\left(\mathbb{R}^{f} \right) \right), f:=f_o + f_h
+X : (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f}, \mathcal{B}\left(\mathbb{R}^{f} \right) \right), f:=f_m + f_h
 $$
 with
 $$
-\forall \omega \in \Omega: X(\omega) := \begin{pmatrix} X_o(\omega) \\ X_h(\omega) \end{pmatrix}
+\forall \omega \in \Omega: X(\omega) := \begin{pmatrix} X_m(\omega) \\ X_h(\omega) \end{pmatrix}
 $$
-Further with $V$ a placeholder for $Y, Z$ and $Y_o$ let
+Further with $V$ a placeholder for $Y, Z$ and $Y_m$ let
 $$
 V : (\Omega, \mathcal{F}) \to \left( E_V, 2^{E_V} \right)
 $$
 with
 $$
-E_Y = \{g,b\}, \quad , E_Z = \{a,r\} \quad E_{Y_o} = \{g,b, \texttt{na}\}
+E_Y = \{g,b\}, \quad E_Z = \{a,r\}, \quad E_{Y_m} = \{g,b, \texttt{na}\}
 $$
 
-be the random variables describing the repayment type, acceptance status and observable repayment status of the loan defined $\forall \omega \in \Omega$ as
+be the random variables describing the repayment type, acceptance status and observable repayment outcome of the loan applied for defined $\forall \omega \in \Omega$ as
 $$
 Y(\omega) = \begin{cases}
     b & \text{if applicant is a defaulter} \\
@@ -78,33 +79,33 @@ Z(\omega) = \begin{cases}
 $$
 and
 $$
-Y_o(\omega) = \begin{cases}
+Y_m(\omega) = \begin{cases}
     Y(\omega) & Z(\omega) = a \\
     \texttt{na} & Z(\omega) = r
 \end{cases}
 $$
 
-$Z$ is of course a random variable only in the extent that is dependent on $X_o$ and $X_f$. To formalize this we can define two further maps, namely
+$Z$ is more precisely modeled as a measurable function of both features sets. Let
 $$
-s : \mathbb{R}^{f_o} \to \mathbb{R}, \; 
-\mathcal{B}\left(\mathbb{R}^{f_i}\right)-\mathcal{B}\left(\mathbb{R}\right) \text{ measurable}
+s : \mathbb{R}^{f_m} \to \mathbb{R}, \; 
+\mathcal{B}\left(\mathbb{R}^{f_m}\right)-\mathcal{B}\left(\mathbb{R}\right) \text{ measurable}
 $$
-as the scorecard and
+be a score function and
 $$
 d : \mathbb{R} \times \mathbb{R}^{f_h} \to \{a, r\}, \;
     \left(\mathcal{B}\left(\mathbb{R}\right)
     \otimes
-    \mathcal{B}\left(\mathbb{R}^{f_i}\right)\right) - 2^{\{a, r\}}
+    \mathcal{B}\left(\mathbb{R}^{f_m}\right)\right) - 2^{\{a, r\}}
     \text{ measurable}
 $$
 
-as the (acceptance) decision function. Then we can further define $Z$ as
+an acceptance decision function. Then
 
 $$
 \forall \omega \in \Omega:
 Z(\omega) =
 d\left(
-    s\left(X_o(\omega)\right),
+    s\left(X_m(\omega)\right),
     X_h(\omega)
 \right)
 $$
