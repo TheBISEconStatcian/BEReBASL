@@ -17,5 +17,127 @@ criticise this thesis.
 ## Concepts definition
 
 When a financial institution (FI) is going to grant a credit, it has recieven
-first some information related to an applicant.
+first some information related to an applicant. This information is constituted
+by the features, which are then used in a scoring model ("model features") and
+other characteristics e. g. whether the applicant dresses well in a face to face
+application. Based on the recieved information the FI decides whether to approve
+the loan. Almost always this decision will be dependent on a scorecard, which
+based on some encodable characteristics of the applicant returns a score. These
+characteristics will be called "model features". On FI's approval a financing
+contract can be concluded leading to disbursement.  A credit-agreement after
+drawdown is called here "accepted".^[As both parties accepted for the contract
+to be concluded] If an application does not lead to the FI's payout, it is called
+"rejected".^[Note that no differentiation on whether rejection came from the FI or
+the applicant is made]
 
+<!-- Download LTeX for language corrections -->
+
+If an accepted applicant pays back (on time/in full - depending on the FI's
+definition) its credit as per constract is considered to be a non-default, a good
+loan, otherwise it is seen as a default. Whether an applicant will default or not
+can be considered as a random outcome depending on its characteristics and maybe
+some exogenous factors which can be seen as "noise" affecting the random variable.
+In this sense, if we ignore the noise, an applicant can be seen as either a defaulter
+or a payer if we assume the payment outcome to be some (measurable) function of its
+features. In some sense can then be seen "is a payer" as a characteristic of the
+applicant that "gets realized at the same time as its features". See that this does
+not mean that an FI could have "a perfect model" - as this factors determining
+whether an applicant will default are not (realistically) fully known to an FI
+neither the dependence structure. All non-exogenous information which conditions
+the payment outcome of the applicant that is not included in the model
+features is called "hidden features".
+
+## Measure theoretic description
+
+Let $X_m, X_h, Y, Y_m, Z, \epsilon$ and $\varepsilon$ be random variables on the
+probability space $(\Omega, \mathcal{F}, \mathbb{P})$. Define with $f_o, f_i \in \mathbb{N}$
+$$
+X_o: (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f_o}, \mathcal{B}(\mathbb{R}^{f_o}) \right), \quad
+X_h: (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f_h}, \mathcal{B}(\mathbb{R}^{f_h}) \right)
+$$
+
+as the random variables generating the applicant's model and hidden features. The joint distribution of both features sets is characterized by
+$$
+X : (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f}, \mathcal{B}\left(\mathbb{R}^{f} \right) \right), f:=f_m + f_h
+$$
+with
+$$
+\forall \omega \in \Omega: X(\omega) := \begin{pmatrix} X_m(\omega) \\ X_h(\omega) \end{pmatrix}
+$$
+Further with $V$ a placeholder for $Y, Z$ and $Y_m$ let
+$$
+V : (\Omega, \mathcal{F}) \to \left( E_V, 2^{E_V} \right)
+$$
+with
+$$
+E_Y = \{g,b\}, \quad E_Z = \{a,r\}, \quad E_{Y_m} = \{g,b, \texttt{na}\}
+$$
+
+be the random variables describing the repayment type, acceptance decision and observable repayment outcome of the loan applied for defined $\forall \omega \in \Omega$ as
+$$
+Y(\omega) = \begin{cases}
+    b & \text{if applicant is a defaulter} \\
+    g & \text{if applicant is a payer}
+\end{cases} ,
+$$
+$$
+Z(\omega) = \begin{cases}
+    a & \text{if applicant gets accepted (financed)} \\
+    r & \text{if applicant gets rejected (non-financed)}
+\end{cases}
+$$
+and
+$$
+Y_m(\omega) = \begin{cases}
+    Y(\omega) & Z(\omega) = a \\
+    \texttt{na} & Z(\omega) = r
+\end{cases}
+$$
+
+$Z$ is more precisely modeled as a measurable function of both features sets. Let
+$$
+s : \mathbb{R}^{f_m} \to \mathbb{R}, \; 
+\mathcal{B}\left(\mathbb{R}^{f_m}\right)-\mathcal{B}\left(\mathbb{R}\right) \text{ measurable}
+$$
+be a score function and
+$$
+d : \mathbb{R} \times \mathbb{R}^{f_h} \to \{a, r\}, \;
+    \left(\mathcal{B}\left(\mathbb{R}\right)
+    \otimes
+    \mathcal{B}\left(\mathbb{R}^{f_m}\right)\right) - 2^{\{a, r\}}
+    \text{ measurable}
+$$
+
+an acceptance decision function. Then
+
+$$
+\forall \omega \in \Omega: \:
+Z(\omega) =
+d\left(
+    s\left(X_m(\omega)\right),
+    X_h(\omega)
+\right)
+$$
+
+Consider thereby that this form does not imply that $d$ "reacts" to every
+component from $X_h$, i. e. a subsset of hidden features can (and realistically
+will) be independent from $Z$. In this spirit, $Y$ can also be modeled as
+$$
+$\forall \omega \in \Omega:
+Y(\omega) = \begin{cases}
+    \varepsilon(\omega) & \epsilon(\omega) = \text{external effect} \\
+    \iota \left(X_m(\omega), X_h(\omega) \right) & \epsilon(\omega) = \text{no external effect}
+\end{cases}
+$$
+
+with
+$$
+\epsilon(\omega) : (\Omega, \mathcal{F}) \to \left(E_\epsilon, 2^{E_\epsilon} \right), \quad
+\varepsilon(\omega) : (\Omega, \mathcal{F}) \to \left(E_Y, 2^{E_Y} \right)
+$$
+
+the random variables defining whether an external effect overrides the "usual behavior"
+and what the external effect ends up causing (e. g. if there is a shock in the laboral
+market and whether it is positive or negative for the applicant). Finally $\iota$ would
+be a $\left(\mathcal{B}^{\mathbb{R^{f_m}}} \otimes \mathbb{R^{f_h}}\right)$-
+$2^{E_Y}$ measurable function
