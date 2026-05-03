@@ -123,7 +123,7 @@ Consider thereby that this form does not imply that $d$ "reacts" to every
 component from $X_h$, i. e. a subsset of hidden features can (and realistically
 will) be independent from $Z$. In this spirit, $Y$ can also be modeled as
 $$
-$\forall \omega \in \Omega:
+\forall \omega \in \Omega:
 Y(\omega) = \begin{cases}
     \varepsilon(\omega) & \epsilon(\omega) = \text{external effect} \\
     \iota \left(X_m(\omega), X_h(\omega) \right) & \epsilon(\omega) = \text{no external effect}
