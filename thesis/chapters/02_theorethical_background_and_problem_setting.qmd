@@ -8,55 +8,62 @@ First and also following the approach of @ehrhardt2021rejectReview a detailed
 description in natural language of the biasing mechanism in FIs is done, so
 that each concept used can be defined properly avoiding confusions. Second a
 measure theoretic characterization of the biasing process through its assumed
-underlying random variables is given. Finally a characterization of the available
+underlying random variables (RV) is given. Finally, a characterization of the available
 data for the FI is done as observed realizations of this process and its random
 variables. Although the main focus of this thesis is not bettering the formalization
 approaches, I find it important to be thorough so that future work can properly
-criticise this thesis.
+criticize this thesis.
 
 ## Concepts definition
 
-When a financial institution (FI) is going to grant a credit, it has recieven
+When a financial institution (FI) is going to grant a credit, it has received
 first some information related to an applicant. This information is constituted
 by the features, which are then used in a scoring model ("model features") and
-other characteristics e. g. whether the applicant dresses well in a face to face
-application. Based on the recieved information the FI decides whether to approve
+other characteristics e.g. whether the applicant dresses well in a face to face
+application. Based on the received information the FI decides whether to approve
 the loan. Almost always this decision will be dependent on a scorecard, which
-based on some encodable characteristics of the applicant returns a score. These
-characteristics will be called "model features". On FI's approval a financing
-contract can be concluded leading to disbursement.  A credit-agreement after
-drawdown is called here "accepted".^[As both parties accepted for the contract
-to be concluded] If an application does not lead to the FI's payout, it is called
-"rejected".^[Note that no differentiation on whether rejection came from the FI or
-the applicant is made]
+based on some characteristics representable as numbers of the applicant returns
+a score. These characteristics will be called "model features". On FI's approval
+a financing contract can be concluded leading to disbursement.  A credit-agreement
+after drawdown is termed "accepted".^[since the contract requires
+the consent ("acceptance") of both parties] If an application does not lead to the
+FI's payout, it is called "rejected".^[Note that no differentiation on whether rejection
+came from the FI or the applicant is made]
 
-<!-- Download LTeX for language corrections -->
+If an accepted applicant fails to repay the loan on time or in full (as defined by the
+FI), the loan is classified as a default (“bad” loan). Otherwise, it is classified as
+a “good” loan. In line with this I refer to applicants as non-payers (bad) or payers
+(good), depending on the eventual repayment outcome.
 
-If an accepted applicant pays back (on time/in full - depending on the FI's
-definition) its credit as per constract is considered to be a non-default, a good
-loan, otherwise it is seen as a default. Whether an applicant will default or not
-can be considered as a random outcome depending on its characteristics and maybe
-some exogenous factors which can be seen as "noise" affecting the random variable.
-In this sense, if we ignore the noise, an applicant can be seen as either a defaulter
-or a payer if we assume the payment outcome to be some (measurable) function of its
-features. In some sense can then be seen "is a payer" as a characteristic of the
-applicant that "gets realized at the same time as its features". See that this does
-not mean that an FI could have "a perfect model" - as this factors determining
-whether an applicant will default are not (realistically) fully known to an FI
-neither the dependence structure. All non-exogenous information which conditions
-the payment outcome of the applicant that is not included in the model
-features is called "hidden features".
+Whether an applicant turns out to be a payer or a non-payer is driven by their
+individual circumstances^[e.g. income or health] and purely unpredictable events^[
+like a bankruptcy out of a corruption scandal in the firm where the applicant is
+employed or the applicant winning the lottery], which are termed "idiosyncratic shocks".
+The individual circumstances can be seen as a set of characteristics containing the
+model features and "hidden features".^[Note: hidden features contain both observed
+features by the FI but not used in the score-card and unobservable ones] Ignoring
+idiosyncratic shocks for a moment, one can think of the repayment outcome as being
+determined *completely* by the applicant's full set of features. In this sense, being
+a payer or non-payer can be viewed as an underlying property of the applicant, even
+though it is not directly observable at the time of the decision. Consider that this
+"fully deterministic form depending on the features" still does not imply that even
+if the FI observed the hidden features and the idiosyncratic shocks, it could perfectly
+predict the repayment outcome as it cannot know the exact dependence structure.
 
 ## Measure theoretic description
 
-Let $X_m, X_h, Y, Y_m, Z, \epsilon$ and $\varepsilon$ be random variables on the
-probability space $(\Omega, \mathcal{F}, \mathbb{P})$. Define with $f_o, f_i \in \mathbb{N}$
+Let $X_m, X_h, Y, Y_m, Z, \epsilon$ and $\varepsilon$ be RVs on the
+probability space $(\Omega, \mathcal{F}, \mathbb{P})$. Define with 
+$f_o, f_i \in \mathbb{N}$
 $$
 X_o: (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f_o}, \mathcal{B}(\mathbb{R}^{f_o}) \right), \quad
 X_h: (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f_h}, \mathcal{B}(\mathbb{R}^{f_h}) \right)
 $$
 
-as the random variables generating the applicant's model and hidden features. The joint distribution of both features sets is characterized by
+as the RVs generating the applicant's model and hidden features^[Note that even though
+not all features are per se continuous and therefore naturally real numbers, a reasonable
+assumption is that they are representable as real numbers]. The joint distribution of both
+features sets is characterized by
 $$
 X : (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f}, \mathcal{B}\left(\mathbb{R}^{f} \right) \right), f:=f_m + f_h
 $$
@@ -73,7 +80,8 @@ $$
 E_Y = \{g,b\}, \quad E_Z = \{a,r\}, \quad E_{Y_m} = \{g,b, \texttt{na}\}
 $$
 
-be the random variables describing the repayment type, acceptance decision and observable repayment outcome of the loan applied for defined $\forall \omega \in \Omega$ as
+be the RVs describing the repayment type, acceptance decision and observable repayment
+outcome of the loan applied for defined $\forall \omega \in \Omega$ as
 $$
 Y(\omega) = \begin{cases}
     b & \text{if applicant is a defaulter} \\
@@ -130,14 +138,19 @@ Y(\omega) = \begin{cases}
 \end{cases}
 $$
 
-with
+with $\iota$ a 
+$\left(\mathcal{B}\left(\mathbb{R^{f_m}}\right) \otimes \mathcal{B}\left(\mathbb{R^{f_h}} \right)\right)$
+-$2^{E_Y}$ measurable function and
 $$
 \epsilon(\omega) : (\Omega, \mathcal{F}) \to \left(E_\epsilon, 2^{E_\epsilon} \right), \quad
 \varepsilon(\omega) : (\Omega, \mathcal{F}) \to \left(E_Y, 2^{E_Y} \right)
 $$
 
-the random variables defining whether an external effect overrides the "usual behavior"
+the RVs defining whether an external effect overrides the "usual behavior"
 and what the external effect ends up causing (e. g. if there is a shock in the laboral
-market and whether it is positive or negative for the applicant). Finally $\iota$ would
-be a $\left(\mathcal{B}^{\mathbb{R^{f_m}}} \otimes \mathbb{R^{f_h}}\right)$-
-$2^{E_Y}$ measurable function
+market and whether it is positive or negative for the applicant).
+
+## The data perspective
+
+The RVs are helpful to model how generally the dependence structure in
+the system looks like. However it is unubiqutous
