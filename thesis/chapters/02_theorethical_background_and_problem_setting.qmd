@@ -16,39 +16,40 @@ criticize this thesis.
 
 ## Concepts definition
 
-When a financial institution (FI) is going to grant a credit, it has received
-first some information related to an applicant. This information is constituted
-by the features, which are then used in a scoring model ("model features") and
-other characteristics e.g. whether the applicant dresses well in a face to face
-application. Based on the received information the FI decides whether to approve
-the loan. Almost always this decision will be dependent on a scorecard, which
-based on some characteristics representable as numbers of the applicant returns
-a score. These characteristics will be called "model features". On FI's approval
-a financing contract can be concluded leading to disbursement.  A credit-agreement
-after drawdown is termed "accepted".^[since the contract requires
-the consent ("acceptance") of both parties] If an application does not lead to the
-FI's payout, it is called "rejected".^[Note that no differentiation on whether rejection
-came from the FI or the applicant is made]
+When a financial institution (FI) grants a credit, it has first received
+information related to an applicant. This information consists of features,
+some of which are used in a scoring model (“model features”), while others—
+e.g. whether the applicant dresses well in a face-to-face application—are not.
+Based on the available information, the FI decides whether to approve the loan.
+In practice, this decision is typically based on a scorecard, which assigns a
+score to the applicant using numerical characteristics. These characteristics
+are referred to as model features. Upon approval by the FI, a financing contract
+can be concluded, leading to disbursement. A credit agreement after drawdown is
+termed “accepted”.^[Since the contract requires the consent (“acceptance”) of both parties.]
+If an application does not lead to a payout by the FI, it is called “rejected”.^[
+No distinction is made between rejection by the FI and withdrawal by the applicant.]
 
-If an accepted applicant fails to repay the loan on time or in full (as defined by the
-FI), the loan is classified as a default (“bad” loan). Otherwise, it is classified as
-a “good” loan. In line with this I refer to applicants as non-payers (bad) or payers
-(good), depending on the eventual repayment outcome.
+If an accepted loan is not repaid on time or in full (as defined by the FI), it is
+classified as a default (“bad” loan); otherwise, it is classified as “good.” In line
+with this, I refer to applicants as non-payers (bad) or payers (good), according to
+the eventual repayment outcome.
 
 Whether an applicant turns out to be a payer or a non-payer is driven by their
-individual circumstances^[e.g. income or health] and purely unpredictable events^[
-like a bankruptcy out of a corruption scandal in the firm where the applicant is
-employed or the applicant winning the lottery], which are termed "idiosyncratic shocks".
-The individual circumstances can be seen as a set of characteristics containing the
-model features and "hidden features".^[Note: hidden features contain both observed
-features by the FI but not used in the score-card and unobservable ones] Ignoring
-idiosyncratic shocks for a moment, one can think of the repayment outcome as being
-determined *completely* by the applicant's full set of features. In this sense, being
-a payer or non-payer can be viewed as an underlying property of the applicant, even
-though it is not directly observable at the time of the decision. Consider that this
-"fully deterministic form depending on the features" still does not imply that even
-if the FI observed the hidden features and the idiosyncratic shocks, it could perfectly
-predict the repayment outcome as it cannot know the exact dependence structure.
+individual circumstances^[e.g. income or health] as well as purely unpredictable
+events^[such as a bankruptcy due to a corruption scandal in the applicant’s firm,
+or the applicant winning the lottery], which I term idiosyncratic shocks. The
+individual circumstances can be understood as a set of characteristics consisting
+of the model features and additional *hidden features*.^[Hidden features include
+both variables observed by the FI but not used in the scorecard, as well as
+unobservable ones.] Ignoring idiosyncratic shocks for a moment, the repayment outcome
+can be thought of as being determined *completely* by this full set of features. In
+this sense, being a payer or non-payer can be viewed as an underlying property of
+the applicant, even though it is not directly observable at the time of the decision.
+
+This interpretation does not imply that the FI could construct a perfect prediction
+model. Even if all features—including hidden ones—were observable, the functional
+relationship governing repayment would remain unknown. In practice, both limited
+observability and unknown dependence prevent perfect prediction.
 
 ## Measure theoretic description
 
