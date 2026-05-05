@@ -176,3 +176,6 @@ R_implementation/.Rhistory
 **/.jupyter_snapshots/
 thesis/thesis.tex
 thesis/.gitignore
+
+## vs code files
+.vscode/
