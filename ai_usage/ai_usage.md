@@ -32,6 +32,17 @@ opinion on naming.
 - [Adapting the CV-Based acceptance loop script into a CLI ready script following the original base acceptance loop](https://chatgpt.com/share/69f5c2c3-30fc-83eb-8420-c413d840d6eb)
 - [Weight the option of tensorizing AU-ROC calculation](https://chatgpt.com/share/69f5c31f-8198-83eb-8ce5-ee4925f22b88)
 - [Help with index gymnastics in batched au-roc development](https://chatgpt.com/share/69f5c364-7318-83eb-8813-2239f056b40f)
+- [Redaction of the description of the RI problem](https://chatgpt.com/share/69f9b0c6-b730-8326-819d-40c9c124184c).
+  Considering that using AI for writting can come close to plagiarism, a very close commit-wise book-keeping is kept here
+  - [49dbafd514d89c967b0e0040fbcf1ce826b137b8](https://github.com/TheBISEconStatcian/BEReBASL/commit/49dbafd514d89c967b0e0040fbcf1ce826b137b8):
+    Corrections and refinements answering specific questions to parts of my text. It also
+    includes insights from a question in a [perplexity chat](https://www.perplexity.ai/search/261ac5f8-71b6-4520-b949-ca2e1ea6b741)
+    (also reported in the perplexity subsection).
+  - [66f2f330b35c77dcdaa022141fdff66f6d2ef472](https://github.com/TheBISEconStatcian/BEReBASL/commit/66f2f330b35c77dcdaa022141fdff66f6d2ef472):
+    Copy-pasting the corrections of ChatGPT based on my complete input of the subsection "Concepts definitions" of section
+    "Theoretical background and problem setting".
+  - [0781b5b894d16f561c34a9e93e78b65a8d8fcff7](https://github.com/TheBISEconStatcian/BEReBASL/commit/0781b5b894d16f561c34a9e93e78b65a8d8fcff7):
+    Refinements to the recommendations of ChatGPT done by the me.
 
 ## Links to `Copilot` usage
 
