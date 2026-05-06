@@ -52,24 +52,25 @@ model. Even if all features—including hidden ones—were observable, the funct
 relationship governing repayment would remain unknown. In practice, both limited
 observability and unknown dependence prevent perfect prediction.
 
-The bias which reject inference addresses is not yet evident. Let's go back to the
-acceptance process. At the beginning of the existence of the FI, it does not have
-any data about its clients, since it has none. There it must either use a scorecard
-trained on data from other markets or use a rule based on an expert's opinion. After
-enough data has been collected, the FI is able to use its own historic data *of accepts*
-to train a scorecard to then accept new clients, as the FI can only observe whether an
-applicant is good or bad after financing. Meaning it uses data from a segment
-of the population with (presumably) higher creditworthiness to then decide on the
-complete population of applicants. The big distributional differences between these
-populations, which have been well documented by @kozdoi_et_al_BE_BASL, are what the
-RI literature points out and often assumes to generate biased scorecards.
+The bias that reject inference addresses is not yet evident. To see it, consider
+the acceptance process. At the beginning of its operations, the FI has no data
+about its own clients. It must therefore rely either on a scorecard trained on
+data from other markets or on rules based on expert judgment. After sufficient
+data has been collected, the FI can train a scorecard using its own historical
+data of *accepted applicants*, since repayment outcomes are only observed for
+financed loans. As a result, the model is estimated on a subset of the applicant
+population—typically one with higher creditworthiness—and then applied to the
+full population of applicants. The distributional differences between these
+populations, which have been well documented (see @kozdoi_et_al_BE_BASL), are
+a central source of bias highlighted in the reject inference literature.
 
-Finally, note that the acceptance process is a sequential one. New accepts become
-historic data, which will again be used to reestimate the scorecard, effectively
-changing the way in which the FI makes the acceptance decision. In other words,
-the time dimension is to be considered when modeling the RI problem for credit data.
-This will be done by grouping time into *acceptance rounds*, whereby each of them
-begins when the scorecard gets reestimated.
+Finally, note that the acceptance process is sequential. Newly accepted applicants
+generate additional observations, which are incorporated into the historical data
+and used to re-estimate the scorecard. This, in turn, changes future acceptance
+decisions. In other words, the decision rule evolves over time, and this time
+dimension must be taken into account when modeling the reject inference problem.
+To capture this, I group time into *acceptance rounds*, where each round begins
+with a re-estimation of the scorecard.
 
 ## Measure theoretic description
 
