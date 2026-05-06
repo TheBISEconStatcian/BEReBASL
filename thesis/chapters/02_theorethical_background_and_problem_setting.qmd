@@ -59,12 +59,11 @@ enough data has been collected, the FI is able to use its own historic data *of 
 to train a scorecard to then accept new clients, as the FI can only observe whether an
 applicant is good or bad after financing. Meaning it uses data from a segment
 of the population with (presumably) higher creditworthiness to then decide on the
-complete population of applicants. The distributional differences in the (model)
-features are very significant as @kozdoi_et_al_BE_BASL have pointed out from empirical
-data and simulation results. These differences already demand to ask whether using only
-the accepted data as if it were a representative^[I. e. what @rubinMissingMechanismsOriginal
-already coined as "ignorable missingness"] is a sensible choice - which will be further
-discussed in @sec-formalization-missing-data-mechanism.
+complete population of applicants. The big distributional differences between these
+populations, which have been well documented by @kozdoi_et_al_BE_BASL, are what the
+RI literature points out and often assumes to generate biased scorecards. Also, note
+that this biasing is a sequential process as new accepts will become historic data
+afterward, which will again be used to re-estimate the score-card.
 
 ## Measure theoretic description
 
