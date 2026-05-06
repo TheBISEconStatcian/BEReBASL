@@ -17,6 +17,7 @@ approaches, I find it important to be thorough so that future work can properly
 criticize this thesis.
 
 ## Concepts definition
+{#sec-concepts-definition}
 
 When a financial institution (FI) grants a credit, it has first received
 information related to an applicant. This information consists of features,
@@ -61,11 +62,18 @@ applicant is good or bad after financing. Meaning it uses data from a segment
 of the population with (presumably) higher creditworthiness to then decide on the
 complete population of applicants. The big distributional differences between these
 populations, which have been well documented by @kozdoi_et_al_BE_BASL, are what the
-RI literature points out and often assumes to generate biased scorecards. Also, note
-that this biasing is a sequential process as new accepts will become historic data
-afterward, which will again be used to re-estimate the score-card.
+RI literature points out and often assumes to generate biased scorecards.
+
+Finally, note that the acceptance process is a sequential one. New accepts become
+historic data, which will again be used to reestimate the scorecard, effectively
+changing the way in which the FI makes the acceptance decision. In other words,
+the time dimension is to be considered when modeling the RI problem for credit data.
+This will be done by grouping time into *acceptance rounds*, whereby each of them
+begins when the scorecard gets reestimated.
 
 ## Measure theoretic description
+
+Let $t \in \mathbb{N}_0$ be a time index indicating
 
 Let $X_m, X_h, Y, Y_m, Z, \epsilon$ and $\varepsilon$ be RVs on the
 probability space $(\Omega, \mathcal{F}, \mathbb{P})$. Define with 
@@ -165,7 +173,9 @@ the RVs defining whether an external effect overrides the "usual behavior"
 and what the external effect ends up causing (e. g. if there is a shock in the laboral
 market and whether it is positive or negative for the applicant).
 
-
+As the attent reader notized, even though the acceptance process in
+@sec-concepts-definition was defined as a sequential process, none of the random
+variables present a 
 
 ## The data perspective
 
