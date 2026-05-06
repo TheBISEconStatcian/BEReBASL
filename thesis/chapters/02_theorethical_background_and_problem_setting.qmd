@@ -16,8 +16,7 @@ Although the main focus of this thesis is not bettering the formalization
 approaches, I find it important to be thorough so that future work can properly
 criticize this thesis.
 
-## Concepts definition
-{#sec-concepts-definition}
+## Concepts definition {#sec-concepts-definition}
 
 When a financial institution (FI) grants a credit, it has first received
 information related to an applicant. This information consists of features,
@@ -184,6 +183,5 @@ variables present a
 The RVs are helpful to model how generally the dependence structure in
 the system looks like. However we also need a notation for the realizations.
 
-## Formalization of the missing data mechanism
-{#sec-formalization-missing-data-mechanism}
+## Formalization of the missing data mechanism {#sec-formalization-missing-data-mechanism}
 
