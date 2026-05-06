@@ -51,7 +51,20 @@ model. Even if all features—including hidden ones—were observable, the funct
 relationship governing repayment would remain unknown. In practice, both limited
 observability and unknown dependence prevent perfect prediction.
 
-The source of the bias is yet not visible.  
+The bias which reject inference addresses is not yet evident. Let's go back to the
+acceptance process. At the beginning of the existence of the FI, it does not have
+any data about its clients, since it has none. There it must either use a scorecard
+trained on data from other markets or use a rule based on an expert's opinion. After
+enough data has been collected, the FI is able to use its own historic data *of accepts*
+to train a scorecard to then accept new clients, as the FI can only observe whether an
+applicant is good or bad after financing. Meaning it uses data from a segment
+of the population with (presumably) higher creditworthiness to then decide on the
+complete population of applicants. The distributional differences in the (model)
+features are very significant as @kozdoi_et_al_BE_BASL have pointed out from empirical
+data and simulation results. These differences already demand to ask whether using only
+the accepted data as if it were a representative^[I. e. what @rubinMissingMechanismsOriginal
+already coined as "ignorable missingness"] is a sensible choice - which will be further
+discussed in @sec-formalization-missing-data-mechanism.
 
 ## Measure theoretic description
 
@@ -159,3 +172,7 @@ market and whether it is positive or negative for the applicant).
 
 The RVs are helpful to model how generally the dependence structure in
 the system looks like. However we also need a notation for the realizations.
+
+## Formalization of the missing data mechanism
+{#sec-formalization-missing-data-mechanism}
+
