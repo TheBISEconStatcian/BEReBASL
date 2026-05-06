@@ -8,9 +8,11 @@ First and also following the approach of @ehrhardt2021rejectReview a detailed
 description in natural language of the biasing mechanism in FIs is done, so
 that each concept used can be defined properly avoiding confusions. Second a
 measure theoretic characterization of the biasing process through its assumed
-underlying random variables (RV) is given. Finally, a characterization of the available
+underlying random variables (RV) is given. Third, a characterization of the available
 data for the FI is done as observed realizations of this process and its random
-variables. Although the main focus of this thesis is not bettering the formalization
+variables. Finally, a precise formulation of the missing-data mechanism guided by
+the definitions of @littleAndRubingAnalysisWithMissingData is presented.
+Although the main focus of this thesis is not bettering the formalization
 approaches, I find it important to be thorough so that future work can properly
 criticize this thesis.
 
@@ -48,6 +50,8 @@ This interpretation does not imply that the FI could construct a perfect predict
 model. Even if all features—including hidden ones—were observable, the functional
 relationship governing repayment would remain unknown. In practice, both limited
 observability and unknown dependence prevent perfect prediction.
+
+The source of the bias is yet not visible.  
 
 ## Measure theoretic description
 
@@ -149,7 +153,9 @@ the RVs defining whether an external effect overrides the "usual behavior"
 and what the external effect ends up causing (e. g. if there is a shock in the laboral
 market and whether it is positive or negative for the applicant).
 
+
+
 ## The data perspective
 
 The RVs are helpful to model how generally the dependence structure in
-the system looks like. However it is unubiqutous
+the system looks like. However we also need a notation for the realizations.
