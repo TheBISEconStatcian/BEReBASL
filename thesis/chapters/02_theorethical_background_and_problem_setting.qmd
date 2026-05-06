@@ -59,16 +59,17 @@ data from other markets or on rules based on expert judgment. After sufficient
 data has been collected, the FI can train a scorecard using its own historical
 data of *accepted applicants*, since repayment outcomes are only observed for
 financed loans. As a result, the model is estimated on a subset of the applicant
-population—typically one with higher creditworthiness—and then applied to the
+population—presumably one with higher creditworthiness—and then applied to the
 full population of applicants. The distributional differences between these
 populations, which have been well documented (see @kozdoi_et_al_BE_BASL), are
-a central source of bias highlighted in the reject inference literature.
+(assumed) to be a central source of bias highlighted in the reject inference
+literature.
 
 Finally, note that the acceptance process is sequential. Newly accepted applicants
 generate additional observations, which are incorporated into the historical data
 and used to re-estimate the scorecard. This, in turn, changes future acceptance
 decisions. In other words, the decision rule evolves over time, and this time
-dimension must be taken into account when modeling the reject inference problem.
+dimension must be considered when modeling the reject inference problem.
 To capture this, I group time into *acceptance rounds*, where each round begins
 with a re-estimation of the scorecard.
 
