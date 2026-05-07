@@ -43,6 +43,10 @@ opinion on naming.
     "Theoretical background and problem setting".
   - [0781b5b894d16f561c34a9e93e78b65a8d8fcff7](https://github.com/TheBISEconStatcian/BEReBASL/commit/0781b5b894d16f561c34a9e93e78b65a8d8fcff7):
     Refinements to the recommendations of ChatGPT done by the me.
+  - [b6e96d383b646e8e34116c72f20560ddc17ced97](https://github.com/TheBISEconStatcian/BEReBASL/commit/b6e96d383b646e8e34116c72f20560ddc17ced97):
+    Help on lowering redundancy and fluency of the dynamic description of the acceptance process.
+  - [9b87490cafc907cac86fea25a4dcd69918f9e553](https://github.com/TheBISEconStatcian/BEReBASL/commit/9b87490cafc907cac86fea25a4dcd69918f9e553):
+    Refinements to the corrections of the last bullet point.
 
 ## Links to `Copilot` usage
 
