@@ -15,4 +15,4 @@ format: pdf
 
 {{< pagebreak >}}
 
-{{< include chapters/02_theorethical_background_and_problem_setting.qmd >}}
+{{< include chapters/02_theoretical_background_and_problem_setting.qmd >}}
