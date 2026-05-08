@@ -1,20 +1,21 @@
 # Theoretical background and problem setting
 
 Following the spirit of @ehrhardt2021rejectReview, I begin by formally
-presenting the Reject Inference Problem in Credit Risk as understood and
+presenting the Reject Inference (RI) Problem in Credit Risk as understood and
 approached in this thesis, so that the hypothesis formulation and the
 theoretical properties of the proposed solution can be precisely formulated.
 First and also following the approach of @ehrhardt2021rejectReview a detailed
 description in natural language of the biasing mechanism in FIs is done, so
 that each concept used can be defined properly avoiding confusions. Second a
 measure theoretic characterization of the biasing process through its assumed
-underlying random variables (RV) is given. Third, a characterization of the available
-data for the FI is done as observed realizations of this process and its random
-variables. Finally, a precise formulation of the missing-data mechanism guided by
-the definitions of @littleAndRubingAnalysisWithMissingData is presented.
-Although the main focus of this thesis is not bettering the formalization
-approaches, I find it important to be thorough so that future work can properly
-criticize this thesis.
+underlying random variables (RV) is given. Third a precise formulation of the
+missing-data mechanism guided by the definitions of
+@littleAndRubingAnalysisWithMissingData is presented, so that the bias which
+RI attempts to alleviate can be clearly recognized including its source. Finally,
+a notation of the available data for the FI is done as observed realizations 
+of the described processes. Although the main focus of this thesis is not bettering
+the formalization approaches, I find it important to be thorough so that future work
+can properly criticize this thesis.
 
 ## Concepts definition {#sec-concepts-definition}
 
@@ -81,21 +82,14 @@ authors do when investigating RI. However, in some cases I am rather loose on
 notation and formality -specially in the notion as a stochastic process-,
 since I believe some nuances are more confusing than helpful, particularly for
 a master's thesis. 
- 
-
 
 Let $\mathbf{T} = \{0, 1, ..., T\} \subseteq {\mathbb{N}}_0$ be the set
-distinguishing across acceptance rounds. This set would be the coarse
-time index for the locally stationary process $$
-
-
-
-Let $t \in \mathbb{N}_0$ be a time index indicating the acceptance round
-and $X_m, X_h, Y, Y_m, Z^{(t)}, \epsilon$ and $\varepsilon$ be RVs on the
+indexing the acceptance rounds and $t \in \mathbf{T}$. Further let 
+$X_m, X_h, Y, Y_m^{(t)}, Z^{(t)}, \epsilon$ and $\varepsilon$ be RVs on the
 probability space $(\Omega, \mathcal{F}, \mathbb{P})$. Define with 
-$f_o, f_i \in \mathbb{N}$
+$f_m, f_i \in \mathbb{N}$
 $$
-X_o: (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f_o}, \mathcal{B}(\mathbb{R}^{f_o}) \right), \quad
+X_m: (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f_m}, \mathcal{B}(\mathbb{R}^{f_m}) \right), \quad
 X_h: (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f_h}, \mathcal{B}(\mathbb{R}^{f_h}) \right)
 $$
 
@@ -110,13 +104,13 @@ with
 $$
 \forall \omega \in \Omega: X(\omega) := \begin{pmatrix} X_m(\omega) \\ X_h(\omega) \end{pmatrix}
 $$
-Further with $V$ a placeholder for $Y, Z^{(t)}$ and $Y_m$ let
+Further with $V$ a placeholder for $Y, Z^{(t)}$ and $Y_m^{(t)}$ let
 $$
 V : (\Omega, \mathcal{F}) \to \left( E_V, 2^{E_V} \right)
 $$
 with
 $$
-E_Y = \{g,b\}, \quad E_{Z^{(t)}} = \{a,r\}, \quad E_{Y_m} = \{g,b, \texttt{na}\}
+E_Y = \{g,b\}, \quad E_{Z^{(t)}} = \{a,r\}, \quad E_{Y_m^{(t)}} = \{g,b, \texttt{na}\}
 $$
 
 be the RVs describing the repayment type, acceptance decision and observable repayment
@@ -135,11 +129,11 @@ Z^{(t)}(\omega) = \begin{cases}
 $$
 and
 $$
-Y_m(\omega) = \begin{cases}
+Y_m^{(t)}(\omega) = \begin{cases}
     Y(\omega) & Z^{(t)}(\omega) = a \\
     \texttt{na} & Z^{(t)}(\omega) = r
 \end{cases}
-$$
+$${#eq-y-m-t-as-measurable-function}
 
 $Z^{(t)}$ is more precisely modeled as a measurable function of both features sets. Let
 $$
@@ -148,7 +142,7 @@ s_t : \mathbb{R}^{f_m} \to \mathbb{R}, \;
 $$
 be a score function and
 $$
-d_t : \mathbb{R} \times \mathbb{R}^{f_h} \to \{a, r\}, \;
+d : \mathbb{R} \times \mathbb{R}^{f_h} \to \{a, r\}, \;
     \left(\mathcal{B}\left(\mathbb{R}\right)
     \otimes
     \mathcal{B}\left(\mathbb{R}^{f_m}\right)\right) - 2^{\{a, r\}}
@@ -166,7 +160,7 @@ d_t\left(
 \right)
 $$ {#eq-z-t-as-measurable-function}
 
-Consider thereby that this form does not imply that $d_t$ "reacts" to every
+Consider thereby that this form does not imply that $d$ "reacts" to every
 component from $X_h$, i. e. a subsset of hidden features can (and realistically
 will) be independent from $Z^{(t)}$. In this spirit, $Y$ can also be modeled as
 $$
@@ -189,22 +183,26 @@ the RVs defining whether an external effect overrides the "usual behavior"
 and what the external effect ends up causing (e.g. if there is a shock in the labor
 market and whether it is positive or negative for the applicant).
 
-From these variables we could generate a description of the acceptance decision
-and the applicants' data as stochastic processes. With $P$ a placeholder for
-$X_m, X_h, Y, Y_m \epsilon$ and $\varepsilon$ we can define the corresponding
+From these variables we can generate a description of the acceptance decision
+and the applicants' data as stochastic processes, in order to describe the
+sequential and dynamic nature of the system. With $P$ a placeholder for
+$X_m, X_h, Y \epsilon$ and $\varepsilon$ we can define the corresponding
 stochastic processes^[Understood as a collection of random variables indexed by
 a time parameter [@Korosteleva2022Chapter1], e.g. $\{X_t, \, t \in \mathbf{\tilde{T}}\}$] as
 $$
-\{\Pi_t \}_{t \in \mathbf{T}}, \quad \Pi_t = P
+\left\{P^{(t)} \right\}_{t \in \mathbf{T}}, \quad P^{(t)} = P
 $$
+and of course also $\left\{Z^{(t)}\right\}_{t \in \mathbf{T}}$ and 
+$\left\{Y^{(t)}_m\right\}_{t \in \mathbf{T}}$.
 
-This shows that all the corresponding processes for these variables are assumed
-to be *strictly* stationary^[A strictly stationary process is characterized by a
-collection of random variables, whereby at each time step the distribution remains
-constant, i.e. following the example of the last footnote: 
+This shows that all the corresponding processes for these variables but $Z^{(t)}$
+and $Y^{(t)}_m$ are assumed to be *strictly* stationary^[A strictly stationary process
+is characterized by a collection of random variables, whereby at each time step the
+distribution remains constant, i.e. following the example of the last footnote: 
 $\forall t, s \in \mathbf{\tilde{T}}:$ $X_s$ and $X_t$ are equal in distribution].
-Only $\left\{Z^{(t)}\right\}_{t \in \mathbf{T}}$ would
-be a non-stationary measurable map of strictly stationary processes. In other
+Only $\left\{Z^{(t)}\right\}_{t \in \mathbf{T}}$ and therefore 
+$\left\{Y^{(t)}_m\right\}_{t \in \mathbf{T}}$. would
+be non-stationary measurable maps of strictly stationary processes. In other
 words I assume that the dynamics regarding the applicants population stay constant
 over acceptance rounds, only the scoring and decision functions change over time
 causing the non-stationarity.^[Note: Alternatively
@@ -213,12 +211,80 @@ definition of the time index) as an approximately locally stationary process ove
 realizations of the "acceptance population random variable", which could open the
 possibility of adapting the ideas of the method presented in
 @dahlhaus2012locallystationaryprocesses in combination with the insights of this
-thesis. A notion of a "multiply observed" time series might also be interesting.]
+thesis.]
+
+With the current formal description of the processes is however not yet fully clear
+how the dependence to past states looks like. It comes from $s_t$, since they depend
+on the past realizations of $Y^{(t)}_m$. A closer look
+to @eq-y-m-t-as-measurable-function also shows that the time dependent part
+is originated through $Z^{(t)}$ itself. To make this very precise we need further
+notation closer to the actual DGP. Following a notation of families of independent
+identically distributed (i.i.d.) variables which should be well known from central
+limit theorems, we can write every one of these processes, with $P^{(t)}$ as placeholder
+for all the processes defined above.
+as
+$$
+\left\{\left\{P^{(t)}_i\right\}_{i=1}^{N_t}\right\}_{t \in \mathbf{T}}, N_t \in \mathbb{N}
+$${#eq-process-definition-with-iid-famlies}
+where each family $\left\{P^{(t)}_i\right\}_{i=1}^{N_t}$ is i.i.d., which shows
+the next assumption in this modelling, i.i.d.-ness in this sense.
+
+Then we can precisely define the random estimator $\hat{s}_t$ for $t \in \mathbf{T} \setminus \{0\}$ 
+through which $s_t$ gets estimated as a measurable function in the form
+$$
+\hat{s}_t : \left(  
+    \mathop{\Large\times}\limits_{\tau = 0}^{t-1} \mathop{\Large\times}\limits_{i=1}^{N_\tau} \chi_{m,i}^{(t)} \times \upsilon_{m,i}^{(t)}, \,
+    \bigotimes_{\tau = 0}^{t-1} \bigotimes_{i=1}^{N_\tau} \mathcal{X}_{m,i}^{(t)} \otimes \mathcal{Y}_{m,i}^{(t)}
+\right) \to \left(\Theta, \mathcal{\Theta} \right)
+$$
+
+with $\left(\chi_{m,i}^{(t)}, \mathcal{X}_{m,i}^{(t)}\right)$ and 
+$\left(\upsilon_{m,i}^{(t)}, \mathcal{Y}_{m,i}^{(t)}\right)$ the state spaces of
+$X^{(t)}_{m, i}$ and $Y^{(t)}_{m, i}$ respectively. $\left(\Theta, \mathcal{\Theta} \right)$
+is the measurable space where the parameters^[Note that this does not assume a space with
+"static dimensionality" so that non-parametric models like XGB with variable amount of trees
+could not be represented by it. In this sense this understanding of parameter differs from
+@rubinMissingMechanismsOriginal and all the Maximum Likelihood literature.] $\theta$ of
+$s_t$ are defined. Although for $d$ a similar definition could be done, it is assumed
+in this thesis that given $s_t$, $d$ does not change across $t$.
+
+## Formalization of the missing data mechanism {#sec-formalization-missing-data-mechanism}
+
+Here the data missingness mechanism which gets recorded by $Y^{(t)}_m$ gets formalized
+according to the canonical definitions of @littleAndRubingAnalysisWithMissingData. Let
+in this section $t \in \mathbf{T} \setminus \{0\}$,
+$$
+X_m^{:t} = \bigcup_{\tau \in \mathbf{T} \setminus \{T\}} \left\{X^{(t)}_{m,i}\right\}_{i=1}^{N_t}
+$$
+and $X_h^{:t}$, $Y^{:t}$, $Y_m^{:t}$ be defined analogously represent the "flattened"
+past random variables in the processes.
+
+The three canonical cases of missingness are Missing Completely at Random (MCAR),
+Missing At Random (MAR) and Missing Not At Random (MNAR). The first case
+means that the missing data is independent of covariates and *and* labels, meaning
+$$
+\mathbb{P}\left(Z^{(t)} = r \middle | Y^{:t}, X_m^{:t}, X_h^{:t} \right) = \mathbb{P}\left(Z^{(t)} = r \right)
+$$
+so $Z^{(t)}$ is independent of the three sets. This would be observed if the
+FI rejected fully at random (e.g. depending on the mood of the employees),
+a "through the door" acceptance policy (always accept) or would always reject.
+In any of these three cases, the scoring function $s_t$ would never be biased,
+meaning its parameters $\theta$ are expected to be calculated "correctly".
+
+Here is important to explain what exactly biasing in this context means, as
+talking about an "unbiased estimator" for methods like XGB is not the same
+as for Maximum Likelihood estimators. Biasing is defined here relatively loose,
+meaning that knowing the statistical properties of the estimation method for
+$s_t$ one has good arguments to believe that given enough data it will be
+a good approximation of a scoring proportional to $\mathbb{P}(Y = b | X)$.
+In this sense an unbiased data-set occurs when it is representative enough
+(again, assuming enough data, the small sample problem is not addressed here)
+to get such a $s_t$.
+
+
+MAR on the other hand happens when the missingness only depends on the 
 
 ## The data perspective
 
 The RVs are helpful to model how generally the dependence structure in
 the system looks like. However we also need a notation for the realizations.
-
-## Formalization of the missing data mechanism {#sec-formalization-missing-data-mechanism}
-
