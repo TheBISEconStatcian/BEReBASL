@@ -22,7 +22,8 @@ can properly criticize this thesis.
 When a financial institution (FI) grants a credit, it has first received
 information related to an applicant. This information consists of features,
 some of which are (almost always) used in a scoring model ("model features"), while
-others—e.g. whether the applicant dresses well in a face-to-face application—are not.
+others—e.g. whether the applicant dresses well in a face-to-face application—are not
+("hidden features").
 Based on the available information, the FI decides whether to approve the loan.
 Upon approval by the FI, a financing contract can be concluded, leading to disbursement.
 A credit agreement after drawdown is termed "accepted".^[Since the contract requires
@@ -40,9 +41,8 @@ individual circumstances^[e.g. income or health] as well as purely unpredictable
 events^[such as a bankruptcy due to a corruption scandal in the applicant’s firm,
 or the applicant winning the lottery], which I term idiosyncratic shocks. The
 individual circumstances can be understood as a set of characteristics consisting
-of the model features and additional *hidden features*.^[Hidden features include
-both variables observed by the FI but not used in the scorecard and unobservable
-ones.] Ignoring idiosyncratic shocks for a moment, the repayment outcome can be
+of the model features, hidden features and additional latent factors, which cannot be
+observed by the FI. Ignoring idiosyncratic shocks for a moment, the repayment outcome can be
 thought of as being determined *completely* by this full set of features. In this
 sense, being a payer or non-payer can be viewed as an underlying property of the
 applicant, even though it is not directly observable at the time of the decision.
@@ -85,18 +85,21 @@ a master's thesis.
 
 Let $\mathbf{T} = \{0, 1, ..., T\} \subseteq {\mathbb{N}}_0$ be the set
 indexing the acceptance rounds and $t \in \mathbf{T}$. Further let 
-$X_m, X_h, Y, Y_m^{(t)}, Z^{(t)}, \epsilon$ and $\varepsilon$ be RVs on the
+$X_m, X_h, X_l, Y, Y_m^{(t)}, Z^{(t)}, \epsilon$ and $\varepsilon$ be RVs on the
 probability space $(\Omega, \mathcal{F}, \mathbb{P})$. Define with 
-$f_m, f_i \in \mathbb{N}$
+$j \in \{m, h, l\}$
 $$
-X_m: (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f_m}, \mathcal{B}(\mathbb{R}^{f_m}) \right), \quad
-X_h: (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f_h}, \mathcal{B}(\mathbb{R}^{f_h}) \right)
+X_j: (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f_j}, \mathcal{B}(\mathbb{R}^{f_j}) \right), \quad
+f_j \in \mathbb{N}_o
 $$
-
-as the RVs generating the applicant's model and hidden features^[Note that even though
-not all features are per se continuous and therefore naturally real numbers, a reasonable
-assumption is that they are representable as real numbers]. The joint distribution of both
-features sets is characterized by
+as the RVs generating the applicant's model features, hidden features and latent factors^[
+    Note that even though not all features are per se continuous and therefore naturally
+    real numbers, a reasonable assumption is that they are representable as real numbers
+]. Further see that the case $f_j = 0$^[Note: $\mathbb{R}^{0} = \{()\}$ is a singleton set
+containing the empty tuple and $\mathcal{B}\left(\mathbb{R}^{0}\right) = \{\emptyset, \{()\}\}$]
+represents a model where $X_j$ always returns an empty tuple, meaning that there are no features
+of type $j$. I assume that at least $f_m > 0$. The joint distribution of both features sets
+observable by the FI is characterized by
 $$
 X : (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f}, \mathcal{B}\left(\mathbb{R}^{f} \right) \right), f:=f_m + f_h
 $$
@@ -145,7 +148,7 @@ $$
 d : \mathbb{R} \times \mathbb{R}^{f_h} \to \{a, r\}, \;
     \left(\mathcal{B}\left(\mathbb{R}\right)
     \otimes
-    \mathcal{B}\left(\mathbb{R}^{f_m}\right)\right) - 2^{\{a, r\}}
+    \mathcal{B}\left(\mathbb{R}^{f_h}\right)\right) - 2^{\{a, r\}}
     \text{ measurable}
 $$
 
@@ -167,7 +170,7 @@ $$
 \forall \omega \in \Omega:
 Y(\omega) = \begin{cases}
     \varepsilon(\omega) & \epsilon(\omega) = \text{external effect} \\
-    \iota \left(X_m(\omega), X_h(\omega) \right) & \epsilon(\omega) = \text{no external effect}
+    \iota \left(X_m(\omega), X_h(\omega), X_l(\omega) \right) & \epsilon(\omega) = \text{no external effect}
 \end{cases}
 $$
 
@@ -252,7 +255,7 @@ in this thesis that given $s_t$, $d$ does not change across $t$.
 
 Here the data missingness mechanism which gets recorded by $Y^{(t)}_m$ gets formalized
 according to the canonical definitions of @littleAndRubingAnalysisWithMissingData. Let
-in this section $t \in \mathbf{T} \setminus \{0\}$,
+in this section $t \in \mathbf{T} \setminus \{0\}$ be arbitrary but fixed,
 $$
 X_m^{:t} = \bigcup_{\tau \in \mathbf{T} \setminus \{T\}} \left\{X^{(t)}_{m,i}\right\}_{i=1}^{N_t}
 $$
@@ -263,7 +266,8 @@ The three canonical cases of missingness are Missing Completely at Random (MCAR)
 Missing At Random (MAR) and Missing Not At Random (MNAR). The first case
 means that the missing data is independent of covariates and *and* labels, meaning
 $$
-\mathbb{P}\left(Z^{(t)} = r \middle | Y^{:t}, X_m^{:t}, X_h^{:t} \right) = \mathbb{P}\left(Z^{(t)} = r \right)
+\mathbb{P}\left(Z^{(t)} = r \middle | Y^{:t}, X_m^{:t}, X_h^{:t} \right) =
+\mathbb{P}\left(Z^{(t)} = r \right)
 $$
 so $Z^{(t)}$ is independent of the three sets. This would be observed if the
 FI rejected fully at random (e.g. depending on the mood of the employees),
@@ -281,8 +285,29 @@ In this sense an unbiased data-set occurs when it is representative enough
 (again, assuming enough data, the small sample problem is not addressed here)
 to get such a $s_t$.
 
+MAR on the other hand happens when the missingness only depends on the
+covariates but not on the outcome variable. Here I define MAR as the case
+where the missingness depends only on the model features, i.e.
+$$
+\mathbb{P}\left(Z^{(t)} = r \middle | Y^{:t}, X_m^{:t}, X_h^{:t} \right) =
+\mathbb{P}\left(Z^{(t)} = r | X_m^{:t} \right)
+$${#eq-mar-only-model}
+Note that this definition varies from the usual condition in the literature, i.e.
+$$
+\mathbb{P}\left(Z^{(t)} = r \middle | Y^{:t}, X_m^{:t}, X_h^{:t}\right)=
+\mathbb{P}\left(Z^{(t)} = r \middle | X_m^{:t}, X_h^{:t}\right).
+$${#eq-mar-all-x}
+which can also be a valid definition of MAR but with a different nuance.
 
-MAR on the other hand happens when the missingness only depends on the 
+@eq-mar-all-x is a valid definition of MAR in the sense that a sample
+composed of $Z^{:t}, Y^{:t}, X_m^{:t}, X_h^{:t}$ would be MAR, and specially
+since for $f_h=0$ it is equivalent to @eq-mar-only-model. However, for $f_h>0$
+using a MAR definition like @eq-mar-all-x would imply that a scoring function
+$s_t$ does not get trained on MAR data, as 
+$Z^{(t)} | X_m^{:t} \cancel{\perp\!\!\!\perp} Y^{:t}$. As RI aims to reduce
+or eliminate the sample bias to get an unbiased score function, it makes sense
+to focus on the bias
+
 
 ## The data perspective
 
