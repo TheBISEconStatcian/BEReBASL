@@ -1,6 +1,6 @@
 ---
-title: Making Reject Inference history aware
-subtitle: Translating the bias generation process into a useful reward signal for a reinforcement learning approach
+title: Quantifying the Unknown
+subtitle: A surprised based reward signal for dynamic reject inference in credit scoring
 date: today
 date-format: "DD.MM.YYYY"
 authors:
@@ -15,6 +15,82 @@ format: pdf
 
 {{< pagebreak >}}
 
+# Introduction
+
+Main contributions expected:
+
+* Measure Theoretic formalization of the RI problem for credit risk as a stochastic
+  process introducing a dynamic dimension as methodology to make more explicit all
+  assumptions on the DGP for simulation frameworks.
+* Simulation framework
+  * Types of classifiers evaluated (Accept based classifier, oracle naive, oracle comparable)
+  * Sensitivity parameters on strength of MNAR:
+    * Correlation of hidden factor
+    * Bias percentage
+* RL set up:
+  * Reward function as "surprise minimizer"
+  * "Batch of batches" perspective for optimizing global minimization instead of trying to
+    calculate individual rewards.
+  * RL Architecture cut for this set up
+
+# Related Work
+
+## Training under sampling bias
+
+### Ignorable missingness approach (when RI is not necessary)
+
+### Overview of used methods (main focus on RL methods)
+
+Strongly based on @kozdoi_et_al_BE_BASL
+
+## Applications in Credit scoring (main focus on RL methods)
+
+
+
 {{< include chapters/02_theoretical_background_and_problem_setting.qmd >}}
+
+# Simulation framework
+
+## General Idea (CV based metric optimization, i.e. no cost awareness)
+
+## Classifiers definition
+
+## Algorithm (includes exact definition of MNAR process)
+
+## Precise DGP description and transparency
+
+# Using the acceptance dynamics
+
+## Hypothesis definition (Surprise, minimization of surprise)
+
+### Define Surprise, minimization of surprise
+
+### Evidence of hypothesis plausibility given the simulation grid results
+
+### Exact hypotheses
+
+## Reward Signal
+
+### Definition as global reward signal
+
+### Data-Structure for the agent (Batch of batches)
+
+## RL Agent (method used, architecture, metaparameters)
+
+# Results of Agent
+
+## "Base Experiment"
+
+## Sensitivity analysis
+
+# Conclussion
+
+## Hypotheses fulfilled?
+
+## Limitations of the study
+
+## Future work (building on the limitations and highlighting measure theoretic possibilities)
+
+
 
 {{< pagebreak >}}
