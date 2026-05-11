@@ -35,6 +35,10 @@ from .acceptance_loop_cv_based_MNAR import (
 
 
 def main():
+    # Torch set up
+    torch.set_num_threads(24)
+    torch.set_num_interop_threads(8)
+    
     # Parse base arguments (includes --var-to-hide, --bias-percentage,
     # --hidden-corr and all the shared loop args).
     parser = build_parser_for_cv_loop()
@@ -51,11 +55,11 @@ def main():
     # ── Grid definition ───────────────────────────────────────────────────────
     # bias_percentage: quantile on the hidden variable that triggers forced
     #   acceptance.  0.0 means no MNAR distortion.
-    bias_percentages: list = [0.0, 0.05, 0.10, 0.20, 0.35]
+    bias_percentages: list = [0.05, 0.10, 0.20, 0.35]
 
     # hidden_corr: Pearson correlation between the hidden variable and every
     #   visible variable in the DGP covariance.  0.0 = fully independent.
-    hidden_corrs: list = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    hidden_corrs: list = [0.0, 0.2, 0.4, 0.6]
     # ─────────────────────────────────────────────────────────────────────────
 
     # Create timestamped base directory
