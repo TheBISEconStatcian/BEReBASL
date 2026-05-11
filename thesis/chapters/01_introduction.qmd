@@ -1,0 +1,17 @@
+# Introduction
+
+Main contributions expected:
+
+* Measure Theoretic formalization of the RI problem for credit risk as a stochastic
+  process introducing a dynamic dimension as methodology to make more explicit all
+  assumptions on the DGP for simulation frameworks.
+* Simulation framework
+  * Types of classifiers evaluated (Accept based classifier, oracle naive, oracle comparable)
+  * Sensitivity parameters on strength of MNAR:
+    * Correlation of hidden factor
+    * Bias percentage
+* RL set up:
+  * Reward function as "surprise minimizer"
+  * "Batch of batches" perspective for optimizing global minimization instead of trying to
+    calculate individual rewards.
+  * RL Architecture cut for this set up

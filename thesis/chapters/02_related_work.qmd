@@ -1,0 +1,11 @@
+# Related Work
+
+## Training under sampling bias
+
+### Ignorable missingness approach (when RI is not necessary)
+
+### Overview of used methods (main focus on RL methods)
+
+Strongly based on @kozdoi_et_al_BE_BASL
+
+## Applications in Credit scoring (main focus on RL methods)

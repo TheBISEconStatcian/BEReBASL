@@ -1,0 +1,9 @@
+# Simulation framework
+
+## General Idea (CV based metric optimization, i.e. no cost awareness)
+
+## Classifiers definition
+
+## Algorithm (includes exact definition of MNAR process)
+
+## Precise DGP description and transparency

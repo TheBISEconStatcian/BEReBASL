@@ -1,0 +1,17 @@
+# Using the acceptance dynamics
+
+## Hypothesis definition (Surprise, minimization of surprise)
+
+### Define Surprise, minimization of surprise
+
+### Evidence of hypothesis plausibility given the simulation grid results
+
+### Exact hypotheses
+
+## Reward Signal
+
+### Definition as global reward signal
+
+### Data-Structure for the agent (Batch of batches)
+
+## RL Agent (method used, architecture, metaparameters)

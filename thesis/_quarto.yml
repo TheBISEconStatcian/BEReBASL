@@ -9,6 +9,8 @@ execute:
   freeze: auto       # Re-runs only if thesis.qmd changed
   echo: false        # Hides code from the PDF (standard for papers)
   warning: false     # Hides python warnings from the PDF
+  python: ./../masters_venv/Scripts/python.exe
+  results: asis
 
 format:
   pdf:
