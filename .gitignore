@@ -179,3 +179,4 @@ thesis/.gitignore
 
 ## vs code files
 .vscode/
+thesis/_freeze/thesis/execute-results/tex.json
