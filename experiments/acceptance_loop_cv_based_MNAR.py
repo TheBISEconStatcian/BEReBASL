@@ -453,11 +453,11 @@ def _timestamp() -> str:
     return datetime.now().strftime("%d.%m.%Y, %H:%M:%S")
 
 def _results_path(sim_dir_path: str) -> str:
-    return os.path.join(sim_dir_path, "simulation_results_cv.pt")
+    return os.path.join(sim_dir_path, "simulation_results_cv_mnar.pt")
 
 
 def _init_path(sim_dir_path: str) -> str:
-    return os.path.join(sim_dir_path, "initial_simulation_objects_cv.pt")
+    return os.path.join(sim_dir_path, "initial_simulation_objects_cv_mnar.pt")
 
 
 def _check_and_save_init_cv_loop(
