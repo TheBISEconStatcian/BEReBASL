@@ -325,7 +325,7 @@ features contain enough information of the latent factors, so that the
 missing variable bias is negligible. If the FI collects enough data of
 the applicant, this might be a somewhat credible claim, but is it really
 enough to just ignore the missingness mechanism? Later the hypothesis checking
-section will give some perspective 
+section will give some perspective on this regard.
 
 
 ## The data perspective
