@@ -55,7 +55,7 @@ def main():
 
     # hidden_corr: Pearson correlation between the hidden variable and every
     #   visible variable in the DGP covariance.  0.0 = fully independent.
-    hidden_corrs: list = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    hidden_corrs: list = [0.0, 0.2, 0.4, 0.6]
     # ─────────────────────────────────────────────────────────────────────────
 
     # Create timestamped base directory
