@@ -34,6 +34,7 @@ opinion on naming.
 - [Help with index gymnastics in batched au-roc development](https://chatgpt.com/share/69f5c364-7318-83eb-8813-2239f056b40f)
 - [Redaction of the description of the RI problem](https://chatgpt.com/share/69f9b0c6-b730-8326-819d-40c9c124184c).
   Considering that using AI for writting can come close to plagiarism, a very close commit-wise book-keeping is kept here
+  to show the *exact* extent of the usage
   - [49dbafd514d89c967b0e0040fbcf1ce826b137b8](https://github.com/TheBISEconStatcian/BEReBASL/commit/49dbafd514d89c967b0e0040fbcf1ce826b137b8):
     Corrections and refinements answering specific questions to parts of my text. It also
     includes insights from a question in a [perplexity chat](https://www.perplexity.ai/search/261ac5f8-71b6-4520-b949-ca2e1ea6b741)
@@ -47,6 +48,7 @@ opinion on naming.
     Help on lowering redundancy and fluency of the dynamic description of the acceptance process.
   - [9b87490cafc907cac86fea25a4dcd69918f9e553](https://github.com/TheBISEconStatcian/BEReBASL/commit/9b87490cafc907cac86fea25a4dcd69918f9e553):
     Refinements to the corrections of the last bullet point.
+- [Metaprompting the MNAR adaptation for Claude](https://chatgpt.com/share/6a0165fb-7310-83eb-a67d-ef86851dd78d)
 
 ## Links to `Copilot` usage
 
@@ -84,6 +86,7 @@ opinion on naming.
 - [Development of `k_fold_cv_normalized_split_batched`](https://claude.ai/share/862fe75b-b334-48ce-b489-5c2e58b5b7cc)
 - [Finding and implementing metric for CV-based threshold](https://claude.ai/share/27b633c3-c6a2-4cba-b540-9158037fdf0d)
 - [Update CV-Acceptance loop CLI as ChatGPT was unable](https://claude.ai/share/9e4ef49a-6346-46f4-9237-f9080d0c845d)
+- [Include MNAR logic according to my own code exemplifying the wished logic](https://claude.ai/share/7c92b2bc-da35-45f9-a216-ab1ed9d4237d)
 
 ## `Github-Copilot`
 
