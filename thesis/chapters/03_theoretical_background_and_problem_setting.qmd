@@ -163,16 +163,14 @@ d_t\left(
 \right)
 $$ {#eq-z-t-as-measurable-function}
 
-Consider thereby that this form does not imply that $d$ "reacts" to every
-component from $X_h$, i. e. a subsset of hidden features can (and realistically
-will) be independent from $Z^{(t)}$. In this spirit, $Y$ can also be modeled as
+In this spirit, $Y$ can also be modeled as
 $$
 \forall \omega \in \Omega:
 Y(\omega) = \begin{cases}
     \varepsilon(\omega) & \epsilon(\omega) = \text{external effect} \\
     \iota \left(X_m(\omega), X_h(\omega), X_l(\omega) \right) & \epsilon(\omega) = \text{no external effect}
 \end{cases}
-$$
+$${#eq-y-as-measurable-function}
 
 with $\iota$ a 
 $\left(\mathcal{B}\left(\mathbb{R^{f_m}}\right) \otimes \mathcal{B}\left(\mathbb{R^{f_h}} \right)\right)$
@@ -184,7 +182,14 @@ $$
 
 the RVs defining whether an external effect overrides the "usual behavior"
 and what the external effect ends up causing (e.g. if there is a shock in the labor
-market and whether it is positive or negative for the applicant).
+market and whether it is positive or negative for the applicant). See that
+from @eq-y-as-measurable-function in connection with @eq-z-t-as-measurable-function
+the FI is modeled to be a "good selector" of features, since all the variables
+which it uses to make the acceptance decision are assumed to actually play a role
+in determining $Y$. This might sound like an unrealistic assumption, however considering
+more irrelevant variables will only make $Z^{(t)}$ "less rational", which might
+actually be a good thing for making the sample more representative. This will be commented
+in the next subsection.
 
 From these variables we can generate a description of the acceptance decision
 and the applicants' data as stochastic processes, in order to describe the
@@ -260,8 +265,8 @@ $$
 X_m^{:t} = \bigcup_{\tau \in \mathbf{T} \setminus \{T\}}
  \left\{X^{(t)}_{m,i}\right\}_{i=1}^{N_t}
 $$
-and $X_h^{:t}$, $Y^{:t}$, $Y_m^{:t}$ be defined analogously represent the "flattened"
-past random variables in the processes.
+and $X_h^{:t}$, $X^{:t}$, $Y^{:t}$, $Y_m^{:t}$ be defined analogously
+represent the "flattened" past random variables in the processes.
 
 The three canonical cases of missingness are Missing Completely at Random (MCAR),
 Missing At Random (MAR) and Missing Not At Random (MNAR). The first case
@@ -293,12 +298,17 @@ $$
 \mathbb{P}\left(Z^{(t)} = r \middle | Y^{:t}, X_m^{:t}, X_h^{:t} \right) =
 \mathbb{P}\left(Z^{(t)} = r | X_m^{:t} \right)
 $${#eq-mar-only-model}
-Note that this definition varies from the usual condition in the literature, i.e.
+Note that even though this definition is conceptionally the same as in many
+other sources, it should not be confused with 
 $$
-\mathbb{P}\left(Z^{(t)} = r \middle | Y^{:t}, X_m^{:t}, X_h^{:t}\right)=
-\mathbb{P}\left(Z^{(t)} = r \middle | X_m^{:t}, X_h^{:t}\right).
+\mathbb{P}\Big(
+    Z^{(t)} = r \Big | Y^{:t},
+    \underbrace{X_m^{:t}, X_h^{:t}}_{X^{:t}}
+\Big)
+=
+\mathbb{P}\left(Z^{(t)} = r \middle | X_m^{:t}, X_h^{:t}\right),
 $${#eq-mar-all-x}
-which can also be a valid definition of MAR but with a different nuance.
+which could also be a valid definition of MAR but with a different nuance.
 
 @eq-mar-all-x is a valid definition of MAR in the sense that a sample
 composed of $Z^{:t}, Y^{:t}, X_m^{:t}, X_h^{:t}$ would be MAR, and specially
@@ -307,7 +317,9 @@ using a MAR definition like @eq-mar-all-x would imply that a scoring function
 $s_t$ does not get trained on MAR data, as 
 $Z^{(t)} | X_m^{:t} \, \cancel{\perp\!\!\!\perp} \, Y^{:t}$. As RI aims to reduce
 or eliminate the sample bias to get an unbiased score function, it makes sense
-to focus on the bias that does concern $s_t$.
+to focus on the bias that does concern $s_t$. Furthermore, @eq-mar-all-x is pretty
+much a trivial statement considering the definition of $Z^{(t)}$ in 
+@eq-z-t-as-measurable-function
 
 If not only @eq-mar-only-model is fulfilled, but we also have no missing
 variable bias, i.e. $f_l=0$ (there are no latent factors also determining
@@ -315,17 +327,39 @@ $Y$) as well, Maximum Likelihood estimators are
 also consistent under this kind of missingness mechanism
 [@littleAndRubingAnalysisWithMissingData], even if the model family is
 wrong, as Quasi-Maximum-Likelihood consistency results would
-also apply, which means that the missing data mechanism is ignorable. Of course
+also apply, rendering ignorable^[
+    Ignorable in the sense of @rubinMissingMechanismsOriginal, i.e.
+    one can train the model using only the data using only complete
+    cases and still obtain consistent or unbiased results.
+] the missing data mechanism. Of course
 if an estimator is consistent, then it also generates an unbiased scoring
-function in the sense of this thesis. This argument
-is often used by FIs and critics of RI to defend the usage of classical
-statistical estimators like the logistic regression without needing to
-consider the data missingness, either assuming $f_l=0$ or that the model
-features contain enough information of the latent factors, so that the
-missing variable bias is negligible. If the FI collects enough data of
-the applicant, this might be a somewhat credible claim, but is it really
-enough to just ignore the missingness mechanism? Later the hypothesis checking
-section will give some perspective on this regard.
+function in the sense of this thesis. This argument is often used by FIs
+and critics of RI to defend the usage of classical statistical estimators
+like the logistic regression without needing to consider the data missingness,
+either assuming $f_l=0$ or that the model features contain enough information
+of the latent factors, so that the missing variable bias is negligible.
+If the FI collects enough data of the applicant, this might be a somewhat
+credible claim, but is it really enough to just ignore the missingness mechanism?
+Later the hypothesis checking section (@sec-empirical-hypothesis-checking) will
+give some perspective on this regard.
+
+The last case (MNAR) can be written as a negation of @eq-mar-only-model, i.e.
+$$
+\mathbb{P}\left(Z^{(t)} = r \middle | Y^{:t}, X_m^{:t}, X_h^{:t} \right) \neq
+\mathbb{P}\left(Z^{(t)} = r | X_m^{:t} \right)
+$${#eq-mnar-only-model}
+which can be intuitively understood as the acceptance decision being driven by
+factors not considered by $s_t$ but upon which $Y^{:t}$ does depend on. Note that
+the dependence of $Y^{:t}$ to $X_h^{:t}$ is necessary for MNAR-ness. Otherwise
+such a factor 
+
+^[
+    Note: As already noted before @eq-z-t-as-measurable-function and 
+    @eq-y-as-measurable-function
+
+]
+
+occurs when the decision on $Z^{(t)}$ is drive
 
 
 ## The data perspective
