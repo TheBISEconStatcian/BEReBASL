@@ -357,7 +357,12 @@ the decision (e.g. does the applicant have blond hair?), decisions overwritten b
 this kind of factors would effectively render a MCAR sample, since in these cases
 $Z^{(t)}_i  \, \cancel{\perp\!\!\!\perp} \, \left\{Y^{:t}, X_m^{:t}\right\}$. This
 is the hardest case to solve, as the missing data cannot be ignored and still be able
-to train an unbiased scoring function.
+to train an unbiased scoring function.^[
+    Note: See that this definition of $X_h$ as RVs on which $Y$ depends upon is
+    related to the case discussion of @bansikCrook2007 on the variables sets to be used
+    for the acceptance-reject model and the default-repayment model. Such a discussion
+    is however not necessary here given the probabilistic model assumed in this thesis.
+]
 
 
 ## The data perspective
