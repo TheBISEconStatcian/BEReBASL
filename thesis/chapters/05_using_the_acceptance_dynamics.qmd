@@ -4,7 +4,7 @@
 
 ### Define Surprise, minimization of surprise
 
-### Evidence of hypothesis plausibility given the simulation grid results
+### Evidence of hypothesis plausibility given the simulation grid results {#sec-empirical-hypothesis-checking}
 
 ### Exact hypotheses
 
