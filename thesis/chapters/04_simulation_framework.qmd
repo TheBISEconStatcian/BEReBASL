@@ -15,10 +15,17 @@ from which the rest of the random variables get easily formulated. After
 defining each of the components an overview of the process as an algorithm
 is provided.
 
-## General Idea (CV based metric optimization, i.e. no cost awareness)
+## Accepts population
 
-## Classifiers definition
+## Decision function
 
-## Algorithm (includes exact definition of MNAR process)
+### Starting the loop: business rule
 
-## Precise DGP description and transparency
+### Scoring function estimation
+
+### CV based threshold
+
+### Hidden features overwrites
+
+## Acceptance loop algorithm
+
