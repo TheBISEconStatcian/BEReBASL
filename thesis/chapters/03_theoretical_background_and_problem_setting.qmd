@@ -206,33 +206,36 @@ with well-defined marginals as above.^[
 Furthermore I model the applicants population at each acceptance round
 $t \in \mathbf{T}$ as an i.i.d. family
 $$
-\left\{X_{m,i}^{(t)}, X_{h,i}^{(t)}, X_{l,i}^{(t)}, Y_{i}^{(t)}\right\}_{i=1}^{N_t}
+\left\{ \left(X_{m,i}^{(t)}, X_{h,i}^{(t)}, X_{l,i}^{(t)}, Y_{i}^{(t)} \right)\right\}_{i=1}^{N_t}
 $$
-where the probability measure of each random vector in the family is mutually
+where the probability measure of each tuple of random variables in the family is mutually
 absolutely continuous with respect to $\mathbb{P}_{X_m, X_h, X_l, Y}$. Meaning:
 the random variable resulting in the observation of each individual at every
 time step is assumed to be distributed as the model above and this distribution
 is time-invariant.
 
-
 Therefore, the only source of temporal dynamics relies on the acceptance decision.
-More specifically it arises from the estimation of $s_t$ since it depends strongly
-on the past realizations of $Y^{(t)}_m$. A closer look
-to @eq-y-m-t-as-measurable-function also shows that the time dependent part
-is originated through $Z^{(t)}$ itself. To make this very precise we need further
-notation closer to the actual DGP. Following a notation of families of independent
-identically distributed (i.i.d.) variables which should be well known from central
-limit theorems, we can write every one of these processes, with $P^{(t)}$ as placeholder
-for all the processes defined above.
-as
+More specifically it arises from the estimation of $s_t$. To do so we also need
+to define the joint distribution of the observable variables to the FI at each
+acceptance round as
 $$
-\left\{\left\{P^{(t)}_i\right\}_{i=1}^{N_t}\right\}_{t \in \mathbf{T}}, N_t \in \mathbb{N}
-$${#eq-process-definition-with-iid-famlies}
-where each family $\left\{P^{(t)}_i\right\}_{i=1}^{N_t}$ is i.i.d., which shows
-the next assumption in this modelling, i.i.d.-ness in this sense.
+\left(X_m, X_h, Y_m^{(t)} , Z^{(t)}\right) \sim \mathbb{P}_{X_m, X_h, Y_m^{(t)} , Z^{(t)}},
+$$
+which also has well-defined marginals as above.^[
+    Of course, the marginals of the $X_m$ and $X_h$ components correspond to the
+    marginals according to $\mathbb{P}_{X_m, X_h, X_l, Y}$.
+]
+From this defining the observable part of the applicant's distribution is
+straightforward:
+$$
+\left\{\left(X_{m,i}^{(t)}, X_{h,i}^{(t)}, Y_{m, i}^{(t)}, Z^{(t)}_i \right)\right\}_{i=1}^{N_t},
+$$
+which is an i.i.d. family for each fixed acceptance round, whose joint distribution
+is not time invariant. Further there exists a time dependence of $Y_{m, i}^{(t)}$ and 
+$Z^{(t)}_i$ to the RVs of past acceptance rounds.
 
-Then we can precisely define the random estimator $\hat{s}_t$ for $t \in \mathbf{T} \setminus \{0\}$ 
-through which $s_t$ gets estimated as a measurable function in the form
+With this family we can define the random estimator $\hat{s}_t$ for $t \in \mathbf{T} \setminus \{0\}$
+as a measurable (regression) function defining the form of the time dependence.
 $$
 \hat{s}_t : \left(  
     \mathop{\Large\times}\limits_{\tau = 0}^{t-1} \mathop{\Large\times}\limits_{i=1}^{N_\tau} \chi_{m,i}^{(t)} \times \upsilon_{m,i}^{(t)}, \,
@@ -243,10 +246,12 @@ $$
 with $\left(\chi_{m,i}^{(t)}, \mathcal{X}_{m,i}^{(t)}\right)$ and 
 $\left(\upsilon_{m,i}^{(t)}, \mathcal{Y}_{m,i}^{(t)}\right)$ the state spaces of
 $X^{(t)}_{m, i}$ and $Y^{(t)}_{m, i}$ respectively. $\left(\mathbf{\Theta}, \Theta \right)$
-is the measurable space where the parameters^[Note that this does not assume a space with
-"static dimensionality" so that non-parametric models like XGB with variable amount of trees
-could not be represented by it. In this sense this understanding of parameter differs from
-@rubinMissingMechanismsOriginal and all the Maximum Likelihood literature.] $\theta$ of
+is the measurable space where the parameters^[
+    Note that this does not assume a space with "static dimensionality" so that
+    non-parametric models like XGB with variable amount of trees could not be
+    represented by it. In this sense this understanding of parameter differs from 
+    @rubinMissingMechanismsOriginal and all the Maximum Likelihood literature.
+] $\theta$ of
 $s_t$ are defined. Although for $d$ a similar definition could be done, it is assumed
 in this thesis that given $s_t$, $d$ does not change across $t$.
 
@@ -256,7 +261,7 @@ Here the data missingness mechanism which gets recorded by $Y^{(t)}_m$ gets form
 according to the canonical definitions of @littleAndRubingAnalysisWithMissingData. Let
 in this section $t \in \mathbf{T} \setminus \{0\}$ be arbitrary but fixed,
 $$
-X_m^{:t} = \bigcup_{\tau \in \mathbf{T} \setminus \{T\}}
+X_m^{:t} = \bigcup_{\tau = 0}^{t-1}
  \left\{X^{(t)}_{m,i}\right\}_{i=1}^{N_t}
 $$
 and $X_h^{:t}$, $X^{:t}$, $Y^{:t}$, $Y_m^{:t}$ be defined analogously
@@ -356,9 +361,3 @@ to train an unbiased scoring function.^[
     for the acceptance-reject model and the default-repayment model. Such a discussion
     is however not necessary here given the probabilistic model assumed in this thesis.
 ]
-
-
-## The data perspective
-
-The RVs are helpful to model how generally the dependence structure in
-the system looks like. However, we also need a notation for the realizations.
