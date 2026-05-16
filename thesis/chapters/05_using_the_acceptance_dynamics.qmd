@@ -1,17 +1,42 @@
 # Using the acceptance dynamics
 
+With a defined simulation framework, one can begin to formulate
+precisely how to use the acceptance dynamics. I base my belief
+on the possibility to take advantage of these dynamics on a hypothesis
+which gets first presented. Based on this hypothesis one can formulate
+a scenario, using that we have full knowledge of the applicants' population,
+which allows gathering evidence on the plausibility of such hypothesis.
+Having delivered this evidence, a reward signal is defined along to a formulation
+of the RI problem as a reinforcement learning problem.
+
 ## Hypothesis definition (Surprise, minimization of surprise)
 
 ### Define Surprise, minimization of surprise
 
-### Evidence of hypothesis plausibility given the simulation grid results {#sec-empirical-hypothesis-checking}
+### Formulating the hypothesis
 
-### Exact hypotheses
+### Checking the hypothesis
 
-## Reward Signal
+#### Classifiers definition
 
-### Definition as global reward signal
+#### Evidence of hypothesis plausibility given the simulation grid results {#sec-empirical-hypothesis-checking}
 
-### Data-Structure for the agent (Batch of batches)
+## RI as a dynamic RL problem
 
-## RL Agent (method used, architecture, metaparameters)
+### Reward signal definition
+
+### Problem formulation
+
+## RL Agent
+
+### Explaining the Data-Structure
+
+### RL-method used
+
+#### Why this method?
+
+#### Presentation of the architecture
+
+#### Training loop algorithm
+
+#### Transparency on metaparameters
