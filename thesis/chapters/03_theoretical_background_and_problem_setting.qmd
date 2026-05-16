@@ -243,12 +243,12 @@ $$
 \hat{s}_t : \left(  
     \mathop{\Large\times}\limits_{\tau = 0}^{t-1} \mathop{\Large\times}\limits_{i=1}^{N_\tau} \chi_{m,i}^{(t)} \times \upsilon_{m,i}^{(t)}, \,
     \bigotimes_{\tau = 0}^{t-1} \bigotimes_{i=1}^{N_\tau} \mathcal{X}_{m,i}^{(t)} \otimes \mathcal{Y}_{m,i}^{(t)}
-\right) \to \left(\Theta, \mathcal{\Theta} \right)
+\right) \to \left(\mathbf{\Theta}, \Theta \right)
 $$
 
 with $\left(\chi_{m,i}^{(t)}, \mathcal{X}_{m,i}^{(t)}\right)$ and 
 $\left(\upsilon_{m,i}^{(t)}, \mathcal{Y}_{m,i}^{(t)}\right)$ the state spaces of
-$X^{(t)}_{m, i}$ and $Y^{(t)}_{m, i}$ respectively. $\left(\Theta, \mathcal{\Theta} \right)$
+$X^{(t)}_{m, i}$ and $Y^{(t)}_{m, i}$ respectively. $\left(\mathbf{\Theta}, \Theta \right)$
 is the measurable space where the parameters^[Note that this does not assume a space with
 "static dimensionality" so that non-parametric models like XGB with variable amount of trees
 could not be represented by it. In this sense this understanding of parameter differs from
@@ -348,21 +348,20 @@ $$
 \mathbb{P}\left(Z^{(t)} = r \middle | Y^{:t}, X_m^{:t}, X_h^{:t} \right) \neq
 \mathbb{P}\left(Z^{(t)} = r | X_m^{:t} \right)
 $${#eq-mnar-only-model}
-which can be intuitively understood as the acceptance decision being driven by
-factors not considered by $s_t$ but upon which $Y^{:t}$ does depend on. Note that
-the dependence of $Y^{:t}$ to $X_h^{:t}$ is necessary for MNAR-ness. Otherwise
-such a factor 
-
-^[
+which can be intuitively understood as the acceptance decision being (also) driven by
+factors not considered by $s_t$ but upon which $Y^{:t}$ does depend on. This can be
+characterized with $f_h > 0$. Note that the dependence of $Y^{:t}$ to $X_h^{:t}$ is
+necessary for MNAR-ness. If one would use some factor independent of $$Y^{:t}$ for
+the decision (e.g. does the applicant have blond hair?), decisions overwritten by
+this kind of factors would effectively render a MCAR sample, since in these cases
+$Z^{(t)}_i  \, \cancel{\perp\!\!\!\perp} \, \left\{Y^{:t}, X_m^{:t}\right\}$.^[
     Note: As already noted before @eq-z-t-as-measurable-function and 
     @eq-y-as-measurable-function
 
 ]
 
-occurs when the decision on $Z^{(t)}$ is drive
-
 
 ## The data perspective
 
 The RVs are helpful to model how generally the dependence structure in
-the system looks like. However we also need a notation for the realizations.
+the system looks like. However, we also need a notation for the realizations.
