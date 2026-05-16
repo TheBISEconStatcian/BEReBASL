@@ -32,7 +32,7 @@ opinion on naming.
 - [Adapting the CV-Based acceptance loop script into a CLI ready script following the original base acceptance loop](https://chatgpt.com/share/69f5c2c3-30fc-83eb-8420-c413d840d6eb)
 - [Weight the option of tensorizing AU-ROC calculation](https://chatgpt.com/share/69f5c31f-8198-83eb-8ce5-ee4925f22b88)
 - [Help with index gymnastics in batched au-roc development](https://chatgpt.com/share/69f5c364-7318-83eb-8813-2239f056b40f)
-- [Redaction of the description of the RI problem](https://chatgpt.com/share/69f9b0c6-b730-8326-819d-40c9c124184c).
+- [Redaction of the description in words and a stochastic model of the RI problem](https://chatgpt.com/share/69f9b0c6-b730-8326-819d-40c9c124184c).
   Considering that using AI for writting can come close to plagiarism, a very close commit-wise book-keeping is kept here
   to show the *exact* extent of the usage
   - [49dbafd514d89c967b0e0040fbcf1ce826b137b8](https://github.com/TheBISEconStatcian/BEReBASL/commit/49dbafd514d89c967b0e0040fbcf1ce826b137b8):
@@ -48,6 +48,8 @@ opinion on naming.
     Help on lowering redundancy and fluency of the dynamic description of the acceptance process.
   - [9b87490cafc907cac86fea25a4dcd69918f9e553](https://github.com/TheBISEconStatcian/BEReBASL/commit/9b87490cafc907cac86fea25a4dcd69918f9e553):
     Refinements to the corrections of the last bullet point.
+  - [2d6c568915c0cbc270d41ccf655eab01846d50f4](https://github.com/TheBISEconStatcian/BEReBASL/commit/2d6c568915c0cbc270d41ccf655eab01846d50f4):
+    Corrections of the measure theoretic description, with which I agreed quickly.
 - [Metaprompting the MNAR adaptation for Claude](https://chatgpt.com/share/6a0165fb-7310-83eb-a67d-ef86851dd78d)
 
 ## Links to `Copilot` usage
