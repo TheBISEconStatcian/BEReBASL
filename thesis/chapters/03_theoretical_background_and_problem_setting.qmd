@@ -90,7 +90,7 @@ probability space $(\Omega, \mathcal{F}, \mathbb{P})$. Define with
 $j \in \{m, h, l\}$
 $$
 X_j: (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f_j}, \mathcal{B}(\mathbb{R}^{f_j}) \right), \quad
-f_j \in \mathbb{N}_o
+f_j \in \mathbb{N}_0
 $$
 as the RVs generating the applicant's model features, hidden features and latent factors^[
     Note that even though not all features are per se continuous and therefore naturally
@@ -98,8 +98,8 @@ as the RVs generating the applicant's model features, hidden features and latent
 ]. Further see that the case $f_j = 0$^[Note: $\mathbb{R}^{0} = \{()\}$ is a singleton set
 containing the empty tuple and $\mathcal{B}\left(\mathbb{R}^{0}\right) = \{\emptyset, \{()\}\}$]
 represents a model where $X_j$ always returns an empty tuple, meaning that there are no features
-of type $j$. I assume that at least $f_m > 0$. The joint distribution of both features sets
-observable by the FI is characterized by
+of type $j$. I assume that at least $f_m > 0$. The joint observable feature representation is
+given by
 $$
 X : (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f}, \mathcal{B}\left(\mathbb{R}^{f} \right) \right), f:=f_m + f_h
 $$
@@ -172,12 +172,11 @@ Y(\omega) = \begin{cases}
 \end{cases}
 $${#eq-y-as-measurable-function}
 
-with $\iota$ a 
-$\left(\mathcal{B}\left(\mathbb{R^{f_m}}\right) \otimes \mathcal{B}\left(\mathbb{R^{f_h}} \right)\right)$
+with $\iota$ a $\bigotimes_{j \in \{m, h, l\}} \mathcal{B}\left(\mathbb{R^{f_j}}\right)$
 -$2^{E_Y}$ measurable function and
 $$
-\epsilon(\omega) : (\Omega, \mathcal{F}) \to \left(E_\epsilon, 2^{E_\epsilon} \right), \quad
-\varepsilon(\omega) : (\Omega, \mathcal{F}) \to \left(E_Y, 2^{E_Y} \right)
+\epsilon : (\Omega, \mathcal{F}) \to \left(E_\epsilon, 2^{E_\epsilon} \right), \quad
+\varepsilon : (\Omega, \mathcal{F}) \to \left(E_Y, 2^{E_Y} \right)
 $$
 
 the RVs defining whether an external effect overrides the "usual behavior"
@@ -318,11 +317,11 @@ using a MAR definition like @eq-mar-all-x would imply that a scoring function
 $s_t$ does not get trained on MAR data, as 
 $Z^{(t)} | X_m^{:t} \, \cancel{\perp\!\!\!\perp} \, Y^{:t}$. Considering that RI aims to reduce
 or eliminate the sample bias to get an unbiased score function, it makes sense
-to focus on the bias that does concern $s_t$. Furthermore, @eq-mar-all-x is pretty
-much a trivial statement considering the definition of $Z^{(t)}$ in 
-@eq-z-t-as-measurable-function.
+to focus on the bias that does concern $s_t$. Furhter, within the present 
+framework, @eq-mar-all-x follows directly form the definition of $Z^{(t)}$ -see 
+@eq-z-t-as-measurable-function- as a measurable function of $X_m$ and $X_h$.
 
-If not only @eq-mar-only-model is fulfilled, but we also have no missing
+If not only @eq-mar-only-model is fulfilled, but we also have no omitted
 variable bias, i.e. $f_l=0$ (there are no latent factors also determining
 $Y$) as well, Maximum Likelihood estimators are
 also consistent under this kind of missingness mechanism
@@ -338,7 +337,7 @@ function in the sense of this thesis. This argument is often used by FIs
 and critics of RI to defend the usage of classical statistical estimators
 like the logistic regression without needing to consider the data missingness,
 either assuming $f_l=0$ or that the model features contain enough information
-of the latent factors, so that the missing variable bias is negligible.
+of the latent factors, so that the omitted variable bias is negligible.
 If the FI collects enough data of the applicant, this might be a somewhat
 credible claim, but is it really enough to just ignore the missingness mechanism?
 Later the hypothesis checking section (@sec-empirical-hypothesis-checking) will
