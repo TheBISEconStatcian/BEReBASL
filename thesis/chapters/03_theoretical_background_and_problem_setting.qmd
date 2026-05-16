@@ -196,7 +196,13 @@ $$
 (X_m, X_h, X_l, Y) \sim \mathbb{P}_{X_m, X_h, X_l, Y}
 $$
 to be defined over the product space of the state spaces of the random variables,
-with well-defined marginals as above.
+with well-defined marginals as above.^[
+    In other words, the joint distribution can be disintegrated in marginals
+    which correspond to the distributions defined above. This assumption
+    allows for conveniently work with Bayesian approaches if needed, as it
+    implies the existence of conditional kernels with few further rather
+    formal requirements [@Pollard_2001, Ch. 4].
+]
 Furthermore I model the applicants population at each acceptance round
 $t \in \mathbf{T}$ as an i.i.d. family
 $$
