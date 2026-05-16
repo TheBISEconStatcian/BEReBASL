@@ -191,38 +191,26 @@ useful or in some sense easier, as the missingness mechanism would render "close
 ignorable". An exact formulation of this idea is given in @sec-formalization-missing-data-mechanism
 after @eq-mnar-only-model.
 
-From these variables we can generate a description of the acceptance decision
-and the applicants' data as stochastic processes, in order to describe the
-sequential and dynamic nature of the system. With $P$ a placeholder for
-$X_m, X_h, Y \epsilon$ and $\varepsilon$ we can define the corresponding
-stochastic processes^[Understood as a collection of random variables indexed by
-a time parameter [@Korosteleva2022Chapter1], e.g. $\{X_t, \, t \in \mathbf{\tilde{T}}\}$] as
+Without much need of further assumptions we can define the joint distribution
 $$
-\left\{P^{(t)} \right\}_{t \in \mathbf{T}}, \quad P^{(t)} = P
+(X_m, X_h, X_l, Y) \sim \mathbb{P}_{X_m, X_h, X_l, Y}
 $$
-and of course also $\left\{Z^{(t)}\right\}_{t \in \mathbf{T}}$ and 
-$\left\{Y^{(t)}_m\right\}_{t \in \mathbf{T}}$.
+to be defined over the product space of the state spaces of the random variables,
+with well-defined marginals as above.
+Furthermore I model the applicants population at each acceptance round
+$t \in \mathbf{T}$ as an i.i.d. family
+$$
+\left\{X_{m,i}^{(t)}, X_{h,i}^{(t)}, X_{l,i}^{(t)}, Y_{i}^{(t)}\right\}_{i=1}^{N_t}
+$$
+where the probability measure of each random vector in the family is mutually
+absolutely continuous with respect to $\mathbb{P}_{X_m, X_h, X_l, Y}$. Meaning:
+the random variable resulting in the observation of each individual at every
+time step is assumed to be distributed as the model above and this distribution
+is time-invariant.
 
-This shows that all the corresponding processes for these variables but $Z^{(t)}$
-and $Y^{(t)}_m$ are assumed to be *strictly* stationary^[A strictly stationary process
-is characterized by a collection of random variables, whereby at each time step the
-distribution remains constant, i.e. following the example of the last footnote: 
-$\forall t, s \in \mathbf{\tilde{T}}:$ $X_s$ and $X_t$ are equal in distribution].
-Only $\left\{Z^{(t)}\right\}_{t \in \mathbf{T}}$ and therefore 
-$\left\{Y^{(t)}_m\right\}_{t \in \mathbf{T}}$. would
-be non-stationary measurable maps of strictly stationary processes. In other
-words I assume that the dynamics regarding the applicants population stay constant
-over acceptance rounds, only the scoring and decision functions change over time
-causing the non-stationarity.^[Note: Alternatively
-$\left\{Z^{(t)}\right\}_{t \in \mathbf{T}}$ could be regarded (by changing the 
-definition of the time index) as an approximately locally stationary process over all
-realizations of the "acceptance population random variable", which could open the
-possibility of adapting the ideas of the method presented in
-@dahlhaus2012locallystationaryprocesses in combination with the insights of this
-thesis.]
 
-With the current formal description of the processes is however not yet fully clear
-how the dependence to past states looks like. It comes from $s_t$, since they depend
+Therefore, the only source of temporal dynamics relies on the acceptance decision.
+More specifically it arises from the estimation of $s_t$ since it depends strongly
 on the past realizations of $Y^{(t)}_m$. A closer look
 to @eq-y-m-t-as-measurable-function also shows that the time dependent part
 is originated through $Z^{(t)}$ itself. To make this very precise we need further
