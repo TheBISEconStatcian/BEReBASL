@@ -239,28 +239,27 @@ estimation of $s_t$. Further consider that the marginal kernels of the features 
 time invariant, the distributional shifts affect only $Z^{(t)}$ and therefore $Y_{m}^{(t)}$.
 
 This estimation of $s_t$ can and should be further formalized to be transparent
-on the further assumptions.
-
-With this family we can define the random estimator $\hat{s}_t$ for $t \in \mathbf{T} \setminus \{0\}$
-as a measurable (regression) function defining the form of the time dependence.
+on the further assumptions. Let
 $$
-\hat{s}_t : \left(  
-    \mathop{\Large\times}\limits_{\tau = 0}^{t-1} \mathop{\Large\times}\limits_{i=1}^{N_\tau} \chi_{m,i}^{(t)} \times \upsilon_{m,i}^{(t)}, \,
-    \bigotimes_{\tau = 0}^{t-1} \bigotimes_{i=1}^{N_\tau} \mathcal{X}_{m,i}^{(t)} \otimes \mathcal{Y}_{m,i}^{(t)}
-\right) \to \left(\mathbf{\Theta}, \Theta \right)
+O_{:t} := \mathop{\Large\times}\limits_{\tau = 0}^{t-1} \mathop{\Large\times}\limits_{i=1}^{N_\tau}
+        \mathbb{R}^{f_m} \times E_{Y_m}
 $$
-
-with $\left(\chi_{m,i}^{(t)}, \mathcal{X}_{m,i}^{(t)}\right)$ and 
-$\left(\upsilon_{m,i}^{(t)}, \mathcal{Y}_{m,i}^{(t)}\right)$ the state spaces of
-$X^{(t)}_{m, i}$ and $Y^{(t)}_{m, i}$ respectively. $\left(\mathbf{\Theta}, \Theta \right)$
-is the measurable space where the parameters^[
-    Note that this does not assume a space with "static dimensionality" so that
-    non-parametric models like XGB with variable amount of trees could not be
-    represented by it. In this sense this understanding of parameter differs from 
-    @rubinMissingMechanismsOriginal and all the Maximum Likelihood literature.
-] $\theta$ of
-$s_t$ are defined. Although for $d$ a similar definition could be done, it is assumed
-in this thesis that given $s_t$, $d$ does not change across $t$.
+with $t \in \mathbf{T} \setminus \{0\}$ denote the product of the underlying
+sets of the state spaces of all past model features and the observable repayment
+outcomes. $\mathcal{O}_{:t}$ denotes then the corresponding product sigma algebra.
+For $t=0$, $s_t$ is assumed to come from some external source (experts opinion, scoring
+trained on other data). For $t>0$, $s_t$ is assumed to be generated through a measurable
+learning procedure
+$$
+a_t : \left(O_{:t}, \mathcal{O}_{:t}\right) \to \left(S_t, \mathcal{S}_t \right)
+$$
+where the codomain denotes the measurable space of all admissible score functions for
+time $t$. See that $a_t$ does not restrict $s_t$ to always be estimated
+by some specific procedure, such that at one acceptance round could be based on a
+XGB-estimated classification forest and in another by a support vector machine.
+Finally it should be noted that although for $d$ a similar definition of some decision
+modeling procedure could be done, it is assumed in this thesis that given $s_t$,
+$d$ does not change across $t$, as in this thesis that will not be the case.
 
 ## Formalization of the missing data mechanism {#sec-formalization-missing-data-mechanism}
 
