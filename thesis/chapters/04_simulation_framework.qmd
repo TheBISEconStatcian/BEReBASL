@@ -15,7 +15,7 @@ from which the rest of the random variables get easily formulated. After
 defining each of the components an overview of the process as an algorithm
 is provided.
 
-## Accepts population
+## Accepts population {#sec-acc-population-simulation}
 
 ## Decision function
 
