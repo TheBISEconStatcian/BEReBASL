@@ -191,28 +191,28 @@ useful or in some sense easier, as the missingness mechanism would render "close
 ignorable". An exact formulation of this idea is given in @sec-formalization-missing-data-mechanism
 after @eq-mnar-only-model.
 
-Without much need of further assumptions we can define the joint distribution
+Now let the joint distribution of the applicants be given by
 $$
 (X_m, X_h, X_l, Y) \sim \mathbb{P}_{X_m, X_h, X_l, Y}
 $$
-to be defined over the product space of the state spaces of the random variables,
-with well-defined marginals as above.^[
-    In other words, the joint distribution can be disintegrated in marginals
-    which correspond to the distributions defined above. This assumption
-    allows for conveniently work with Bayesian approaches if needed, as it
-    implies the existence of conditional kernels with few further rather
-    formal requirements [@Pollard_2001, Ch. 4].
+be defined over the product space of the state spaces of the random variables,
+with marginals as above.^[
+    See that all features have Borel state spaces, such that their product
+    is also a Borel space, and as such regularity conditions are fulfilled.
+    The product of a Borel space equipped with a probability measure with a
+    finite sigma algebra $\left(2^{E_y}\right)$ allows for the product measure
+    of both spaces to fulfill regularity conditions for the existence of the
+    joint distribution and the kernel of marginal distributions
+    [@Pollard_2001, Ch. 4 - Theorem 9]
 ]
-Furthermore I model the applicants population at each acceptance round
+Furthermore I model the applicants' population at each acceptance round
 $t \in \mathbf{T}$ as an i.i.d. family
 $$
 \left\{ \left(X_{m,i}^{(t)}, X_{h,i}^{(t)}, X_{l,i}^{(t)}, Y_{i}^{(t)} \right)\right\}_{i=1}^{N_t}
 $$
-where the probability measure of each tuple of random variables in the family is mutually
-absolutely continuous with respect to $\mathbb{P}_{X_m, X_h, X_l, Y}$. Meaning:
-the random variable resulting in the observation of each individual at every
-time step is assumed to be distributed as the model above and this distribution
-is time-invariant.
+where each tuple of random variables in the family is distributed according
+to $\mathbb{P}_{X_m, X_h, X_l, Y}$. Meaning the features and repayment
+outcome variables of the applicants follow a time-invariant distribution
 
 Therefore, the only source of temporal dynamics relies on the acceptance decision.
 More specifically it arises from the estimation of $s_t$. To do so we also need
@@ -223,16 +223,23 @@ $$
 $$
 which also has well-defined marginals as above.^[
     Of course, the marginals of the $X_m$ and $X_h$ components correspond to the
-    marginals according to $\mathbb{P}_{X_m, X_h, X_l, Y}$.
+    marginals according to $\mathbb{P}_{X_m, X_h, X_l, Y}$. Argumentation for
+    regularity is analogous to the former.
 ]
 From this defining the observable part of the applicant's distribution is
 straightforward:
 $$
 \left\{\left(X_{m,i}^{(t)}, X_{h,i}^{(t)}, Y_{m, i}^{(t)}, Z^{(t)}_i \right)\right\}_{i=1}^{N_t},
 $$
-which is an i.i.d. family for each fixed acceptance round, whose joint distribution
-is not time invariant. Further there exists a time dependence of $Y_{m, i}^{(t)}$ and 
-$Z^{(t)}_i$ to the RVs of past acceptance rounds.
+which, conditional on $s_t$, forms an i.i.d. family for each fixed acceptance
+round. This conditional i.i.d. characteristic already hints that across acceptance
+rounds the distribution of each family may (and likely does) change. These changes
+are not exogenous, but dependent on the families of earlier acceptance rounds through
+estimation of $s_t$. Further consider that the marginal kernels of the features remain
+time invariant, the distributional shifts affect only $Z^{(t)}$ and therefore $Y_{m}^{(t)}$.
+
+This estimation of $s_t$ can and should be further formalized to be transparent
+on the further assumptions.
 
 With this family we can define the random estimator $\hat{s}_t$ for $t \in \mathbf{T} \setminus \{0\}$
 as a measurable (regression) function defining the form of the time dependence.
