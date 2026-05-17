@@ -195,15 +195,13 @@ Now let the joint distribution of the applicants be given by
 $$
 (X_m, X_h, X_l, Y) \sim \mathbb{P}_{X_m, X_h, X_l, Y}
 $$
-be defined over the product space of the state spaces of the random variables,
+defined over the product space of the state spaces of the random variables,
 with marginals as above.^[
-    See that all features have Borel state spaces, such that their product
-    is also a Borel space, and as such regularity conditions are fulfilled.
-    The product of a Borel space equipped with a probability measure with a
-    finite sigma algebra $\left(2^{E_y}\right)$ allows for the product measure
-    of both spaces to fulfill regularity conditions for the existence of the
-    joint distribution and the kernel of marginal distributions
-    [@Pollard_2001, Ch. 4 - Theorem 9]
+    Since all feature spaces are Borel spaces, their finite product is also
+    a Borel space. As $\left(Y, 2^{E_y}\right)$ is finite, the resulting
+    product space satisfies the regularity assumptions ensuring the existence
+    of regular conditional probability kernels [@Pollard_2001, Ch. 4, Theorem 9],
+    which will later be required for conditional modeling arguments.
 ]
 Furthermore I model the applicants' population at each acceptance round
 $t \in \mathbf{T}$ as an i.i.d. family
@@ -211,8 +209,8 @@ $$
 \left\{ \left(X_{m,i}^{(t)}, X_{h,i}^{(t)}, X_{l,i}^{(t)}, Y_{i}^{(t)} \right)\right\}_{i=1}^{N_t}
 $$
 where each tuple of random variables in the family is distributed according
-to $\mathbb{P}_{X_m, X_h, X_l, Y}$. Meaning the features and repayment
-outcome variables of the applicants follow a time-invariant distribution
+to $\mathbb{P}_{X_m, X_h, X_l, Y}$. Meaning that the features and repayment
+outcomes of applicants follow a time-invariant distribution.
 
 Therefore, the only source of temporal dynamics relies on the acceptance decision.
 More specifically it arises from the estimation of $s_t$. To do so we also need
@@ -221,7 +219,7 @@ acceptance round as
 $$
 \left(X_m, X_h, Y_m^{(t)} , Z^{(t)}\right) \sim \mathbb{P}_{X_m, X_h, Y_m^{(t)} , Z^{(t)}},
 $$
-which also has well-defined marginals as above.^[
+which also has marginals defined as above.^[
     Of course, the marginals of the $X_m$ and $X_h$ components correspond to the
     marginals according to $\mathbb{P}_{X_m, X_h, X_l, Y}$. Argumentation for
     regularity is analogous to the former.
@@ -235,17 +233,18 @@ which, conditional on $s_t$, forms an i.i.d. family for each fixed acceptance
 round. This conditional i.i.d. characteristic already hints that across acceptance
 rounds the distribution of each family may (and likely does) change. These changes
 are not exogenous, but dependent on the families of earlier acceptance rounds through
-estimation of $s_t$. Further consider that the marginal kernels of the features remain
-time invariant, the distributional shifts affect only $Z^{(t)}$ and therefore $Y_{m}^{(t)}$.
+estimation of $s_t$. Further consider that the probability kernels governing the feature
+variables remain time invariant; the distributional shifts affect only
+$Z^{(t)}$ and therefore $Y_{m}^{(t)}$.
 
 This estimation of $s_t$ can and should be further formalized to be transparent
 on the further assumptions. Let
 $$
 O_{:t} := \mathop{\Large\times}\limits_{\tau = 0}^{t-1} \mathop{\Large\times}\limits_{i=1}^{N_\tau}
-        \mathbb{R}^{f_m} \times E_{Y_m}
+        \left(\mathbb{R}^{f_m} \times E_{Y_m^{(\tau)}} \right)
 $$
 with $t \in \mathbf{T} \setminus \{0\}$ denote the product of the underlying
-sets of the state spaces of all past model features and the observable repayment
+sets of all past model features and the observable repayment
 outcomes. $\mathcal{O}_{:t}$ denotes then the corresponding product sigma algebra.
 For $t=0$, $s_t$ is assumed to come from some external source (experts opinion, scoring
 trained on other data). For $t>0$, $s_t$ is assumed to be generated through a measurable
@@ -255,11 +254,11 @@ a_t : \left(O_{:t}, \mathcal{O}_{:t}\right) \to \left(S_t, \mathcal{S}_t \right)
 $$
 where the codomain denotes the measurable space of all admissible score functions for
 time $t$. See that $a_t$ does not restrict $s_t$ to always be estimated
-by some specific procedure, such that at one acceptance round could be based on a
-XGB-estimated classification forest and in another by a support vector machine.
-Finally it should be noted that although for $d$ a similar definition of some decision
+by some specific procedure, such that the score function at one acceptance round could
+be based on a XGB classification forest and in another by a support vector machine.
+Finally, it should be noted that although for $d$ a similar definition of some decision
 modeling procedure could be done, it is assumed in this thesis that given $s_t$,
-$d$ does not change across $t$, as in this thesis that will not be the case.
+$d$ does not change across $t$, since such dynamics are not considered in this thesis.
 
 ## Formalization of the missing data mechanism {#sec-formalization-missing-data-mechanism}
 
