@@ -52,6 +52,9 @@ opinion on naming.
     Corrections of the measure theoretic description, with which I agreed quickly.
   - [620c571e853e00fecda86d541e0f41c7ce183571](https://github.com/TheBISEconStatcian/BEReBASL/commit/620c571e853e00fecda86d541e0f41c7ce183571) corrections on the reformulation of stochastic process.
   - [3b3efa4a239be16c7236a7bbbc0d09c9be49bc69](https://github.com/TheBISEconStatcian/BEReBASL/commit/3b3efa4a239be16c7236a7bbbc0d09c9be49bc69) Corrections on nuances of the family definitions, regularity conditions argument was inspired by ChatGPT and checked against with the given source.
+  - [0820738157fabcd501bb189b7457c47535bebaf5](https://github.com/TheBISEconStatcian/BEReBASL/commit/0820738157fabcd501bb189b7457c47535bebaf5) Polishing the learn algorithm measurability argument. (Apply suggestions)
+  - [357b737544a38a828e5e3ca42371004f646b1b9b](https://github.com/TheBISEconStatcian/BEReBASL/commit/357b737544a38a828e5e3ca42371004f646b1b9b) Apply redaction and precision remarks as discussed with
+  the chat.
 - [Metaprompting the MNAR adaptation for Claude](https://chatgpt.com/share/6a0165fb-7310-83eb-a67d-ef86851dd78d)
 
 ## Links to `Copilot` usage
