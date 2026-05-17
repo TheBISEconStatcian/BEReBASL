@@ -73,7 +73,7 @@ dimension must be considered when modeling the reject inference problem.
 To capture this, I group time into *acceptance rounds*, where each round begins
 with a re-estimation of the scorecard.
 
-## Measure theoretic description
+## Measure theoretic description {#sec-measure-theoretic-desc-ri-problem}
 
 Now with clear concepts from an economic perspective, we can define a stochastic
 model for the RI problem. I try to be rigorous with the formulation, since I
