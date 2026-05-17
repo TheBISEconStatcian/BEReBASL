@@ -15,7 +15,29 @@ from which the rest of the random variables get easily formulated. After
 defining each of the components an overview of the process as an algorithm
 is provided.
 
-## Accepts population {#sec-acc-population-simulation}
+## Applicants' population {#sec-app-population-simulation}
+
+Recalling section @sec-measure-theoretic-desc-ri-problem, according to
+the probabilistic model for the RL problem it suffices to define the
+distributions of the repayment outcome and the features to define the applicants'
+population. In this thesis I do not consider latent features (case $f_l = 0$).
+Unconditionally it holds $Y \sim Bernoulli(\pi_{b})$ with $\pi_b \in (0,1)$
+the probability of a bad applicant. The observable features vector $X$^[
+    Recall: $X = \begin{pmatrix}X_m \\ X_h \end{pmatrix}$
+]
+is defined as a Gaussian Mixture. With $o \in \{g, b\}$ the conditional distribution
+is given by
+$$
+X | Y=o \sim \mathcal{N}\left(
+    \begin{pmatrix}
+        \mu_{m, o} \\ \mu_{h, o}
+    \end{pmatrix},
+    \begin{pmatrix}
+        \Sigma_{m, o} & \Sigma_{mh, o} \\
+        \Sigma_{mh, o}^{\top} & \Sigma_{h, o}
+    \end{pmatrix}
+\right)
+$$
 
 ## Decision function
 
