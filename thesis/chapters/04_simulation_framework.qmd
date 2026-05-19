@@ -84,7 +84,7 @@ $$
 which of course corresponds to the probability mass function of a Bernoulli
 distributed variable, and
 $$
-p_X(x) = \int_{E_Y} p_{X, \tilde{Y}}(x, y) \, \mathbb{P}_{\tilde{Y}}(dy) = \pi_b \phi_{X_b}(x) + \pi_g \phi_{X_g}(x)
+p_X(x) = \int_{E_Y} p_{X, \tilde{Y}}(x, y) \, \#_{Y}(dy) = \pi_b \phi_{X_b}(x) + \pi_g \phi_{X_g}(x)
 $$
 
 and thus finally:
