@@ -45,7 +45,11 @@ sense, being a payer or non-payer can be viewed as an underlying property of the
 applicant, even though it is not directly observable at the time of the decision.
 Therefore, an applicant is called a *good applicant* if in the absence of an idiosyncratic
 shock, it would have resulted in a good loan (if the loan was accepted). A *bad
-applicant* is defined analogously.
+applicant* is defined analogously.^[
+    Although the usage of bad and good for the loan and for the applicants in
+    a slight different manner might feel confusing, it makes the mathematical
+    notation *much* easier.
+]
 
 This interpretation does not imply that the FI could construct a perfect prediction
 model. Even if all features—including hidden ones—were observable, the functional
