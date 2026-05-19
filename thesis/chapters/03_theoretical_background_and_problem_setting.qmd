@@ -171,8 +171,8 @@ In this spirit, $Y$ can also be modeled as
 $$
 \forall \omega \in \Omega:
 Y(\omega) = \begin{cases}
-    \varepsilon(\omega) & \epsilon(\omega) = \text{external effect} \\
-    \iota \left(X_m(\omega), X_h(\omega), X_l(\omega) \right) & \epsilon(\omega) = \text{no external effect}
+    \varepsilon(\omega) & \epsilon(\omega) = \text{idiosyncratic shock} \\
+    \iota \left(X_m(\omega), X_h(\omega), X_l(\omega) \right) & \epsilon(\omega) = \text{no idiosyncratic shock}
 \end{cases}
 $${#eq-y-as-measurable-function}
 
@@ -183,10 +183,13 @@ $$
 \varepsilon : (\Omega, \mathcal{F}) \to \left(E_Y, 2^{E_Y} \right)
 $$
 
-the RVs defining whether an external effect overrides the "usual behavior"
-and what the external effect ends up causing (e.g. if there is a shock in the labor
-market and whether it is positive or negative for the applicant). See that
-from @eq-y-as-measurable-function in connection with @eq-z-t-as-measurable-function
+the RVs defining whether an idiosyncratic shock occurs and its effect (e.g. if there
+is a shock in the labor market and whether it is positive or negative for the applicant).
+From this perspective is easy to precisely formulate the difference between a good/bad
+applicant and a loan. A loan is a bad loan if $Y = b$, an applicant is a bad applicant
+if $Y = b | \{\epsilon = \text{no external effect}\}$
+
+See that from @eq-y-as-measurable-function in connection with @eq-z-t-as-measurable-function
 the FI is modeled to be a "good selector" of features, since all the variables
 which it uses to make the acceptance decision are assumed to actually play a role
 in determining $Y$. Although it might sound like an unrealistic assumption, modeling
