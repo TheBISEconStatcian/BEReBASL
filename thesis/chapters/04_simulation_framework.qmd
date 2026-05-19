@@ -27,7 +27,7 @@ since it is less convoluted, is the object that the scorecard will
 attempt to model and is easily bridged to the idea of a good and bad applicants.
 It holds $\tilde{Y} \sim Bernoulli(\pi_{b})$ with $\pi_b \in (0,1)$
 the probability of a bad applicant. The observable features vector $X$^[
-    Recall from @eq-X-joint-observable-feats-vec: $X = \begin{pmatrix}X_m \\ X_h \end{pmatrix}$
+    Recall from @eq-X-joint-observable-feats-vec: $X = \left(X_m^{\top}, X_h^{\top} \right)^{\top}$
 ]
 is defined as a Gaussian Mixture with two components, a good one (paying population)
 and a bad one (defaulters). With $o \in \{g, b\}$ we can characterize the distributions
@@ -46,44 +46,40 @@ X | \{\tilde{Y}=o\} \sim \mathcal{N}\left(
 \right)
 $$
 with $\Sigma, \Sigma_{m, o}$ and $\Sigma_{h, o}$ strictly positive definite (so, non-singular).
-Letting $X_o$ be short for $X | \{Y=o\}$ also let $\phi_{X_o}$ denote its probability density
+Letting $X_o$ be short for $X | \{\tilde{Y}=o\}$ also let $\phi_{X_o}$ denote its probability density
 function (pdf). Since $X_o$ is normally distributed the pdf is given by
 $$
 \phi_{X_o}(x) := 
 \frac{1}{\sqrt{(2\pi)^f |\Sigma_o|} }
-\exp\left\{-\frac{1}{2} (x-\mu)^\top \Sigma^{-1} (x-\mu)\right\}
+\exp\left\{-\frac{1}{2} (x-\mu_o)^\top \Sigma_o^{-1} (x-\mu_o)\right\}
 $$
 
 For further analysis it is also helpful to write down the characterization of the joint distribution
-of $(X,\tilde{Y})$ namely^[
-    The regularity and existence of this distribution follows from the fact that the
-    conditional kernel of $\mathbb{P}_{X_m, X_h, X_l, Y}$ exists (as discussed in the
-    footnote after @eq-joint-dist-feats-and-repayment). Since $\varepsilon$ is
-    sigma finite as well the regularity conditions are passed to 
-    $\mathbb{P}_{X_m, X_h, X_l, \tilde{Y}}$
-]
+of $(X,\tilde{Y})$, which is the marginal distribution of $\mathbb{P}_{X_m, X_h, X_l, Y}$ over the latent
+feature component, given $\epsilon = \text{no external effect}$. Its density^[
+    Following @Pollard_2001 [Ch. 3, Sec. 1], densities are understood here in the Radon–Nikodym sense,
+    such that absolute continuity with respect to Lebesgue measure alone is not required, but can be
+    given with respect to any dominating measure.
+] is defined as a Radon-Nikodym derivative, using that the normal distribution is absolutely continuous
+w. r. t. the Lebesgue Measure, in this case $\lambda^f$ over $\mathbb{R}^f$, and the discreteness of $Y$
 $$
-\mathbb{P}_{X, \tilde{Y}} := \int_{\mathbb{R}^{f_l}} \mathbb{P}_{X_m, X_h, X_l, Y} \, d \mathbb{P}_{X_l} \, .
+p_{X, \tilde{Y}} = \frac{d\mathbb{P}_{X, \tilde{Y}}}{d\left(\lambda^f \otimes \#_Y\right)}
 $$
-
-Its density^[
-    A small note on formalism based on @Pollard_2001 [Ch. 3, Sec. 1]: often in the literature densities
-    are only defined for "continuous RVs", meaning RVs with distributions absolutely continuous
-    with respect to Lebesgue measure. Therefore, it might seem unnatural to say that $(X, Y)$ has
-    a density when $\mathbb{P}_Y$ is not absolutely continuous w. r. t. Lebesgue. However, from a
-    measure theoretic perspective we only need absolute continuity to some other measure, in this
-    case a probability measure defined over the product space
-    $\mathcal{B}\left(\mathbb{R}^{f} \right) \otimes 2^{E_y}$.
-] is a map $\mathbb{R} \times E_y \to [0, 1]$ given by
+where $\#_Y$ is the counting measure over $E_Y$, which gets evaluated pointwise as a map
+$\mathbb{R} \times E_y \to [0, \infty)$
 $$
 p_{X, \tilde{Y}}(x, o) = \pi_o \cdot \phi_{X_o}(x)
 $$
 where $\phi_{X_o}$ is the probability density function (pdf)
 of the multivariate normal distribution of $X | \{\tilde{Y}=o\}$ and $\pi_g := 1 - \pi_b$.
 
-From this we can easily derive the marginals
+From this we can easily derive the marginals^[
+    Since $\pi_b \in (0, 1)$ and $\phi_{X_o}$ is strictly positive *and*
+    finite everywhere, the marginal densities of $\mathbb{P}_{X, \tilde{Y}}$ over
+    $X$ and $\tilde{Y}$ each are well-defined [@Pollard_2001, Ch. 4, Theorem 12]
+] as
 $$
-p_{\tilde{Y}}(o) = \int_{\mathbb{R}^{f}} p_{X, \tilde{Y}}(x, o) \, \mathbb{P}_{X}(dx) = \pi_o ,
+p_{\tilde{Y}}(o) = \int_{\mathbb{R}^{f}} p_{X, \tilde{Y}}(x, o) \, \lambda^f(dx) = \pi_o ,
 $$
 which of course corresponds to the probability mass function of a Bernoulli
 distributed variable, and
@@ -91,18 +87,7 @@ $$
 p_X(x) = \int_{E_Y} p_{X, \tilde{Y}}(x, y) \, \mathbb{P}_{\tilde{Y}}(dy) = \pi_b \phi_{X_b}(x) + \pi_g \phi_{X_g}(x)
 $$
 
-From this describing the density of the distribution $Y | X$ is straightforward^[
-    Again remember the note on regularity of the conditional probability kernels
-    of $\mathbb{P}_{X_m, X_h, X_l, \tilde{Y}}$, which implies here the existence of the
-    respective densities with a similar argument as the last note (integrability
-    is ensured). Theorem 12 from @Pollard_2001 [Ch. 4] applies, where the regularity
-    condition on the denominator is assured by the normal nature of the components and
-    by $\pi_b \notin \{0, 1\}$.
-]
-$$
-\mathbb{P}(\tilde{Y} = o | X=x) \equiv \frac{\mathbb{P}(X = x | \tilde{Y}=o) \, \mathbb{P}(\tilde{Y}=o)}{\mathbb{P}(X = x)}
-$$
-which can be written in terms of the densities above:
+and thus finally:
 $$
 \mathbb{P}(\tilde{Y} = o | X=x) = p_{\tilde{Y} | X} (o, x) = \frac{\phi_{X_o}(x) p_{\tilde{Y}}(o)}{p_X(x)}
 $$
