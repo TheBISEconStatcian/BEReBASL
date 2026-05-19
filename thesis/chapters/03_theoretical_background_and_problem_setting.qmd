@@ -347,22 +347,36 @@ credible claim, but is it really enough to just ignore the missingness mechanism
 Later the hypothesis checking section (@sec-empirical-hypothesis-checking) will
 give some perspective on this regard.
 
-The last case (MNAR) can be written as a negation of @eq-mar-only-model, i.e.
+The last case (MNAR) is the hardest case, as the missing data cannot be ignored and
+still be able to train an unbiased scoring function. Formally it can be written as
+a negation of @eq-mar-only-model, i.e.
 $$
 \mathbb{P}\left(Z^{(t)} = r \middle | Y^{:t}, X_m^{:t}, X_h^{:t} \right) \neq
 \mathbb{P}\left(Z^{(t)} = r | X_m^{:t} \right)
 $${#eq-mnar-only-model}
 which can be intuitively understood as the acceptance decision being (also) driven by
-factors not considered by $s_t$ but upon which $Y^{:t}$ does depend on. This can be
+factors not considered by $s_t$ but upon which $Y^{:t}$ does depend on. This is
 characterized with $f_h > 0$. Note that the dependence of $Y^{:t}$ to $X_h^{:t}$ is
 necessary for MNAR-ness. If one would use some factor independent of $Y^{:t}$ for
 the decision (e.g. does the applicant have blond hair?), decisions overwritten by
 this kind of factors would effectively render a MCAR sample, since in these cases
-$Z^{(t)}_i  \, \cancel{\perp\!\!\!\perp} \, \left\{Y^{:t}, X_m^{:t}\right\}$.^[
+$Z^{(t)}_i  \, \perp\!\!\!\perp \, \left\{Y^{:t}, X_m^{:t}\right\}$.^[
     Note: See that this definition of $X_h$ as RVs on which $Y$ depends upon is
     related to the case discussion of @bansikCrook2007 on the variables sets to be used
     for the acceptance-reject model and the default-repayment model. Such a discussion
     is however not necessary here given the probabilistic model assumed in this thesis.
 ]
-This is the hardest case to solve, as the missing data cannot be ignored and still be able
-to train an unbiased scoring function.
+Additionaly see that this discussion makes it natural to alternatively (and equivalently)
+write the MNAR condition as
+$$
+Z^{(t)} | X_m^{:t} \cancel{\perp\!\!\!\perp} Y^{:t}
+$${#eq-mnar-as-not-independence}
+
+Furthermore consider that MNAR (at least as modeled here) inherently implies an omitted
+variable bias, as $Y^{:t} \cancel{\perp\!\!\!\perp} X_h^{:t}$. This makes the evaluation
+of the effectivness of RI as a tool to correct for MNAR complicated, as one cannot cleanly
+separate the effect of MNAR-ness and of the omitted variable on the performance loss of
+the score-card estimation. At most one can reduce the effect of the omitted variable bias
+by increasing the dependence structure between $X_m$ and $X_h$, however this would on the
+other hand *also* weaken the dependence described by @eq-mnar-as-not-independence and in this
+sense approach MNAR-ness to the MAR case.
