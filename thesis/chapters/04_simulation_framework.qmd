@@ -96,7 +96,7 @@ objective also excludes overfitting, as no noise is modeled here. Now
 let us assume that $\epsilon, \varepsilon$ are Bernoulli distributed
 with parameters $\pi_{\epsilon} := \mathbb{P}(\epsilon =\text{no idiosyncratic shock}) > 0$
 and $\pi_{\varepsilon, b} := \mathbb{P}(\varepsilon = b) \in (0,1)$. 
-With this we can further write down by law of total probability
+With this we can further write down
 $$
 \mathbb{P}(Y = b | X = x) = 
     \pi_{\varepsilon, b} \, p_{\tilde{Y} | X} (b, x) +
