@@ -6,7 +6,7 @@ components of the loop, i.e.
 
 - The joint distribution $\mathbb{P}_{(Y, X)}$ of the repayment variable
   and the covariates,
-- the acceptance decision $Z^{(t)}$ for each timestep, meaning formulating
+- the acceptance decision $Z^{(t)}$ for each acceptance round, meaning formulating
     - the estimation method of the score function $s_t$,
     - the threshold calculation and
     - the complete decision function $d$ for both the MAR and MNAR cases,
