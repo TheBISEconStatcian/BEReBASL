@@ -2,17 +2,17 @@
 
 This thesis uses an acceptance loop which has been further developed
 from the loop described in @kozdoi_et_al_BE_BASL. In this section the
-components of the loop, i.e.
+components of the loop are defined, i.e.
 
 - The joint distribution $\mathbb{P}_{(Y, X)}$ of the repayment variable
   and the covariates,
 - the acceptance decision $Z^{(t)}$ for each acceptance round, meaning formulating
     - the estimation method of the score function $s_t$,
     - the threshold calculation and
-    - the complete decision function $d$ for both the MAR and MNAR cases,
+    - the complete decision function $d$ for both the MAR and MNAR cases
+- from which the rest of the RVs and functions get formulated.
 
-from which the rest of the random variables get easily formulated. After
-defining each of the components an overview of the process as an algorithm
+After defining each of the components an overview of the process as an algorithm
 is provided.
 
 ## Applicants' population {#sec-app-population-simulation}
