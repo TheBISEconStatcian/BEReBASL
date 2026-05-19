@@ -23,20 +23,82 @@ distributions of the repayment outcome and the features to define the applicants
 population. In this thesis I do not consider latent features (case $f_l = 0$).
 Unconditionally it holds $Y \sim Bernoulli(\pi_{b})$ with $\pi_b \in (0,1)$
 the probability of a bad applicant. The observable features vector $X$^[
-    Recall: $X = \begin{pmatrix}X_m \\ X_h \end{pmatrix}$
+    Recall from @eq-X-joint-observable-feats-vec: $X = \begin{pmatrix}X_m \\ X_h \end{pmatrix}$
 ]
-is defined as a Gaussian Mixture. With $o \in \{g, b\}$ the conditional distribution
-is given by
+is defined as a Gaussian Mixture with two components, a good one (paying population)
+and a bad one (defaulters). With $o \in \{g, b\}$ we can characterize the distributions
+of these populations as
 $$
-X | Y=o \sim \mathcal{N}\left(
+X | \{Y=o\} \sim \mathcal{N}\left(
+    \mu_o =
     \begin{pmatrix}
         \mu_{m, o} \\ \mu_{h, o}
     \end{pmatrix},
+    \Sigma_o =
     \begin{pmatrix}
         \Sigma_{m, o} & \Sigma_{mh, o} \\
         \Sigma_{mh, o}^{\top} & \Sigma_{h, o}
     \end{pmatrix}
 \right)
+$$
+with $\Sigma, \Sigma_{m, o}$ and $\Sigma_{h, o}$ strictly positive definite (so, non-singular).
+Letting $X_o$ be short for $X | \{Y=o\}$ also let $\phi_{X_o}$ denote its probability density
+function (pdf). Since $X_o$ is normally distributed the pdf is given by
+$$
+\phi_{X_o}(x) := 
+\frac{1}{\sqrt{(2\pi)^f |\Sigma_o|} }
+\exp\left\{-\frac{1}{2} (x-\mu)^\top \Sigma^{-1} (x-\mu)\right\}
+$$
+
+For further analysis it is also helpful to write down the characterization of the joint distribution
+of $(X,Y)$ namely^[
+    The regularity and existence of this distribution follows from the fact that the
+    conditional kernel of $\mathbb{P}_{X_m, X_h, X_l, Y}$ exists (as discussed in the
+    footnote after @eq-joint-dist-feats-and-repayment)
+]
+$$
+\mathbb{P}_{X, Y} := \int_{\mathbb{R}^{f_l}} \mathbb{P}_{X_m, X_h, X_l, Y} \, d \mathbb{P}_{X_l} \, .
+$$
+
+Its density^[
+    A small note on formalism based on @Pollard_2001 [Ch. 3, Sec. 1]: often in the literature densities
+    are only defined for "continuous RVs", meaning RVs with distributions absolutely continuous
+    with respect to Lebesgue measure. Therefore, it might seem unnatural to say that $(X, Y)$ has
+    a density when $\mathbb{P}_Y$ is not absolutely continuous w. r. t. Lebesgue. However, from a
+    measure theoretic perspective we only need absolute continuity to some other measure, in this
+    case a probability measure defined over the product space
+    $\mathcal{B}\left(\mathbb{R}^{f} \right) \otimes 2^{E_y}$.
+] is a map $\mathbb{R} \times E_y \to [0, 1]$ given by
+$$
+p_{X, Y}(x, o) = \pi_o \cdot \phi_{X_o}(x)
+$$
+where $\phi_{X_o}$ is the probability density function (pdf)
+of the multivariate normal distribution of $X | \{Y=o\}$ and $\pi_g := 1 - \pi_b$.
+
+From this we can easily derive the marginals
+$$
+p_Y(o) = \int_{\mathbb{R}^{f}} p_{X, Y}(x, o) \, \mathbb{P}_{X}(dx) = \pi_o ,
+$$
+which of course corresponds to the probability mass function of a Bernoulli
+distributed variable, and
+$$
+p_X(x) = \int_{E_Y} p_{X, Y}(x, y) \, \mathbb{P}_{Y}(dy) = \pi_b \phi_{X_b}(x) + \pi_g \phi_{X_g}(x)
+$$
+
+From this describing the density of the distribution $Y | X$ is straightforward^[
+    Again remember the note on regularity of the conditional probability kernels
+    of $\mathbb{P}_{X_m, X_h, X_l, Y}$, which implies here the existence of the
+    respective densities with a similar argument as the last note (integrability
+    is ensured). Theorem 12 from @Pollard_2001 [Ch. 4] applies, where the regularity
+    condition on the denominator is assured by the normal nature of the components and
+    by $\pi_b \notin \{0, 1\}$.
+]
+$$
+\mathbb{P}(Y = o | X=x) \equiv \frac{\mathbb{P}(X = x | Y=o) \, \mathbb{P}(Y=o)}{\mathbb{P}(X = x)}
+$$
+which can be written in terms of the densities above:
+$$
+\mathbb{P}(Y = o | X=x) = p_{Y | X} (o, x) = \frac{\phi_{X_o}(x) p_Y(o)}{p_X(x)}
 $$
 
 ## Decision function

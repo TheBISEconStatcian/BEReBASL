@@ -102,11 +102,11 @@ of type $j$. I assume that at least $f_m > 0$. The joint observable feature repr
 given by
 $$
 X : (\Omega, \mathcal{F}) \to \left(\mathbb{R}^{f}, \mathcal{B}\left(\mathbb{R}^{f} \right) \right), f:=f_m + f_h
-$$
+$${#eq-X-map-definition}
 with
 $$
 \forall \omega \in \Omega: X(\omega) := \begin{pmatrix} X_m(\omega) \\ X_h(\omega) \end{pmatrix}
-$$
+$${#eq-X-joint-observable-feats-vec}
 Further with $V$ a placeholder for $Y, Z^{(t)}$ and $Y_m^{(t)}$ let
 $$
 V : (\Omega, \mathcal{F}) \to \left( E_V, 2^{E_V} \right)
@@ -194,7 +194,7 @@ after @eq-mnar-only-model.
 Now let the joint distribution of the applicants be given by
 $$
 (X_m, X_h, X_l, Y) \sim \mathbb{P}_{X_m, X_h, X_l, Y}
-$$
+$${#eq-joint-dist-feats-and-repayment}
 defined over the product space of the state spaces of the random variables,
 with marginals as above.^[
     Since all feature spaces are Borel spaces, their finite product is also
