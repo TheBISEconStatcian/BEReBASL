@@ -20,7 +20,7 @@ is provided.
 Recalling section @sec-measure-theoretic-desc-ri-problem, according to
 the probabilistic model for the RL problem it suffices to define the
 distributions of the repayment outcome and the features to define the applicants'
-population. In this thesis I do not consider latent features (case $f_l = 0$).
+population. In the simulation I do not consider latent features (case $f_l = 0$).
 Further let $\tilde{Y} := Y | \{\epsilon = \text{no external effect}\}$ denote
 the "noiseless" repayment outcome. I describe the population with this variable,
 since it is less convoluted, is the object that the scorecard will
@@ -83,7 +83,7 @@ of the multivariate normal distribution of $X | \{\tilde{Y}=o\}$ and $\pi_g := 1
 
 From this we can easily derive the marginals
 $$
-p_\tilde{Y}(o) = \int_{\mathbb{R}^{f}} p_{X, \tilde{Y}}(x, o) \, \mathbb{P}_{X}(dx) = \pi_o ,
+p_{\tilde{Y}}(o) = \int_{\mathbb{R}^{f}} p_{X, \tilde{Y}}(x, o) \, \mathbb{P}_{X}(dx) = \pi_o ,
 $$
 which of course corresponds to the probability mass function of a Bernoulli
 distributed variable, and
@@ -104,7 +104,7 @@ $$
 $$
 which can be written in terms of the densities above:
 $$
-\mathbb{P}(\tilde{Y} = o | X=x) = p_{\tilde{Y} | X} (o, x) = \frac{\phi_{X_o}(x) p_\tilde{Y}(o)}{p_X(x)}
+\mathbb{P}(\tilde{Y} = o | X=x) = p_{\tilde{Y} | X} (o, x) = \frac{\phi_{X_o}(x) p_{\tilde{Y}}(o)}{p_X(x)}
 $$
 
 ## Decision function
