@@ -104,15 +104,20 @@ $$
 $$
 which is the basis for the best possible prediction of a bad loan.
 
-## Decision function
+## Decision and scoring functions
+
+The decision function has two phases, the starting phase (where no data has been gathered yet)
+and the scoring function estimating phase. In the following is explained how in each moment
+the function looks like.
 
 ### Starting the loop: business rule
 
 ### Scoring function estimation
 
+
 ### CV based threshold
 
-### Hidden features overwrites
+### Hidden features overwrites 
 
 ## Acceptance loop algorithm
 
