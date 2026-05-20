@@ -13,6 +13,7 @@ import torch
 from berebasl.estimation.basl import BASLPartialUnbiaser
 from berebasl.evaluation.batched_metrics import batched_auroc
 from berebasl.evaluation.bayesian_evaluation import BayesianMetric
+from berebasl.simulation import GOOD_BAD_ENCODING
 from berebasl.simulation.credit_data_simulation import CreditDataGenerator, CreditData, CreditDataSample
 from berebasl.estimation.classifiers import Classifier, TorchLogistic
 
@@ -234,7 +235,7 @@ def generate_initial_and_holdout_population(
         def_flag_new_applicants,
         var_for_rule=0,
         top_percent=top_percent,
-        default_value = CreditDataGenerator.bad_good_encoding["bad"]
+        default_value = GOOD_BAD_ENCODING["bad"]
     )
 
     credit_data = CreditData(feats_new_applicants, def_flag_new_applicants, accepts)
