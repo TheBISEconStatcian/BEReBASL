@@ -18,6 +18,7 @@ from berebasl.simulation.gaussian_mixture import (
     GaussianMixture,
     random_vcov_matrix
 )
+from . import GOOD_BAD_ENCODING
 
 def _mix_mean_dif_as_expected(
     mix_mean_dif: Union[torch.Tensor, float],
@@ -256,11 +257,6 @@ def _adapt_mix_var_dif(
         return mix_var_dif
 
 class CreditDataGenerator:
-    bad_good_encoding = {
-        "bad" : 1,
-        "good" : 0
-    }
-
     def __init__(
             self,
             bad_mixture : GaussianMixture,
@@ -291,7 +287,7 @@ class CreditDataGenerator:
 
         self.good_mixture.rng = self.bad_mixture.rng
         self.determinstic_mixture_weights = bool(deterministic_weight_sampling)
-
+    
     @property
     def add_noise(self) -> bool:
         return self.noise_std > 0
@@ -376,14 +372,16 @@ class CreditDataGenerator:
             deterministic_weights = self.determinstic_mixture_weights,
             reveal_mixture_components=reveal_mixture_components
         ) # [n_bad, k] or [b, n_bad, k]
-        y_bad = X_bad.new_full(X_bad.shape[:-1], self.bad_good_encoding["bad"]) # [n_good] or [b, n_good, f]
+        # Use that bad is 1
+        y_bad = X_bad.new_ones(X_bad.shape[:-1]) # [n_good] or [b, n_good, f]
 
         X_good, K_idxs_good = self.good_mixture.sample(
             n_good, 
             deterministic_weights = self.determinstic_mixture_weights,
             reveal_mixture_components=reveal_mixture_components
         ) # [n_good, k] or [b, n_good, f]
-        y_good = X_good.new_full(X_good.shape[:-1], self.bad_good_encoding["good"]) # [n_good] or [b, n_good]
+        # Now use that good is 0
+        y_good = X_good.new_zeros(X_good.shape[:-1]) # [n_good] or [b, n_good]
 
         X = torch.cat([X_bad, X_good], dim=-2) # [n, f] or [b, n, f]
         y = torch.cat([y_bad, y_good], dim=-1) # [n] or [b, n]
@@ -567,7 +565,7 @@ class CreditDataGenerator:
         _, y, log_rho_p_bad, log_rho_p_good = self.mc_simulate(n_samples)
 
         pred_bad = log_rho_p_bad > log_rho_p_good           # (n,) or (b, n)
-        true_bad = y == self.bad_good_encoding["bad"]        # (n,) or (b, n)
+        true_bad = y == 1        # (n,) or (b, n)
         errors   = pred_bad ^ true_bad                       # (n,) or (b, n)
 
         result = errors.to(self.good_mixture.dtype).mean(dim=-1) # scalar or (b,)

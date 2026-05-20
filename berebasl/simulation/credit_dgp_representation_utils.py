@@ -16,6 +16,7 @@ from scipy.stats import chi2
 import torch
 
 from berebasl.simulation.credit_data_simulation import CreditDataGenerator, GaussianMixture
+from . import GOOD_BAD_ENCODING
 
 from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Union, Tuple
 
@@ -68,7 +69,7 @@ def make_plot_dicts_to_show_dgp_pairwise(
             for gb in gb_vals:
                 gb_add_suffix = gb[0] + batch_add_suffix
                 for k in range(mixtures_K[gb]) if is_mixture[gb] else [0]:
-                    mask = B_lbls == data_gen.bad_good_encoding[gb]
+                    mask = B_lbls == GOOD_BAD_ENCODING[gb]
                     mean, cov = (B_gm_bad_mean, B_gm_bad_cov) if gb=="bad" else (B_gm_good_mean, B_gm_good_cov)
                     # Extract current variable components
                     mean = mean[..., [f1, f2]]
@@ -142,7 +143,7 @@ def make_plot_dicts_to_show_dgp_3d(
         for gb in gb_vals:
             gb_add_suffix = gb[0] + batch_add_suffix
             for k in range(mixtures_K[gb]) if is_mixture[gb] else [0]:
-                mask = B_lbls == data_gen.bad_good_encoding[gb]
+                mask = B_lbls == GOOD_BAD_ENCODING[gb]
                 mean, cov = (B_gm_bad_mean, B_gm_bad_cov) if gb == "bad" else (B_gm_good_mean, B_gm_good_cov)
                 if is_mixture[gb]:
                     mask &= B_K_idxs == k
