@@ -38,7 +38,7 @@ def make_plot_dicts_to_show_dgp_pairwise(
     mixtures_K: Dict[str, Optional[int]] = {gb: getattr(data_gen, gb+'_mixture').K if is_mixture[gb] else None for gb in gb_vals}
 
     gm_params = sum([
-        [gm.mean, gm.effective_cov_additive(noise_var) if data_gen.add_noise else gm.cov] 
+        [gm.mean, gm.effective_cov_additive(noise_var) if data_gen.add_features_noise else gm.cov] 
         for gm in (data_gen.bad_mixture, data_gen.good_mixture)
     ], [])
 
@@ -113,7 +113,7 @@ def make_plot_dicts_to_show_dgp_3d(
     mixtures_K: Dict[str, Optional[int]] = {gb: getattr(data_gen, gb + '_mixture').K if is_mixture[gb] else None for gb in gb_vals}
 
     gm_params = sum([
-        [gm.mean, gm.effective_cov_additive(noise_var) if data_gen.add_noise else gm.cov]
+        [gm.mean, gm.effective_cov_additive(noise_var) if data_gen.add_features_noise else gm.cov]
         for gm in (data_gen.bad_mixture, data_gen.good_mixture)
     ], [])
 
@@ -684,7 +684,7 @@ def credit_dgp_tex_report(credit_dgp: CreditDataGenerator) -> str:
 
     report = (
         "The credit data DGP contains " + 
-        (f"additive white noise with variance {credit_dgp.noise_std ** 2:.2f}" if credit_dgp.add_noise else "no noise") + 
+        (f"additive white noise with variance {credit_dgp.noise_std ** 2:.2f}" if credit_dgp.add_features_noise else "no noise") + 
         f" and samples with a bad ratio of {credit_dgp.bad_ratio*100:.1f}%."
     )
 

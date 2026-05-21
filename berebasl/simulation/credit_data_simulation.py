@@ -289,7 +289,7 @@ class CreditDataGenerator:
         self.determinstic_mixture_weights = bool(deterministic_weight_sampling)
     
     @property
-    def add_noise(self) -> bool:
+    def add_features_noise(self) -> bool:
         return self.noise_std > 0
 
     @property
@@ -349,6 +349,31 @@ class CreditDataGenerator:
         self.good_mixture.to(device, seed, set_same_initial_seed)
         self.good_mixture.rng = self.bad_mixture.rng
         return self
+
+    def _calc_n_bad_n_good(self, n: int) -> int:
+        if self.determinstic_mixture_weights:
+            n_bad = round(self.bad_ratio * n)
+            n_good = round((1-self.bad_ratio) * n)
+            if (n_bad + n_good) != n:
+                adapt_n_bad = torch.randint(low=0,high=2,size=(1,),generator=self.rng).to(bool).item()
+                if adapt_n_bad:
+                    n_bad = n - n_good
+                else:
+                    n_good = n - n_bad
+            
+            return n_bad, n_good
+        
+        # Simulate Y_prob even though it will not be used directly because
+        # of simple indexing being more efficient than using a mask. Only of
+        # one batch as each batch must have the same amount of n
+        Y_prob = torch.bernoulli(
+                input=torch.full((n,), fill_value=self.bad_ratio, device=torch.device('cpu')),
+                generator=self.rng
+            ).to(torch.int32)
+        n_bad = Y_prob.sum().item()
+        n_good = n - n_bad
+
+        return n_bad, n_good
     
     def sample(
             self, 
@@ -386,7 +411,7 @@ class CreditDataGenerator:
         X = torch.cat([X_bad, X_good], dim=-2) # [n, f] or [b, n, f]
         y = torch.cat([y_bad, y_good], dim=-1) # [n] or [b, n]
 
-        if self.add_noise:
+        if self.add_features_noise:
             X = X + torch.randn(X.shape, generator=self.rng, device=device, dtype=dtype) * self.noise_std
 
         if reveal_mixture_components:
