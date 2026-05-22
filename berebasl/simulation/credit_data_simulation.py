@@ -263,6 +263,8 @@ class CreditDataGenerator:
             good_mixture : GaussianMixture,
             noise_var : float,
             bad_ratio : float,
+            prob_idiosyncratic_shock: float = 0.0,
+            prob_bad_when_shock: float = 0.5,
             seed : Optional[int] = None,
             deterministic_weight_sampling: bool = False
     ):
@@ -272,15 +274,27 @@ class CreditDataGenerator:
         mixtures_are_compatible = (
             (bad_mixture.F == good_mixture.F) and 
             (bad_mixture.B == good_mixture.B) and
-            (bad_mixture.is_batched == good_mixture.is_batched)
+            (bad_mixture.is_batched == good_mixture.is_batched) and
+            (bad_mixture.device == good_mixture.device) and
+            (bad_mixture.dtype == good_mixture.dtype)
         )
         if not mixtures_are_compatible:
-            raise AssertionError("Mixtures are not compatible, batch and feature dimension must match")
+            raise AssertionError(
+                "Mixtures are not compatible, batch and feature dimension must "
+                "match, must be on same device and have the same dtype"
+                )
         
         self.bad_mixture = bad_mixture
         self.good_mixture = good_mixture
         self.noise_std = sqrt(float(noise_var))
         self.bad_ratio = float(bad_ratio)
+        self.prob_idiosyncratic_shock = float(prob_idiosyncratic_shock)
+        self.prob_bad_when_shock = float(prob_bad_when_shock)
+
+        expected_to_be_prob = ['bad_ratio', 'prob_idiosyncratic_shock', 'prob_bad_when_shock']
+
+        if not all([0 <= getattr(self, p) <= 1 for p in expected_to_be_prob]):
+            raise AssertionError("Any of " + ", ".join(expected_to_be_prob) + "was not in [0,1]")
 
         if seed is not None:
             self.bad_mixture.manual_seed(seed)
@@ -291,6 +305,10 @@ class CreditDataGenerator:
     @property
     def add_features_noise(self) -> bool:
         return self.noise_std > 0
+
+    @property
+    def simulate_idiosyncratic_shocks(self) -> bool:
+        return self.prob_idiosyncratic_shock > 0
 
     @property
     def device(self) -> torch.device:
@@ -379,53 +397,64 @@ class CreditDataGenerator:
             self, 
             n : int,
             reveal_mixture_components : bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
-        n_bad = round(self.bad_ratio * n)
-        n_good = round((1-self.bad_ratio) * n)
-        if (n_bad + n_good) != n:
-            adapt_n_bad = torch.randint(low=0,high=2,size=(1,),generator=self.rng).to(bool).item()
-            if adapt_n_bad:
-                n_bad = n - n_good
-            else:
-                n_good = n - n_bad
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+        leading_dims = (self.B, n) if self.is_batched else (n,)
+        n_bad, n_good = self._calc_n_bad_n_good(n)
 
-        dtype = self.dtype
-        device = self.device
+        Y = torch.ones(leading_dims, dtype=self.dtype, device=self.device) # Initialize as all bad
+        if n_bad < n:
+            Y[..., n_bad:] = 0
+        
+        X = Y.new_empty(leading_dims + (self.features_count,))
+        bad_is_mixture = self.bad_mixture.is_mixture
+        good_is_mixture = self.good_mixture.is_mixture
+        K_idxs = (
+            torch.full(leading_dims, fill_value=-1, device=self.device, dtype=torch.int32)
+            if reveal_mixture_components and (bad_is_mixture or good_is_mixture) else
+            None
+        )
 
-        X_bad, K_idxs_bad = self.bad_mixture.sample(
-            n_bad, 
-            deterministic_weights = self.determinstic_mixture_weights,
-            reveal_mixture_components=reveal_mixture_components
-        ) # [n_bad, k] or [b, n_bad, k]
-        # Use that bad is 1
-        y_bad = X_bad.new_ones(X_bad.shape[:-1]) # [n_good] or [b, n_good, f]
-
-        X_good, K_idxs_good = self.good_mixture.sample(
-            n_good, 
-            deterministic_weights = self.determinstic_mixture_weights,
-            reveal_mixture_components=reveal_mixture_components
-        ) # [n_good, k] or [b, n_good, f]
-        # Now use that good is 0
-        y_good = X_good.new_zeros(X_good.shape[:-1]) # [n_good] or [b, n_good]
-
-        X = torch.cat([X_bad, X_good], dim=-2) # [n, f] or [b, n, f]
-        y = torch.cat([y_bad, y_good], dim=-1) # [n] or [b, n]
+        if n_bad > 0:
+            X[..., :n_bad, :], K_idxs_bad = self.bad_mixture.sample(
+                n_bad, 
+                deterministic_weights = self.determinstic_mixture_weights,
+                reveal_mixture_components=reveal_mixture_components
+            ) # [n_bad, k] or [b, n_bad, k]
+            if bad_is_mixture and reveal_mixture_components:
+                K_idxs[..., :n_bad] = K_idxs_bad
+                
+        if n_good > 0:
+            X[..., n_bad:, :], K_idxs_good = self.good_mixture.sample(
+                n_good, 
+                deterministic_weights = self.determinstic_mixture_weights,
+                reveal_mixture_components=reveal_mixture_components
+            ) # [n_good, f] or [b, n_good, f]
+            if good_is_mixture and reveal_mixture_components:
+                K_idxs[..., n_bad:] = K_idxs_good
 
         if self.add_features_noise:
-            X = X + torch.randn(X.shape, generator=self.rng, device=device, dtype=dtype) * self.noise_std
+            X = X + torch.randn(X.shape, generator=self.rng, device=X.device, dtype=X.dtype) * self.noise_std
 
-        if reveal_mixture_components:
-            at_least_one_is_mixture = False
-            K_idxs = torch.full_like(y, fill_value=-1, dtype=torch.int32)
-            if self.bad_mixture.is_mixture:
-                K_idxs[..., :n_bad] = K_idxs_bad.to(K_idxs.dtype)
-                at_least_one_is_mixture = True
-            if self.good_mixture.is_mixture:
-                K_idxs[..., -n_good:] = K_idxs_good.to(K_idxs.dtype)
-                at_least_one_is_mixture = True
-            return X, y, (K_idxs if at_least_one_is_mixture else None)
+        if self.simulate_idiosyncratic_shocks:
+            # True if \epsilon = shock
+            mask_shock = torch.bernoulli(
+                torch.full_like(Y, fill_value=self.prob_idiosyncratic_shock),
+                generator=self.rng
+            ).to(bool)
 
-        return X, y
+            n_shocks_to_simulate = mask_shock.sum()
+            
+            # 1 if \varepsilon = bad
+            if self.prob_bad_when_shock == 0:
+                Y[mask_shock] = 0
+            elif self.prob_bad_when_shock == 1:
+                Y[mask_shock] = 1
+            else:
+                Y[mask_shock] = torch.bernoulli(
+                    Y.new_full((n_shocks_to_simulate,), self.prob_bad_when_shock)
+                )
+        
+        return X, Y, K_idxs
     
     def log_prob_bad(self, x: torch.Tensor) -> torch.Tensor:
         r"""
