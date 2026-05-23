@@ -303,6 +303,16 @@ class CreditDataGenerator:
         self.determinstic_mixture_weights = bool(deterministic_weight_sampling)
     
     @property
+    def shock_multinom_probs(self) -> torch.Tensor:
+        prob_y_bad_because_of_shock = self.prob_idiosyncratic_shock * self.prob_bad_when_shock
+        prob_no_shock = 1-self.prob_idiosyncratic_shock
+        return self.bad_mixture.mean.new_tensor( # Calculate this way to be sure it is normed even if floating point imprecisions
+            [1-prob_y_bad_because_of_shock-prob_no_shock, 
+             prob_y_bad_because_of_shock,
+             prob_no_shock]
+        )
+
+    @property
     def add_features_noise(self) -> bool:
         return self.noise_std > 0
 
@@ -436,23 +446,23 @@ class CreditDataGenerator:
             X = X + torch.randn(X.shape, generator=self.rng, device=X.device, dtype=X.dtype) * self.noise_std
 
         if self.simulate_idiosyncratic_shocks:
-            # True if \epsilon = shock
-            mask_shock = torch.bernoulli(
-                torch.full_like(Y, fill_value=self.prob_idiosyncratic_shock),
+            C_vals = torch.multinomial(
+                self.shock_multinom_probs,
+                Y.numel(),
+                replacement=True,
                 generator=self.rng
-            ).to(bool)
-
-            n_shocks_to_simulate = mask_shock.sum()
+            ).to(Y.dtype)
+            # True if \epsilon = shock, which is the same as C not being the last value
+            mask_shock = C_vals < 2
+            mask_shock_reshaped = mask_shock.reshape(Y.shape)
             
             # 1 if \varepsilon = bad
             if self.prob_bad_when_shock == 0:
-                Y[mask_shock] = 0
+                Y.masked_fill_(mask_shock_reshaped, 0)
             elif self.prob_bad_when_shock == 1:
-                Y[mask_shock] = 1
+                Y.masked_fill_(mask_shock_reshaped, 1)
             else:
-                Y[mask_shock] = torch.bernoulli(
-                    Y.new_full((n_shocks_to_simulate,), self.prob_bad_when_shock)
-                )
+                Y[mask_shock_reshaped] = C_vals[mask_shock]
         
         return X, Y, K_idxs
     
