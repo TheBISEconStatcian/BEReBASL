@@ -1576,3 +1576,181 @@ class BatchedLogistic(nn.Module):
             dtype         = dtype,
             init_betas    = init_betas,
         )
+
+class PerfectBayesClassif:
+    def __init__(
+            self,
+            dgp: CreditDataGenerator,
+            consider_idiosyncratic_shock: bool,
+            consider_feats_noise: bool
+        ):
+        self.p_bad_given_no_shock = dgp.p_bad_given_no_shock
+        if consider_idiosyncratic_shock:
+            self.p_shock = dgp.prob_idiosyncratic_shock
+            self.p_bad_because_of_shock = self.p_shock * dgp.prob_bad_given_shock
+        else:
+            self.p_shock = None
+            self.p_bad_given_shock = None
+
+        self._is_batched = dgp.is_batched
+        self._K_bad = dgp.bad_mixture.K
+
+        # batch_dims = [] if not dgp.is_batched else [dgp.B]
+
+        # [*batch_dims, K_bad, F], [*batch_dims, K_bad, F, F], [*batch_dims, K_bad]
+        mean_bad, cov_chol_bad, weights_bad = self.extract_mixture_comps(
+            dgp.bad_mixture,
+            prior_prob_given_no_shock=self.p_bad_given_no_shock,
+            consider_feats_noise=consider_feats_noise,
+            feats_noise_std= dgp.feats_noise_std
+        )
+        # [*batch_dims, K_good, F], [*batch_dims, K_good, F, F], [*batch_dims, K_good]
+        mean_good, cov_chol_good, weights_good = self.extract_mixture_comps(
+            dgp.good_mixture,
+            prior_prob_given_no_shock=1-self.p_bad_given_no_shock,
+            consider_feats_noise=consider_feats_noise,
+            feats_noise_std= dgp.feats_noise_std
+        )
+
+        self.joint_means = torch.cat([mean_bad, mean_good], dim=-2)             # [*batch_dims, K, F]
+        self.joint_cov_chols = torch.cat([cov_chol_bad, cov_chol_good], dim=-3) # [*batch_dims, K, F, F]
+        self.joint_weights = torch.cat([weights_bad, weights_good], dim=-1)     # [*batch_dims, K]
+
+        self._log_component_const = self.log_normalizing_factors(self.joint_cov_chols, self.joint_weights) # [*batch_dims, K]
+
+    @property
+    def dtype(self) -> torch.dtype:
+        return self.joint_means.dtype
+
+    @property
+    def K(self) -> int:
+        return self.joint_weights.size(-1)
+
+    @property
+    def K_bad(self) -> int:
+        return self._K_bad
+    
+    @property
+    def K_good(self) -> int:
+        return self.K - self.K_bad
+    
+    @property
+    def F(self) -> int:
+        return self.joint_means.size(-1)
+    
+    @property
+    def batch_dims(self) -> torch.Size:
+        return self.joint_means.shape[:-2]
+
+    @property
+    def consider_idiosyncratic_shock(self) -> bool:
+        return self.p_shock is not None
+
+    @staticmethod
+    def extract_mixture_comps(
+        mixture: GaussianMixture,
+        prior_prob_given_no_shock: float,
+        consider_feats_noise: bool,
+        feats_noise_std: float,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        mean, cov_chol, weights = mixture._normalized_params() # [B, K, F], [B, K, F, F], [B, K]
+        if consider_feats_noise and feats_noise_std > 0:
+            cov = mixture._effective_cov_additive(cov_chol @ cov_chol.mT, noise_var=feats_noise_std**2)
+            cov_chol = torch.linalg.cholesky(cov)
+
+        if weights is None:
+            weights = mean.new_full(mean.shape[:-1], fill_value=prior_prob_given_no_shock) # [B, 1], K = 1
+        else:
+            weights *= prior_prob_given_no_shock # [B, K]
+
+        if not mixture.is_batched:
+            mean, cov_chol, weights = [p.squeeze(0) for p in (mean, cov_chol, weights)] # [K, F], [K, F, F], [K]
+
+        return mean, cov_chol, weights
+
+    @staticmethod    
+    def log_normalizing_factors(cov_chol: torch.Tensor, weights: torch.Tensor):
+        F = cov_chol.size(-1)
+        log_det = 2 * cov_chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1) # [*batch_dims, K]
+        log_norm_components = -0.5 * (F * log(2 * torch.pi) + log_det)
+        log_norm = weights.log() + log_norm_components
+
+        return log_norm
+
+
+    def broadcast_X(self, X: torch.Tensor, safety_checks: bool = True):
+        *lead_dims, F = X.shape
+        if safety_checks:
+            if F != self.F:
+                raise AssertionError("X has the wrong features dimension")
+            if not X.is_floating_point():
+                raise AssertionError("X should be a floating point")
+            
+        X = X.to(dtype=self.dtype)
+        count_to_add_inbetween = len(self.batch_dims) + 1 # 1 for the channel dimension
+        helper_add_dims = (1,) * count_to_add_inbetween
+
+        X = X.reshape(*lead_dims, *helper_add_dims, F)
+
+        return X
+    
+    def mahalonobis_X(self, X_broadcasted):
+        X_c = X_broadcasted - self.joint_means # [*lead_dims, *bb_dims, K, F]
+
+        v = (
+            torch.linalg.solve_triangular( 
+                self.joint_cov_chols,
+                X_c.unsqueeze(-1), # [*lead_dims, *bb_dims, K, F, 1]
+                upper=False
+            ) # [*lead_dims, *bb_dims, K, F, 1]
+            .squeeze_(-1) # [*lead_dims, *bb_dims, K, F]
+        )
+
+        mahal = v.pow(2).sum(dim=-1) # squared euclician norm of v
+
+        return mahal # [*lead_dims, *bb_dims, K]
+    
+    def log_component_pdf(self, X_broadcasted):
+        mahal_X = self.mahalonobis_X(X_broadcasted)
+
+        log_pdf_per_component = self._log_component_const - (mahal_X/2)
+
+        return log_pdf_per_component
+    
+    def log_prob_bad_given_no_shock(self, X_broadcasted: torch.Tensor) -> torch.Tensor:
+        log_pdf_per_component = self.log_component_pdf(X_broadcasted)
+
+        # This is equal to \log (\phi_{X_b}(\textt{X})\mathbb{P}(Y=b))
+        log_likelihood_X_bad = torch.logsumexp(log_pdf_per_component[..., :self.K_bad], dim=-1) # [*lead_dims, *bb_dims]
+        
+        # This is equal to \log (\phi_{X_g}(\textt{X})\mathbb{P}(Y=g) +  \phi_{X_b}(\textt{X})\mathbb{P}(Y=b))
+        log_marginal_pdf_X = torch.logsumexp(log_pdf_per_component, dim=-1) # [*lead_dims, *bb_dims]
+
+        # \log \mathbb{P}(Y=b | X = \textt{X})
+        return log_likelihood_X_bad - log_marginal_pdf_X # [*lead_dims, *bb_dims]
+        
+
+    def predict_prob_bad(self, X: torch.Tensor, safety_checks: bool = True):
+        #  *lead_dims, F = X.shape, bb_dims = (1,) * len(self.batch_dims)
+        X = self.broadcast_X(X, safety_checks) # [*lead_dims, *bb_dims, 1, F]
+
+        # \log \mathbb{P}(Y=b | X = \textt{X})
+        log_posterior = self.log_prob_bad_given_no_shock(X)
+
+        prob_bad = log_posterior.exp()
+
+        if self.consider_idiosyncratic_shock:
+            prob_bad *= 1-self.p_shock
+            prob_bad += self.p_bad_because_of_shock
+
+        return prob_bad
+    
+    def predict_proba(self, features: torch.Tensor):
+        prob_bad = self.predict_prob_bad(features)
+        
+        probs = prob_bad.new_empty(prob_bad.shape + (2,))
+        probs[..., 1] = prob_bad
+        probs[..., 0] = 1-prob_bad
+
+        return probs
+    
