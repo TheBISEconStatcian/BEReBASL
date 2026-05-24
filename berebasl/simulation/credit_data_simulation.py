@@ -291,7 +291,7 @@ class CreditDataGenerator:
         self.prob_idiosyncratic_shock = float(prob_idiosyncratic_shock)
         self.prob_bad_given_shock = float(prob_bad_given_shock)
 
-        expected_to_be_prob = ['p_bad_given_no_shock', 'prob_idiosyncratic_shock', 'prob_bad_given_shock']
+        expected_to_be_prob = ['prob_bad_given_no_shock', 'prob_idiosyncratic_shock', 'prob_bad_given_shock']
 
         if not all([0 <= getattr(self, p) <= 1 for p in expected_to_be_prob]):
             raise AssertionError("Any of " + ", ".join(expected_to_be_prob) + "was not in [0,1]")
@@ -932,7 +932,7 @@ class CreditDataGenerator:
             good_mixture = mixture_good,
             seed = seed_credit_data_gen,
             feats_noise_var=feats_noise_var,
-            bad_ratio=bad_ratio,
+            p_bad_given_no_shock=bad_ratio,
             deterministic_weight_sampling=deterministic_weights_for_mixture_sampling
         )
     
