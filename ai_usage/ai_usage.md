@@ -99,7 +99,7 @@ opinion on naming.
 ## `Github-Copilot`
 
 Most of the help used with Github copilot was done solely with the chat function.
-However while developing in some cases the auto-fill function was activated, which
+However, while developing in some cases the auto-fill function was activated, which
 constitutes AI usage. The latest has not been documented. The chats have been saved
 under `./gihub_copilot_chats` and have self explaining names. Only for chats which
 seem to need a small clarification a small description is added here:
