@@ -61,7 +61,7 @@ def make_plot_dicts_to_show_dgp_pairwise(
             )]
         )
     )
-    F = data_gen.features_count
+    F = data_gen.F
     for b, (B_feats, B_lbls, B_K_idxs, B_gm_bad_mean, B_gm_bad_cov, B_gm_good_mean, B_gm_good_cov) in enumerate(batch_iter):
         plot_dict = plot_dicts[b]
         batch_add_suffix = f"^{{B={b}}}" if is_batched else ""
@@ -355,7 +355,7 @@ def plot_credit_dgp_3d(
         azim: int = 35
     ) -> Optional[List[plt.Figure]]:
     """Visualize a 3D MVN or Gaussian mixture for F=3 using the same colour and legend semantics as 2D."""
-    if data_gen.features_count != 3:
+    if data_gen.F != 3:
         raise ValueError("plot_credit_dgp_3d only supports F=3")
     
     if cmap_dict is None:
@@ -367,7 +367,7 @@ def plot_credit_dgp_3d(
 
     is_batched = data_gen.is_batched
     B = data_gen.B
-    F = data_gen.features_count
+    F = data_gen.F
     if not is_batched:
         plot_dicts = [plot_dicts]
 
@@ -550,7 +550,7 @@ def plot_credit_dgp_pairwise(
     plot_dicts = make_plot_dicts_to_show_dgp_pairwise(data_gen, sample_size, cmap_dict)
     is_batched = data_gen.is_batched
     B = data_gen.B
-    F = data_gen.features_count
+    F = data_gen.F
 
     if not is_batched:
         plot_dicts = [plot_dicts]

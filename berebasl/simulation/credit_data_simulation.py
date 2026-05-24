@@ -111,7 +111,7 @@ def _adapt_mix_mean_dif(
             A tensor of shape ``(k - 1, f)`` or a compatible shape.
     """
     if dtype is None:
-            dtype = torch.get_default_dtype()
+        dtype = torch.get_default_dtype()
     if security_check:
         assert _mix_mean_dif_as_expected(mix_mean_dif, k, f)
 
@@ -336,7 +336,7 @@ class CreditDataGenerator:
         return self.bad_mixture.rng
     
     @property
-    def features_count(self) -> int:
+    def F(self) -> int:
         return self.bad_mixture.F
 
     @property
@@ -346,6 +346,10 @@ class CreditDataGenerator:
     @property
     def B(self) -> int:
         return self.bad_mixture.B
+    
+    @property
+    def K(self) -> int:
+        return self.bad_mixture.K + self.good_mixture.K
     
     def manual_seed(self, seed : int) -> torch.Generator:
         self.rng.manual_seed(seed)
@@ -445,7 +449,7 @@ class CreditDataGenerator:
         if n_bad < n:
             Y[..., n_bad:] = 0
         
-        X = Y.new_empty(leading_dims + (self.features_count,))
+        X = Y.new_empty(leading_dims + (self.F,))
         bad_is_mixture = self.bad_mixture.is_mixture
         good_is_mixture = self.good_mixture.is_mixture
         K_idxs = (
@@ -620,7 +624,7 @@ class CreditDataGenerator:
             - **log_rho_p_good**   ``(n,)``   or ``(b, n)``    — :math:`\log((1-\rho) \cdot p_{\text{good}}(x))`.
         """
         if n_samples is None:
-            n_samples = max(10_000, 500 * self.bad_mixture.K * self.features_count)
+            n_samples = max(10_000, 500 * self.bad_mixture.K * self.F)
 
         X, y        = self.sample(n_samples)
         log_p_bad   = self.log_prob_bad(X)
@@ -872,10 +876,10 @@ class CreditDataGenerator:
 
         mu_bad = torch.zeros(count_covariates, **kwargs_for_generated_tensors)
         mu_good = mu_bad + mean_bad_diff
+        mu_bad = mu_bad.expand_as(mu_good)
 
         if iid:
             sigma_bad, sigma_good = [torch.eye(count_covariates, **kwargs_for_generated_tensors) for _ in range(2)]
-            mix_var_dif_bad, mix_var_dif_good = 0.0, 0.0
         elif covars is not None:
             sigma_bad = covars["bad"]
             sigma_good = covars["good"]
@@ -897,28 +901,14 @@ class CreditDataGenerator:
         else:
             if mixture_weights.dim() == 1:
                 weights_bad = mixture_weights
-                weights_good = mixture_weights.copy()
+                weights_good = mixture_weights.clone()
             else:
                 if do_security_checks:
                     assert mixture_weights.dim() == 2, "mixture_weights has to be a tensor of dim in (1,2)"
                     assert mixture_weights.size(0) == 2, "Shape should be [2, m]"
                 weights_bad = mixture_weights[0]
                 weights_good = mixture_weights[1]
-            
-            m = weights_bad.size(-1)
 
-            mix_mean_dif_bad, mix_mean_dif_good = [_adapt_mix_mean_dif(d, m, f=count_covariates, security_check=do_security_checks) 
-                                                   for d in (mix_mean_dif_bad, mix_mean_dif_good)]
-            
-            amplify_base_with_dif = lambda param, dif : torch.cat([param.unsqueeze(0), param.unsqueeze(0) + dif],
-                                                                  dim=0)
-
-            mu_bad, mu_good = [amplify_base_with_dif(mu, dif)
-                               for mu, dif in [(mu_bad, mix_mean_dif_bad), (mu_good, mix_mean_dif_good)]]
-            
-            sigma_bad, sigma_good = [_adapt_mix_var_dif(d, m, f=count_covariates, security_check=do_security_checks) 
-                                                    for d in (mix_var_dif_bad, mix_var_dif_good)]
-                
         mixture_bad = GaussianMixture(
             mean = mu_bad,
             cov = sigma_bad,

@@ -612,7 +612,7 @@ def acceptance_loop(
     stats : defaultdict(list) or None
         Pre-populated stats dict when resuming; created fresh otherwise.
     """
-    F          = data_generator.features_count
+    F          = data_generator.F
     var_to_hide = int(var_to_hide) % F                        # resolve negative index
     model_vars  = [f for f in range(F) if f != var_to_hide]  # visible features
 
