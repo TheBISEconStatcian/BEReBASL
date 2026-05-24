@@ -946,7 +946,7 @@ def run_cv_simulation(params: dict, device: torch.device, dtype: torch.dtype) ->
         holdout_sample = params["holdout_sample"],
         top_percent  = 0.2,
     )
-    data_generator.noise_std = params["noise_std"]
+    data_generator.feats_noise_std = params["noise_std"]
 
     print("\n\n*** Starting CV-based acceptance loop ***\n\n")
     base_seed = params["initial_seed"]

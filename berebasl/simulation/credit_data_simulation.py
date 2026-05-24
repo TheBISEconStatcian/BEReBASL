@@ -261,10 +261,10 @@ class CreditDataGenerator:
             self,
             bad_mixture : GaussianMixture,
             good_mixture : GaussianMixture,
-            noise_var : float,
+            feats_noise_var : float,
             bad_ratio : float,
             prob_idiosyncratic_shock: float = 0.0,
-            prob_bad_when_shock: float = 0.5,
+            prob_bad_given_shock: float = 0.5,
             seed : Optional[int] = None,
             deterministic_weight_sampling: bool = False
     ):
@@ -286,10 +286,10 @@ class CreditDataGenerator:
         
         self.bad_mixture = bad_mixture
         self.good_mixture = good_mixture
-        self.noise_std = sqrt(float(noise_var))
+        self.feats_noise_std = sqrt(float(feats_noise_var))
         self.bad_ratio = float(bad_ratio)
         self.prob_idiosyncratic_shock = float(prob_idiosyncratic_shock)
-        self.prob_bad_when_shock = float(prob_bad_when_shock)
+        self.prob_bad_given_shock = float(prob_bad_given_shock)
 
         expected_to_be_prob = ['bad_ratio', 'prob_idiosyncratic_shock', 'prob_bad_when_shock']
 
@@ -304,7 +304,7 @@ class CreditDataGenerator:
     
     @property
     def shock_multinom_probs(self) -> torch.Tensor:
-        prob_y_bad_because_of_shock = self.prob_idiosyncratic_shock * self.prob_bad_when_shock
+        prob_y_bad_because_of_shock = self.prob_idiosyncratic_shock * self.prob_bad_given_shock
         prob_no_shock = 1-self.prob_idiosyncratic_shock
         return self.bad_mixture.mean.new_tensor( # Calculate this way to be sure it is normed even if floating point imprecisions
             [1-prob_y_bad_because_of_shock-prob_no_shock, 
@@ -314,7 +314,7 @@ class CreditDataGenerator:
 
     @property
     def add_features_noise(self) -> bool:
-        return self.noise_std > 0
+        return self.feats_noise_std > 0
 
     @property
     def simulate_idiosyncratic_shocks(self) -> bool:
@@ -378,6 +378,36 @@ class CreditDataGenerator:
         self.good_mixture.rng = self.bad_mixture.rng
         return self
 
+    def set_new_noise_config(
+            self,
+            feats_noise_var: Optional[float]=None,
+            prob_idiosyncratic_shock: Optional[float] = None,
+            prob_bad_given_shock: Optional[float] = None,
+        ) -> "CreditDataGenerator":
+        if feats_noise_var is not None:
+            feats_noise_var = float(feats_noise_var)
+            if feats_noise_var < 0:
+                raise AssertionError(
+                    "The covariates variance must be greater 0"
+                )
+            self.feats_noise_std = sqrt(feats_noise_var)
+
+        probs_gen = zip(
+            [prob_idiosyncratic_shock, prob_bad_given_shock],
+            ["prob_idiosyncratic_shock", "prob_bad_given_shock"]
+        )
+
+        for v, n in probs_gen:
+            if v is not None:
+                v = float(v)
+                if  not (0 <= v <= 1):
+                    raise AssertionError(
+                        n + " must be in [0,1]"
+                    )
+                setattr(self, n, v)
+
+        return self
+    
     def _calc_n_bad_n_good(self, n: int) -> int:
         if self.determinstic_mixture_weights:
             n_bad = round(self.bad_ratio * n)
@@ -443,7 +473,7 @@ class CreditDataGenerator:
                 K_idxs[..., n_bad:] = K_idxs_good
 
         if self.add_features_noise:
-            X = X + torch.randn(X.shape, generator=self.rng, device=X.device, dtype=X.dtype) * self.noise_std
+            X = X + torch.randn(X.shape, generator=self.rng, device=X.device, dtype=X.dtype) * self.feats_noise_std
 
         if self.simulate_idiosyncratic_shocks:
             C_vals = torch.multinomial(
@@ -457,9 +487,9 @@ class CreditDataGenerator:
             mask_shock_reshaped = mask_shock.reshape(Y.shape)
             
             # 1 if \varepsilon = bad
-            if self.prob_bad_when_shock == 0:
+            if self.prob_bad_given_shock == 0:
                 Y.masked_fill_(mask_shock_reshaped, 0)
-            elif self.prob_bad_when_shock == 1:
+            elif self.prob_bad_given_shock == 1:
                 Y.masked_fill_(mask_shock_reshaped, 1)
             else:
                 Y[mask_shock_reshaped] = C_vals[mask_shock]
@@ -482,7 +512,7 @@ class CreditDataGenerator:
         Returns:
             Tensor: Shape ``(n,)`` or ``(b, n)``.
         """
-        return self.bad_mixture.log_prob(x, white_noise_var=self.noise_std ** 2)
+        return self.bad_mixture.log_prob(x, white_noise_var=self.feats_noise_std ** 2)
 
 
     def log_prob_good(self, x: torch.Tensor) -> torch.Tensor:
@@ -501,7 +531,7 @@ class CreditDataGenerator:
         Returns:
             Tensor: Shape ``(n,)`` or ``(b, n)``.
         """
-        return self.good_mixture.log_prob(x, white_noise_var=self.noise_std ** 2)
+        return self.good_mixture.log_prob(x, white_noise_var=self.feats_noise_std ** 2)
 
 
     def _log_prob_given_components(
