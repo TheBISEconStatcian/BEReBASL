@@ -617,7 +617,7 @@ def acceptance_loop(
         accept_decisions: Dict[str, torch.Tensor] = {}
         for th in THRESHOLD_BASIS:
             clf = BatchedLogistic(
-                n_features=data_generator.features_count,
+                n_features=data_generator.F,
                 batch_shape=torch.Size([]),
                 device=data_generator.device,
                 dtype=data_generator.dtype,
