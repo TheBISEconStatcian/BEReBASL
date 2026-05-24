@@ -666,7 +666,7 @@ def credit_dgp_tex_report(credit_dgp: CreditDataGenerator) -> str:
     
 
     dgp_descr = [
-        "The " + gb + f"s represent {(credit_dgp.p_bad_given_no_shock if gb == 'bad' else 1 - credit_dgp.p_bad_given_no_shock)*100:.1f}% of the data and its covariates' DGP is a "+ 
+        "The " + gb + f"s represent {(credit_dgp.prob_bad_given_no_shock if gb == 'bad' else 1 - credit_dgp.prob_bad_given_no_shock)*100:.1f}% of the data and its covariates' DGP is a "+ 
         (f"batched (B={getattr(credit_dgp, gb + '_mixture').B})" if is_batched else "") + 
         "Gaussian " + (
             "Mixture with " + ("deterministic" if credit_dgp.determinstic_mixture_weights else "random") + " weights"
@@ -685,7 +685,7 @@ def credit_dgp_tex_report(credit_dgp: CreditDataGenerator) -> str:
     report = (
         "The credit data DGP contains " + 
         (f"additive white noise with variance {credit_dgp.feats_noise_std ** 2:.2f}" if credit_dgp.add_features_noise else "no noise") + 
-        f" and samples with a bad ratio of {credit_dgp.p_bad_given_no_shock*100:.1f}%."
+        f" and samples with a bad ratio of {credit_dgp.prob_bad_given_no_shock*100:.1f}%."
     )
 
     bayes_error_rates_per: torch.Tensor = credit_dgp.bayes_error_rate(100_000) * 100

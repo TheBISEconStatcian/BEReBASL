@@ -287,7 +287,7 @@ class CreditDataGenerator:
         self.bad_mixture = bad_mixture
         self.good_mixture = good_mixture
         self.feats_noise_std = sqrt(float(feats_noise_var))
-        self.p_bad_given_no_shock = float(p_bad_given_no_shock)
+        self.prob_bad_given_no_shock = float(p_bad_given_no_shock)
         self.prob_idiosyncratic_shock = float(prob_idiosyncratic_shock)
         self.prob_bad_given_shock = float(prob_bad_given_shock)
 
@@ -414,8 +414,8 @@ class CreditDataGenerator:
     
     def _calc_n_bad_n_good(self, n: int) -> int:
         if self.determinstic_mixture_weights:
-            n_bad = round(self.p_bad_given_no_shock * n)
-            n_good = round((1-self.p_bad_given_no_shock) * n)
+            n_bad = round(self.prob_bad_given_no_shock * n)
+            n_good = round((1-self.prob_bad_given_no_shock) * n)
             if (n_bad + n_good) != n:
                 adapt_n_bad = torch.randint(low=0,high=2,size=(1,),generator=self.rng).to(bool).item()
                 if adapt_n_bad:
@@ -429,7 +429,7 @@ class CreditDataGenerator:
         # of simple indexing being more efficient than using a mask. Only of
         # one batch as each batch must have the same amount of n
         Y_prob = torch.bernoulli(
-                input=torch.full((n,), fill_value=self.p_bad_given_no_shock, device=torch.device('cpu')),
+                input=torch.full((n,), fill_value=self.prob_bad_given_no_shock, device=torch.device('cpu')),
                 generator=self.rng
             ).to(torch.int32)
         n_bad = Y_prob.sum().item()
@@ -562,8 +562,8 @@ class CreditDataGenerator:
         Returns:
             Tuple[Tensor, Tensor]: ``(log_rho_p_bad, log_rho_p_good)``, same shape as inputs.
         """
-        log_rho_p_bad  = log(self.p_bad_given_no_shock)       + log_p_bad
-        log_rho_p_good = log(1.0 - self.p_bad_given_no_shock) + log_p_good
+        log_rho_p_bad  = log(self.prob_bad_given_no_shock)       + log_p_bad
+        log_rho_p_good = log(1.0 - self.prob_bad_given_no_shock) + log_p_good
         return log_rho_p_bad, log_rho_p_good
 
 
