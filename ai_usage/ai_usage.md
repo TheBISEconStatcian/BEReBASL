@@ -56,6 +56,7 @@ opinion on naming.
   - [357b737544a38a828e5e3ca42371004f646b1b9b](https://github.com/TheBISEconStatcian/BEReBASL/commit/357b737544a38a828e5e3ca42371004f646b1b9b) Apply redaction and precision remarks as discussed with
   the chat.
 - [Metaprompting the MNAR adaptation for Claude](https://chatgpt.com/share/6a0165fb-7310-83eb-a67d-ef86851dd78d)
+- [Implementation of `PerfectBayesClassifier`](https://chatgpt.com/share/6a133ae4-7ee4-83eb-a3aa-d301b268f725)
 
 ## Links to `Copilot` usage
 
