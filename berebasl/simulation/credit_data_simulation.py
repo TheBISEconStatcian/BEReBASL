@@ -291,7 +291,7 @@ class CreditDataGenerator:
         self.prob_idiosyncratic_shock = float(prob_idiosyncratic_shock)
         self.prob_bad_given_shock = float(prob_bad_given_shock)
 
-        expected_to_be_prob = ['bad_ratio', 'prob_idiosyncratic_shock', 'prob_bad_when_shock']
+        expected_to_be_prob = ['bad_ratio', 'prob_idiosyncratic_shock', 'prob_bad_given_shock']
 
         if not all([0 <= getattr(self, p) <= 1 for p in expected_to_be_prob]):
             raise AssertionError("Any of " + ", ".join(expected_to_be_prob) + "was not in [0,1]")
@@ -808,7 +808,7 @@ class CreditDataGenerator:
         mix_var_dif_bad  : Union[torch.Tensor, float]   = None,
         mix_var_dif_good  : Union[torch.Tensor, float]   = None,
         deterministic_weights_for_mixture_sampling: bool = True,
-        noise_var : float = 0.1,
+        feats_noise_var : float = 0.1,
         bad_ratio : float = 0.5,
         device : Optional[torch.device] = None, 
         dtype : Optional[torch.dtype] = None,
@@ -841,7 +841,7 @@ class CreditDataGenerator:
                 Mean offsets for mixture components.
             mix_var_dif_bad, mix_var_dif_good (Tensor or float, optional):
                 Variance offsets for mixture components.
-            noise_var (float, default=0.1):
+            feats_noise_var (float, default=0.1):
                 Variance of the 0-mean normally distributed noise to be added to covariate
                 samples.
             bad_ratio (float, default=0.5):

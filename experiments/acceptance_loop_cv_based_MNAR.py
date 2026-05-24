@@ -246,7 +246,7 @@ def mnar_default_dgp(
         iid = False,
         mixture_weights=None,
         bad_ratio = 0.5,
-        noise_var=0.0,
+        feats_noise_var=0.0,
         device = device,
         dtype=dtype,
         seed_credit_data_gen=seed_credit_data_gen,
