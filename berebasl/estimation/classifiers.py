@@ -11,6 +11,8 @@ import torch.optim as optim
 from typing import Callable, Dict, Optional, Tuple, Union
 
 from berebasl.utils.tensor_validation import assert_tensors
+from berebasl.simulation.credit_data_simulation import CreditDataGenerator
+from berebasl.simulation.gaussian_mixture import GaussianMixture
 
 def function_has_expected_signature(fun : Callable, count_params : int):
     sig = inspect.signature(fun)
@@ -1577,20 +1579,165 @@ class BatchedLogistic(nn.Module):
             init_betas    = init_betas,
         )
 
-class PerfectBayesClassif:
+class PerfectBayesClassifier:
+    r"""
+    Perfect Bayesian classifier for binary classification derived from a known DGP.
+
+    Combines two Gaussian mixture components (bad and good outcomes) with optional
+    idiosyncratic shocks to compute the optimal Bayesian classification rule.
+    Predictions are based on the posterior probability of the bad outcome given features,
+    computed via the normalized likelihood ratio of the mixture components.
+
+    The classifier is parameterized by the conditional distributions :math:`p(X | Y=b)`
+    and :math:`p(X | Y=g)` modeled as Gaussian mixtures, along with the prior
+    probability :math:`\mathbb{P}(Y=b)`. When idiosyncratic shocks are enabled,
+    the posterior incorporates an additional unconditional shock probability that
+    can flip the outcome independently of features.
+
+    Attributes
+    ----------
+    prob_bad_given_no_shock : float
+        Prior probability of bad outcome, :math:`\mathbb{P}(Y=b \mid \text{no shock})`.
+        Derived from ``dgp.prob_bad_given_no_shock``.
+    prob_shock : Optional[float]
+        Probability of idiosyncratic shock, :math:`\mathbb{P}(\text{shock})``.
+        ``None`` if ``consider_idiosyncratic_shock=False``.
+    prob_bad_because_of_shock : float
+        Unconditional probability of bad outcome due to shock alone:
+        :math:`\mathbb{P}(\text{shock}) \times \mathbb{P}(Y=b \mid \text{shock})`.
+        Only set if ``consider_idiosyncratic_shock=True``.
+    joint_means : torch.Tensor
+        Concatenated means of bad and good mixture components. Shape
+        ``[*batch_dims, K, F]`` where ``K = K_bad + K_good``.
+    joint_cov_chols : torch.Tensor
+        Concatenated Cholesky factors of covariance matrices for bad and good
+        components. Shape ``[*batch_dims, K, F, F]``.
+    joint_weights : torch.Tensor
+        Concatenated mixture weights (scaled by class priors) for bad and good
+        components. Shape ``[*batch_dims, K]``.
+
+    Properties
+    ----------
+    dtype : torch.dtype
+        Data type of ``joint_means`` (propagates to all computations).
+    K : int
+        Total number of mixture components (``K_bad + K_good``).
+    K_bad : int
+        Number of components in bad outcome mixture.
+    K_good : int
+        Number of components in good outcome mixture.
+    F : int
+        Feature dimension (number of features).
+    batch_dims : torch.Size
+        Leading batch dimensions of the mixture parameters.
+    consider_idiosyncratic_shock : bool
+        Whether idiosyncratic shocks are enabled (equivalently, ``prob_shock is not None``).
+
+    Methods
+    -------
+    broadcast_X(X, safety_checks=True)
+        Reshape feature matrix to align with batch dimensions for mixture evaluation.
+    mahalanobis_X(X_broadcasted)
+        Compute squared Mahalanobis distances from each feature vector to each
+        mixture component.
+    log_component_pdf(X_broadcasted)
+        Compute log-probability density under each mixture component.
+    log_prob_bad_given_no_shock(X_broadcasted)
+        Compute log posterior of bad outcome (conditioned on no shock).
+    predict_prob_bad(X, safety_checks=True)
+        Compute posterior probability of bad outcome, optionally incorporating
+        idiosyncratic shocks.
+    predict_proba(features)
+        Return class probabilities in the format ``[..., 2]`` where columns are
+        ``[P(Y=0), P(Y=1)]`` (good, bad).
+    extract_mixture_comps(mixture, prior_prob_given_no_shock, consider_feats_noise, feats_noise_std)
+        Static method: extract and optionally augment means, Cholesky factors,
+        and weights from a Gaussian mixture.
+    log_normalizing_factors(cov_chol, weights)
+        Static method: compute the log-space normalization constant for each
+        mixture component (excluding the Mahalanobis term).
+
+    Notes
+    -----
+    **Posterior computation via log-space**
+
+    The posterior :math:`\mathbb{P}(Y=b \mid X)` is computed via the log-space
+    likelihood ratio to avoid numerical underflow:
+
+    .. math::
+
+        \log \mathbb{P}(Y=b \mid X) = \log \Phi_b(X) - \log \Phi(X),
+
+    where :math:`\Phi_b(X) = \sum_{k=1}^{K_b} p_k^{(b)} \phi_{k,b}(X)` is the
+    marginal likelihood under the bad mixture (with :math:`\phi_{k,b}` being
+    the Gaussian density of component :math:`k`), and :math:`\Phi(X)` is the
+    total marginal likelihood across both mixtures.  Both are computed via
+    ``torch.logsumexp`` on the per-component log-densities.
+
+    **Idiosyncratic shocks**
+
+    When enabled, the final predicted probability incorporates an unconditional
+    shock term:
+
+    .. math::
+
+        \mathbb{P}(Y=b \mid X) = (1 - p_s) \cdot \mathbb{P}(Y=b \mid X, \text{no shock})
+                                + p_s \cdot \mathbb{P}(Y=b \mid \text{shock}),
+
+    where :math:`p_s` is the shock probability.  This models a background failure
+    mode independent of the observed features.
+
+    **Batch support**
+
+    The classifier can handle batched mixture parameters (e.g., per-fold or
+    per-scenario Gaussian mixtures).  All feature evaluations preserve batch
+    dimensions through explicit reshaping and broadcasting.
+    """
+
+    # Instance variable type hints
+    prob_bad_given_no_shock: float
+    prob_shock: Optional[float]
+    prob_bad_because_of_shock: Optional[float]
+    joint_means: torch.Tensor
+    joint_cov_chols: torch.Tensor
+    joint_weights: torch.Tensor
+
     def __init__(
             self,
             dgp: CreditDataGenerator,
             consider_idiosyncratic_shock: bool,
             consider_feats_noise: bool
         ):
-        self.p_bad_given_no_shock = dgp.p_bad_given_no_shock
+        r"""
+        Initialize the perfect Bayesian classifier from a data generating process.
+
+        Parameters
+        ----------
+        dgp : CreditDataGenerator
+            Data generating process instance providing the mixture parameters
+            for bad and good outcomes, along with shock probabilities and
+            prior probabilities.
+        consider_idiosyncratic_shock : bool
+            If ``True``, the posterior incorporates an unconditional shock term
+            that can flip the outcome independently of features.  If ``False``,
+            predictions are based entirely on the likelihood ratio.
+        consider_feats_noise : bool
+            If ``True``, augments the Gaussian mixture covariances with
+            feature noise (typically observation error) from ``dgp.feats_noise_std``.
+
+        Notes
+        -----
+        The classifier extracts and concatenates the bad and good mixture
+        components, scaling their weights by the respective class priors.
+        All tensors are stored on the device of the DGP's mixture tensors.
+        """
+        self.prob_bad_given_no_shock = dgp.prob_bad_given_no_shock
         if consider_idiosyncratic_shock:
-            self.p_shock = dgp.prob_idiosyncratic_shock
-            self.p_bad_because_of_shock = self.p_shock * dgp.prob_bad_given_shock
+            self.prob_shock = dgp.prob_idiosyncratic_shock
+            self.prob_bad_because_of_shock = self.prob_shock * dgp.prob_bad_given_shock
         else:
-            self.p_shock = None
-            self.p_bad_given_shock = None
+            self.prob_shock = None
+            self.prob_bad_because_of_shock = None
 
         self._is_batched = dgp.is_batched
         self._K_bad = dgp.bad_mixture.K
@@ -1600,14 +1747,14 @@ class PerfectBayesClassif:
         # [*batch_dims, K_bad, F], [*batch_dims, K_bad, F, F], [*batch_dims, K_bad]
         mean_bad, cov_chol_bad, weights_bad = self.extract_mixture_comps(
             dgp.bad_mixture,
-            prior_prob_given_no_shock=self.p_bad_given_no_shock,
+            prior_prob_given_no_shock=self.prob_bad_given_no_shock,
             consider_feats_noise=consider_feats_noise,
             feats_noise_std= dgp.feats_noise_std
         )
         # [*batch_dims, K_good, F], [*batch_dims, K_good, F, F], [*batch_dims, K_good]
         mean_good, cov_chol_good, weights_good = self.extract_mixture_comps(
             dgp.good_mixture,
-            prior_prob_given_no_shock=1-self.p_bad_given_no_shock,
+            prior_prob_given_no_shock=1-self.prob_bad_given_no_shock,
             consider_feats_noise=consider_feats_noise,
             feats_noise_std= dgp.feats_noise_std
         )
@@ -1620,31 +1767,77 @@ class PerfectBayesClassif:
 
     @property
     def dtype(self) -> torch.dtype:
+        r"""Data type of the mixture parameters.
+
+        Returns
+        -------
+        torch.dtype
+        """
         return self.joint_means.dtype
 
     @property
     def K(self) -> int:
+        r"""Total number of mixture components.
+
+        Equal to ``K_bad + K_good``.
+
+        Returns
+        -------
+        int
+        """
         return self.joint_weights.size(-1)
 
     @property
     def K_bad(self) -> int:
+        r"""Number of components in the bad outcome mixture.
+
+        Returns
+        -------
+        int
+        """
         return self._K_bad
     
     @property
     def K_good(self) -> int:
+        r"""Number of components in the good outcome mixture.
+
+        Returns
+        -------
+        int
+        """
         return self.K - self.K_bad
     
     @property
     def F(self) -> int:
+        r"""Feature dimension (number of input features).
+
+        Returns
+        -------
+        int
+        """
         return self.joint_means.size(-1)
     
     @property
     def batch_dims(self) -> torch.Size:
+        r"""Leading batch dimensions of the mixture parameters.
+
+        Returns
+        -------
+        torch.Size
+        """
         return self.joint_means.shape[:-2]
 
     @property
     def consider_idiosyncratic_shock(self) -> bool:
-        return self.p_shock is not None
+        r"""Whether idiosyncratic shocks are enabled.
+
+        Equivalent to ``prob_shock is not None``.
+
+        Returns
+        -------
+        bool
+        """
+        return self.prob_shock is not None
 
     @staticmethod
     def extract_mixture_comps(
@@ -1653,6 +1846,35 @@ class PerfectBayesClassif:
         consider_feats_noise: bool,
         feats_noise_std: float,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        r"""Extract and optionally augment components from a Gaussian mixture.
+
+        Retrieves the normalized parameters (means, Cholesky factors, weights)
+        from a mixture object. Optionally augments covariances with feature noise
+        and scales weights by the class prior probability.
+
+        Parameters
+        ----------
+        mixture : GaussianMixture
+            Source mixture object with ``_normalized_params()`` method.
+        prior_prob_given_no_shock : float
+            Class prior probability, used to scale mixture weights.
+        consider_feats_noise : bool
+            If ``True``, augment covariances with feature noise.
+        feats_noise_std : float
+            Standard deviation of feature noise. Used only if
+            ``consider_feats_noise=True``.
+
+        Returns
+        -------
+        mean : torch.Tensor
+            Component means, shape ``[K, F]`` or ``[B, K, F]`` depending on
+            whether the mixture is batched.
+        cov_chol : torch.Tensor
+            Cholesky factors of covariances, shape ``[K, F, F]`` or
+            ``[B, K, F, F]``.
+        weights : torch.Tensor
+            Mixture weights scaled by class prior, shape ``[K]`` or ``[B, K]``.
+        """
         mean, cov_chol, weights = mixture._normalized_params() # [B, K, F], [B, K, F, F], [B, K]
         if consider_feats_noise and feats_noise_std > 0:
             cov = mixture._effective_cov_additive(cov_chol @ cov_chol.mT, noise_var=feats_noise_std**2)
@@ -1670,6 +1892,30 @@ class PerfectBayesClassif:
 
     @staticmethod    
     def log_normalizing_factors(cov_chol: torch.Tensor, weights: torch.Tensor):
+        r"""Compute log-space normalization constants for Gaussian components.
+
+        For each mixture component, computes the log-space normalization factor
+        that, combined with the Mahalanobis distance, yields the log-density:
+
+        .. math::
+
+            \log p_k(x) = \text{log_norm}[k] - \frac{1}{2} \|v\|^2,
+
+        where :math:`v = L^{-1}(x - \mu)` and :math:`L` is the Cholesky factor.
+
+        Parameters
+        ----------
+        cov_chol : torch.Tensor
+            Cholesky factors of covariance matrices, shape ``[..., K, F, F]``.
+        weights : torch.Tensor
+            Mixture weights (including class priors), shape ``[..., K]``.
+
+        Returns
+        -------
+        torch.Tensor
+            Log normalization constants, shape ``[..., K]``. Each entry includes
+            the log-determinant of the covariance and the log-weight.
+        """
         F = cov_chol.size(-1)
         log_det = 2 * cov_chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1) # [*batch_dims, K]
         log_norm_components = -0.5 * (F * log(2 * torch.pi) + log_det)
@@ -1679,6 +1925,29 @@ class PerfectBayesClassif:
 
 
     def broadcast_X(self, X: torch.Tensor, safety_checks: bool = True):
+        r"""Reshape features to align with batch and component dimensions.
+
+        Inserts singleton dimensions to make feature matrix broadcastable with
+        the mixture parameters for vectorized density evaluation.
+
+        Parameters
+        ----------
+        X : torch.Tensor
+            Feature matrix of shape ``[*lead_dims, F]``.
+        safety_checks : bool, default=True
+            If ``True``, validates that ``X`` has the correct feature dimension
+            and is floating-point.
+
+        Returns
+        -------
+        torch.Tensor
+            Reshaped features of shape ``[*lead_dims, *batch_dims, 1, F]``.
+
+        Raises
+        ------
+        AssertionError
+            If ``safety_checks=True`` and feature dimension or dtype is incorrect.
+        """
         *lead_dims, F = X.shape
         if safety_checks:
             if F != self.F:
@@ -1694,7 +1963,29 @@ class PerfectBayesClassif:
 
         return X
     
-    def mahalonobis_X(self, X_broadcasted):
+    def mahalanobis_X(self, X_broadcasted):
+        r"""Compute squared Mahalanobis distances to all mixture components.
+
+        For each feature vector and component, solves the triangular system
+        :math:`L v = (x - \mu)` where :math:`L` is the Cholesky factor, then
+        returns :math:`\|v\|^2`.
+
+        Parameters
+        ----------
+        X_broadcasted : torch.Tensor
+            Broadcasted features of shape ``[*lead_dims, *batch_dims, 1, F]``
+            (typically output of :meth:`broadcast_X`).
+
+        Returns
+        -------
+        torch.Tensor
+            Squared Mahalanobis distances of shape ``[*lead_dims, *batch_dims, K]``.
+
+        Notes
+        -----
+        Uses ``torch.linalg.solve_triangular`` with the lower Cholesky factor
+        to avoid explicitly inverting the covariance.
+        """
         X_c = X_broadcasted - self.joint_means # [*lead_dims, *bb_dims, K, F]
 
         v = (
@@ -1711,13 +2002,62 @@ class PerfectBayesClassif:
         return mahal # [*lead_dims, *bb_dims, K]
     
     def log_component_pdf(self, X_broadcasted):
-        mahal_X = self.mahalonobis_X(X_broadcasted)
+        r"""Compute log-probability density under each mixture component.
+
+        Parameters
+        ----------
+        X_broadcasted : torch.Tensor
+            Broadcasted features of shape ``[*lead_dims, *batch_dims, 1, F]``.
+
+        Returns
+        -------
+        torch.Tensor
+            Log-densities under each component, shape ``[*lead_dims, *batch_dims, K]``.
+
+        Notes
+        -----
+        Combines pre-computed normalization factors with the Mahalanobis distance:
+
+        .. math::
+
+            \log \phi_k(x) = \text{log_norm}[k] - \frac{1}{2} M_k(x),
+
+        where :math:`M_k(x)` is the squared Mahalanobis distance.
+        """
+        mahal_X = self.mahalanobis_X(X_broadcasted)
 
         log_pdf_per_component = self._log_component_const - (mahal_X/2)
 
         return log_pdf_per_component
     
     def log_prob_bad_given_no_shock(self, X_broadcasted: torch.Tensor) -> torch.Tensor:
+        r"""Compute log posterior of bad outcome (conditioned on no shock).
+
+        Computes the log-space likelihood ratio:
+
+        .. math::
+
+            \log \mathbb{P}(Y=b \mid X) = \log \Phi_b(X) - \log \Phi(X),
+
+        where :math:`\Phi_b(X)` is the marginal likelihood under the bad mixture
+        and :math:`\Phi(X)` is the total marginal likelihood.
+
+        Parameters
+        ----------
+        X_broadcasted : torch.Tensor
+            Broadcasted features of shape ``[*lead_dims, *batch_dims, 1, F]``.
+
+        Returns
+        -------
+        torch.Tensor
+            Log posterior probabilities of bad outcome (no shock),
+            shape ``[*lead_dims, *batch_dims]``.
+
+        Notes
+        -----
+        Both marginal likelihoods are computed via ``torch.logsumexp`` to avoid
+        numerical underflow.
+        """
         log_pdf_per_component = self.log_component_pdf(X_broadcasted)
 
         # This is equal to \log (\phi_{X_b}(\textt{X})\mathbb{P}(Y=b))
@@ -1731,6 +2071,31 @@ class PerfectBayesClassif:
         
 
     def predict_prob_bad(self, X: torch.Tensor, safety_checks: bool = True):
+        r"""Compute posterior probability of bad outcome (including shocks if enabled).
+
+        Parameters
+        ----------
+        X : torch.Tensor
+            Feature matrix of shape ``[*lead_dims, F]``.
+        safety_checks : bool, default=True
+            If ``True``, validates feature dimension and dtype in :meth:`broadcast_X`.
+
+        Returns
+        -------
+        torch.Tensor
+            Posterior probabilities of bad outcome, shape ``[*lead_dims, *batch_dims]``.
+
+        Notes
+        -----
+        If ``consider_idiosyncratic_shock=True``, incorporates the shock term:
+
+        .. math::
+
+            \mathbb{P}(Y=b \mid X) = (1 - p_s) \mathbb{P}(Y=b \mid X, \text{no shock})
+                                    + p_s \mathbb{P}(Y=b \mid \text{shock}),
+
+        Otherwise returns only the shock-free posterior.
+        """
         #  *lead_dims, F = X.shape, bb_dims = (1,) * len(self.batch_dims)
         X = self.broadcast_X(X, safety_checks) # [*lead_dims, *bb_dims, 1, F]
 
@@ -1740,12 +2105,25 @@ class PerfectBayesClassif:
         prob_bad = log_posterior.exp()
 
         if self.consider_idiosyncratic_shock:
-            prob_bad *= 1-self.p_shock
-            prob_bad += self.p_bad_because_of_shock
+            prob_bad *= 1-self.prob_shock
+            prob_bad += self.prob_bad_because_of_shock
 
         return prob_bad
     
     def predict_proba(self, features: torch.Tensor):
+        r"""Return class probabilities in scikit-learn format.
+
+        Parameters
+        ----------
+        features : torch.Tensor
+            Feature matrix of shape ``[*lead_dims, F]``.
+
+        Returns
+        -------
+        torch.Tensor
+            Class probabilities of shape ``[*lead_dims, *batch_dims, 2]`` where the
+            last dimension contains ``[P(Y=0), P(Y=1)]`` (good, bad) respectively.
+        """
         prob_bad = self.predict_prob_bad(features)
         
         probs = prob_bad.new_empty(prob_bad.shape + (2,))
@@ -1753,4 +2131,198 @@ class PerfectBayesClassif:
         probs[..., 0] = 1-prob_bad
 
         return probs
+
+    def predict(self, features: torch.Tensor) -> torch.Tensor:
+        r"""Predict the most likely class.
+
+        Parameters
+        ----------
+        features : torch.Tensor
+            Feature matrix of shape ``[*lead_dims, F]``.
+
+        Returns
+        -------
+        torch.Tensor
+            Binary class predictions (0 or 1) of shape ``[*lead_dims, *batch_dims]``.
+        """
+        probs = self.predict_proba(features)  # [..., *batch_dims, 2]
+        return torch.argmax(probs, dim=-1)  # [..., *batch_dims]
+
+    def decision_function(self, features: torch.Tensor) -> torch.Tensor:
+        r"""Compute the log-odds decision scores.
+
+        Returns the log-odds (log posterior odds) of the bad outcome:
+
+        .. math::
+
+            z(x) = \log \frac{\mathbb{P}(Y=b \mid x)}{\mathbb{P}(Y=g \mid x)}.
+
+        Parameters
+        ----------
+        features : torch.Tensor
+            Feature matrix of shape ``[*lead_dims, F]``.
+
+        Returns
+        -------
+        torch.Tensor
+            Log-odds of shape ``[*lead_dims, *batch_dims]``. Positive values favor
+            the bad outcome, negative values favor the good outcome.
+
+        Notes
+        -----
+        This is the unnormalized decision score that represents the model's
+        confidence in the bad outcome. It is monotonic in the posterior probability
+        and is typically used for ROC curves, calibration analysis, and threshold tuning.
+        """
+        X = self.broadcast_X(features, safety_checks=True)
+        return self.log_prob_bad_given_no_shock(X)
+
+    def to_state_dict(self) -> Dict[str, ndarray]:
+        r"""Return a lightweight, device-agnostic snapshot of the model state.
+
+        Returns
+        -------
+        dict
+            Dictionary with the following keys:
+
+            ``"joint_means"``
+                ``numpy.ndarray`` of shape ``[*batch_dims, K, F]``.
+            ``"joint_cov_chols"``
+                ``numpy.ndarray`` of shape ``[*batch_dims, K, F, F]``.
+            ``"joint_weights"``
+                ``numpy.ndarray`` of shape ``[*batch_dims, K]``.
+            ``"prob_bad_given_no_shock"``
+                ``float``.
+            ``"prob_shock"``
+                ``float`` or ``None``.
+            ``"prob_bad_because_of_shock"``
+                ``float`` or ``None``.
+            ``"K_bad"``
+                ``int``.
+            ``"is_batched"``
+                ``bool``.
+
+        Notes
+        -----
+        The returned arrays are detached CPU copies; modifying them does not
+        affect the model.  The dictionary is fully pickle-safe and device-independent.
+        """
+        return {
+            "joint_means": self.joint_means.detach().cpu().numpy(),
+            "joint_cov_chols": self.joint_cov_chols.detach().cpu().numpy(),
+            "joint_weights": self.joint_weights.detach().cpu().numpy(),
+            "prob_bad_given_no_shock": float(self.prob_bad_given_no_shock),
+            "prob_shock": float(self.prob_shock) if self.prob_shock is not None else None,
+            "prob_bad_because_of_shock": float(self.prob_bad_because_of_shock) if self.prob_bad_because_of_shock is not None else None,
+            "_K_bad": int(self._K_bad),
+            "is_batched": bool(self._is_batched),
+        }
+
+    def load_from_state_dict(self, state_dict: Dict[str, Union[ndarray, torch.Tensor]]) -> None:
+        r"""Restore model state from a snapshot produced by :meth:`to_state_dict`.
+
+        Parameters
+        ----------
+        state_dict : dict
+            Must contain exactly the keys produced by :meth:`to_state_dict`.
+
+        Raises
+        ------
+        ValueError
+            If required keys are missing, unexpected keys are present, or shapes
+            do not match.
+        """
+        expected = {
+            "joint_means", "joint_cov_chols", "joint_weights",
+            "prob_bad_given_no_shock", "prob_shock", "prob_bad_because_of_shock",
+            "_K_bad", "is_batched",
+        }
+        given = set(state_dict.keys())
+        if given != expected:
+            raise ValueError(
+                f"state_dict keys mismatch.\n  Expected: {sorted(expected)}\n  Got: {sorted(given)}"
+            )
+
+        # Validate and convert numpy arrays to tensors
+        for key in ["joint_means", "joint_cov_chols", "joint_weights"]:
+            data = state_dict[key]
+            if isinstance(data, ndarray):
+                data = torch.from_numpy(data)
+            elif not isinstance(data, torch.Tensor):
+                raise ValueError(
+                    f"'{key}' must be a numpy.ndarray or torch.Tensor, got {type(data)}"
+                )
+            if data.shape != getattr(self, key).shape:
+                raise ValueError(
+                    f"Shape mismatch for '{key}': expected {tuple(getattr(self, key).shape)}, "
+                    f"got {tuple(data.shape)}"
+                )
+
+        # Restore tensors
+        with torch.no_grad():
+            self.joint_means.copy_(
+                state_dict["joint_means"].to(
+                    dtype=self.joint_means.dtype, device=self.joint_means.device
+                )
+            )
+            self.joint_cov_chols.copy_(
+                state_dict["joint_cov_chols"].to(
+                    dtype=self.joint_cov_chols.dtype, device=self.joint_cov_chols.device
+                )
+            )
+            self.joint_weights.copy_(
+                state_dict["joint_weights"].to(
+                    dtype=self.joint_weights.dtype, device=self.joint_weights.device
+                )
+            )
+            # Recompute log normalization factors
+            self._log_component_const.copy_(
+                self.log_normalizing_factors(self.joint_cov_chols, self.joint_weights)
+            )
+
+        # Restore scalar attributes
+        self.prob_bad_given_no_shock = float(state_dict["prob_bad_given_no_shock"])
+        self.prob_shock = float(state_dict["prob_shock"]) if state_dict["prob_shock"] is not None else None
+        self.prob_bad_because_of_shock = float(state_dict["prob_bad_because_of_shock"]) if state_dict["prob_bad_because_of_shock"] is not None else None
+
+    def to(self, device: Optional[torch.device] = None, dtype: Optional[torch.dtype] = None) -> "PerfectBayesClassifier":
+        r"""Move all tensors to a target device and/or data type.
+
+        Parameters
+        ----------
+        device : torch.device, optional
+            Target device. If ``None``, device is not changed.
+        dtype : torch.dtype, optional
+            Target data type. If ``None``, dtype is not changed.
+
+        Returns
+        -------
+        PerfectBayesClassifier
+            Returns ``self`` for method chaining.
+
+        Notes
+        -----
+        All mixture tensors and pre-computed log normalization factors are moved
+        together to ensure consistency.
+        """
+        if device is not None or dtype is not None:
+            with torch.no_grad():
+                if device is not None and dtype is not None:
+                    self.joint_means.data = self.joint_means.to(device=device, dtype=dtype)
+                    self.joint_cov_chols.data = self.joint_cov_chols.to(device=device, dtype=dtype)
+                    self.joint_weights.data = self.joint_weights.to(device=device, dtype=dtype)
+                elif device is not None:
+                    self.joint_means.data = self.joint_means.to(device=device)
+                    self.joint_cov_chols.data = self.joint_cov_chols.to(device=device)
+                    self.joint_weights.data = self.joint_weights.to(device=device)
+                else:  # dtype is not None
+                    self.joint_means.data = self.joint_means.to(dtype=dtype)
+                    self.joint_cov_chols.data = self.joint_cov_chols.to(dtype=dtype)
+                    self.joint_weights.data = self.joint_weights.to(dtype=dtype)
+                
+                # Recompute log normalization factors on the new device/dtype
+                self._log_component_const.data = self.log_normalizing_factors(
+                    self.joint_cov_chols, self.joint_weights
+                )
+        return self
     
