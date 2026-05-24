@@ -941,7 +941,7 @@ class CreditDataGenerator:
             bad_mixture = mixture_bad,
             good_mixture = mixture_good,
             seed = seed_credit_data_gen,
-            noise_var=noise_var,
+            feats_noise_var=feats_noise_var,
             bad_ratio=bad_ratio,
             deterministic_weight_sampling=deterministic_weights_for_mixture_sampling
         )
