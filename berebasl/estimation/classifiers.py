@@ -2275,7 +2275,7 @@ class PerfectBayesClassifier:
                     dtype=self.joint_weights.dtype, device=self.joint_weights.device
                 )
             )
-            # Recompute log normalization factors
+            # Recompute log normalization factors, considering maybe new device and dtype
             self._log_component_const.copy_(
                 self.log_normalizing_factors(self.joint_cov_chols, self.joint_weights)
             )
