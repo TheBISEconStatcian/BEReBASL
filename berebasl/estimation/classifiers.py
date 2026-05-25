@@ -1,7 +1,7 @@
 from copy import deepcopy
 from contextlib import contextmanager
 import inspect
-from math import sqrt
+from math import log, sqrt
 
 from numpy import ndarray
 import torch
@@ -1891,7 +1891,10 @@ class PerfectBayesClassifier:
         return mean, cov_chol, weights
 
     @staticmethod    
-    def log_normalizing_factors(cov_chol: torch.Tensor, weights: torch.Tensor):
+    def log_normalizing_factors(
+            cov_chol: torch.Tensor,
+            weights: torch.Tensor
+        ) -> torch.Tensor:
         r"""Compute log-space normalization constants for Gaussian components.
 
         For each mixture component, computes the log-space normalization factor
@@ -1917,14 +1920,14 @@ class PerfectBayesClassifier:
             the log-determinant of the covariance and the log-weight.
         """
         F = cov_chol.size(-1)
-        log_det = 2 * cov_chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1) # [*batch_dims, K]
-        log_norm_components = -0.5 * (F * log(2 * torch.pi) + log_det)
-        log_norm = weights.log() + log_norm_components
+        log_det = 2 * cov_chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1) # [..., K]
+        log_norm_components = -0.5 * (F * log(2 * torch.pi) + log_det)      # [..., K]
+        log_norm = weights.log() + log_norm_components   # [..., K]
 
         return log_norm
 
 
-    def broadcast_X(self, X: torch.Tensor, safety_checks: bool = True):
+    def broadcast_X(self, X: torch.Tensor, safety_checks: bool = True) -> torch.Tensor:
         r"""Reshape features to align with batch and component dimensions.
 
         Inserts singleton dimensions to make feature matrix broadcastable with
@@ -1941,7 +1944,8 @@ class PerfectBayesClassifier:
         Returns
         -------
         torch.Tensor
-            Reshaped features of shape ``[*lead_dims, *batch_dims, 1, F]``.
+            Reshaped features of shape ``[*lead_dims, *bb_dims, 1, F]``. Whereby
+            ``bb_dims = [1 for _ in self.batch_dims]``
 
         Raises
         ------
@@ -1959,11 +1963,11 @@ class PerfectBayesClassifier:
         count_to_add_inbetween = len(self.batch_dims) + 1 # 1 for the channel dimension
         helper_add_dims = (1,) * count_to_add_inbetween
 
-        X = X.reshape(*lead_dims, *helper_add_dims, F)
+        X = X.reshape(*lead_dims, *helper_add_dims, F) # [*lead_dims, *bb_dims, F]
 
         return X
     
-    def mahalanobis_X(self, X_broadcasted):
+    def mahalanobis_X(self, X_broadcasted) -> torch.Tensor:
         r"""Compute squared Mahalanobis distances to all mixture components.
 
         For each feature vector and component, solves the triangular system
@@ -1973,8 +1977,9 @@ class PerfectBayesClassifier:
         Parameters
         ----------
         X_broadcasted : torch.Tensor
-            Broadcasted features of shape ``[*lead_dims, *batch_dims, 1, F]``
-            (typically output of :meth:`broadcast_X`).
+            Broadcasted features of shape ``[*lead_dims, *bb_dims, 1, F]``
+            (typically output of :meth:`broadcast_X`). Whereby
+            ``bb_dims = [1 for _ in self.batch_dims]``
 
         Returns
         -------
@@ -1986,22 +1991,22 @@ class PerfectBayesClassifier:
         Uses ``torch.linalg.solve_triangular`` with the lower Cholesky factor
         to avoid explicitly inverting the covariance.
         """
-        X_c = X_broadcasted - self.joint_means # [*lead_dims, *bb_dims, K, F]
+        X_c = X_broadcasted - self.joint_means # [*lead_dims, *batch_dims, K, F]
 
         v = (
             torch.linalg.solve_triangular( 
                 self.joint_cov_chols,
-                X_c.unsqueeze(-1), # [*lead_dims, *bb_dims, K, F, 1]
+                X_c.unsqueeze(-1), # [*lead_dims, *batch_dims, K, F, 1]
                 upper=False
-            ) # [*lead_dims, *bb_dims, K, F, 1]
-            .squeeze_(-1) # [*lead_dims, *bb_dims, K, F]
+            ) # [*lead_dims, *batch_dims, K, F, 1]
+            .squeeze_(-1) # [*lead_dims, *batch_dims, K, F]
         )
 
         mahal = v.pow(2).sum(dim=-1) # squared euclician norm of v
 
-        return mahal # [*lead_dims, *bb_dims, K]
+        return mahal # [*lead_dims, *batch_dims, K]
     
-    def log_component_pdf(self, X_broadcasted):
+    def log_component_pdf(self, X_broadcasted) -> torch.Tensor:
         r"""Compute log-probability density under each mixture component.
 
         Parameters
@@ -2024,11 +2029,11 @@ class PerfectBayesClassifier:
 
         where :math:`M_k(x)` is the squared Mahalanobis distance.
         """
-        mahal_X = self.mahalanobis_X(X_broadcasted)
+        mahal_X = self.mahalanobis_X(X_broadcasted) # [*lead_dims, *batch_dims, K]
 
-        log_pdf_per_component = self._log_component_const - (mahal_X/2)
+        log_pdf_per_component = self._log_component_const - (mahal_X/2) # [*lead_dims, *batch_dims, K]
 
-        return log_pdf_per_component
+        return log_pdf_per_component # [*lead_dims, *batch_dims, K]
     
     def log_prob_bad_given_no_shock(self, X_broadcasted: torch.Tensor) -> torch.Tensor:
         r"""Compute log posterior of bad outcome (conditioned on no shock).
@@ -2058,19 +2063,19 @@ class PerfectBayesClassifier:
         Both marginal likelihoods are computed via ``torch.logsumexp`` to avoid
         numerical underflow.
         """
-        log_pdf_per_component = self.log_component_pdf(X_broadcasted)
+        log_pdf_per_component = self.log_component_pdf(X_broadcasted) # [*lead_dims, *batch_dims, K]
 
         # This is equal to \log (\phi_{X_b}(\textt{X})\mathbb{P}(Y=b))
-        log_likelihood_X_bad = torch.logsumexp(log_pdf_per_component[..., :self.K_bad], dim=-1) # [*lead_dims, *bb_dims]
+        log_likelihood_X_bad = torch.logsumexp(log_pdf_per_component[..., :self.K_bad], dim=-1) # [*lead_dims, *batch_dims]
         
         # This is equal to \log (\phi_{X_g}(\textt{X})\mathbb{P}(Y=g) +  \phi_{X_b}(\textt{X})\mathbb{P}(Y=b))
-        log_marginal_pdf_X = torch.logsumexp(log_pdf_per_component, dim=-1) # [*lead_dims, *bb_dims]
+        log_marginal_pdf_X = torch.logsumexp(log_pdf_per_component, dim=-1) # [*lead_dims, *batch_dims]
 
         # \log \mathbb{P}(Y=b | X = \textt{X})
-        return log_likelihood_X_bad - log_marginal_pdf_X # [*lead_dims, *bb_dims]
+        return log_likelihood_X_bad - log_marginal_pdf_X # [*lead_dims, *batch_dims]
         
 
-    def predict_prob_bad(self, X: torch.Tensor, safety_checks: bool = True):
+    def predict_prob_bad(self, X: torch.Tensor, safety_checks: bool = True) -> torch.Tensor:
         r"""Compute posterior probability of bad outcome (including shocks if enabled).
 
         Parameters
@@ -2100,7 +2105,7 @@ class PerfectBayesClassifier:
         X = self.broadcast_X(X, safety_checks) # [*lead_dims, *bb_dims, 1, F]
 
         # \log \mathbb{P}(Y=b | X = \textt{X})
-        log_posterior = self.log_prob_bad_given_no_shock(X)
+        log_posterior = self.log_prob_bad_given_no_shock(X) # [*lead_dims, *batch_dims]
 
         prob_bad = log_posterior.exp()
 
@@ -2108,9 +2113,9 @@ class PerfectBayesClassifier:
             prob_bad *= 1-self.prob_shock
             prob_bad += self.prob_bad_because_of_shock
 
-        return prob_bad
+        return prob_bad  # [*lead_dims, *batch_dims]
     
-    def predict_proba(self, features: torch.Tensor):
+    def predict_proba(self, features: torch.Tensor) -> torch.Tensor:
         r"""Return class probabilities in scikit-learn format.
 
         Parameters
@@ -2124,13 +2129,13 @@ class PerfectBayesClassifier:
             Class probabilities of shape ``[*lead_dims, *batch_dims, 2]`` where the
             last dimension contains ``[P(Y=0), P(Y=1)]`` (good, bad) respectively.
         """
-        prob_bad = self.predict_prob_bad(features)
+        prob_bad = self.predict_prob_bad(features)  # [*lead_dims, *batch_dims]
         
-        probs = prob_bad.new_empty(prob_bad.shape + (2,))
+        probs = prob_bad.new_empty(prob_bad.shape + (2,))  # [*lead_dims, *batch_dims, gb=2]
         probs[..., 1] = prob_bad
         probs[..., 0] = 1-prob_bad
 
-        return probs
+        return probs # [*lead_dims, *batch_dims, gb=2]
 
     def predict(self, features: torch.Tensor) -> torch.Tensor:
         r"""Predict the most likely class.
@@ -2218,13 +2223,18 @@ class PerfectBayesClassifier:
             "is_batched": bool(self._is_batched),
         }
 
-    def load_from_state_dict(self, state_dict: Dict[str, Union[ndarray, torch.Tensor]]) -> None:
+    def load_from_state_dict(self, state_dict: Dict[str, Union[ndarray, torch.Tensor]]) -> "PerfectBayesClassifier":
         r"""Restore model state from a snapshot produced by :meth:`to_state_dict`.
 
         Parameters
         ----------
         state_dict : dict
             Must contain exactly the keys produced by :meth:`to_state_dict`.
+
+        Returns
+        -------
+        PerfectBayesClassifier
+            Returns ``self`` for method chaining.
 
         Raises
         ------
@@ -2285,6 +2295,8 @@ class PerfectBayesClassifier:
         self.prob_shock = float(state_dict["prob_shock"]) if state_dict["prob_shock"] is not None else None
         self.prob_bad_because_of_shock = float(state_dict["prob_bad_because_of_shock"]) if state_dict["prob_bad_because_of_shock"] is not None else None
 
+        return self
+
     def to(self, device: Optional[torch.device] = None, dtype: Optional[torch.dtype] = None) -> "PerfectBayesClassifier":
         r"""Move all tensors to a target device and/or data type.
 
@@ -2324,5 +2336,6 @@ class PerfectBayesClassifier:
                 self._log_component_const.data = self.log_normalizing_factors(
                     self.joint_cov_chols, self.joint_weights
                 )
+
         return self
     
