@@ -84,7 +84,8 @@ def k_fold_cv_normalized_split(
     if mask_valid is None:
         mask_valid = ~(labels.isnan() if isnan(nan_lbls) else labels == nan_lbls)
 
-    min_bads_given_per_fold = torch.all(labels.sum(dim=-1) >= (min_bads * k))
+    base_to_count_bads = (labels == 1) & mask_valid
+    min_bads_given_per_fold = torch.all(base_to_count_bads.sum(dim=-1) >= (min_bads * k))
     if safety_checks:
         inputs_ok = (
             (type(features) is type(labels) is type(mask_valid) is torch.Tensor) and
