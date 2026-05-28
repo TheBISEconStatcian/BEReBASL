@@ -1612,6 +1612,10 @@ class PerfectBayesClassifier:
     joint_cov_chols : torch.Tensor
         Concatenated Cholesky factors of covariance matrices for bad and good
         components. Shape ``[*batch_dims, K, F, F]``.
+    joint_inv_covs: torch.Tensor
+        Concatenated inverse of the covariance matrices calculated via
+        ``torch.cholesky_inverse``. Used for performance reasons for the
+        mahalanobis standardization.
     joint_weights : torch.Tensor
         Concatenated mixture weights (scaled by class priors) for bad and good
         components. Shape ``[*batch_dims, K]``.
@@ -1700,6 +1704,7 @@ class PerfectBayesClassifier:
     prob_bad_because_of_shock: Optional[float]
     joint_means: torch.Tensor
     joint_cov_chols: torch.Tensor
+    joint_inv_cov: torch.Tensor
     joint_weights: torch.Tensor
 
     def __init__(
@@ -1761,6 +1766,10 @@ class PerfectBayesClassifier:
 
         self.joint_means = torch.cat([mean_bad, mean_good], dim=-2)             # [*batch_dims, K, F]
         self.joint_cov_chols = torch.cat([cov_chol_bad, cov_chol_good], dim=-3) # [*batch_dims, K, F, F]
+        self.joint_inv_covs = torch.cholesky_inverse(
+            self.joint_cov_chols.double(), # Use double precision for the inverse, as it is the most brittle step
+            upper = False
+        ).to(self.joint_cov_chols.dtype) # Turn back to the "usual precision"
         self.joint_weights = torch.cat([weights_bad, weights_good], dim=-1)     # [*batch_dims, K]
 
         self._log_component_const = self.log_normalizing_factors(self.joint_cov_chols, self.joint_weights) # [*batch_dims, K]
@@ -1838,6 +1847,19 @@ class PerfectBayesClassifier:
         bool
         """
         return self.prob_shock is not None
+    
+    @property
+    def joint_covs(self) -> torch.Tensor:
+        """
+        Cvariance matrices of the bad and
+        good components, the back transform of
+        the cholesky decompositions
+
+        Returns
+        -------
+        torch.Tensor
+        """
+        return self.joint_cov_chols @ self.joint_cov_chols.mT
 
     @staticmethod
     def extract_mixture_comps(
@@ -1988,23 +2010,19 @@ class PerfectBayesClassifier:
 
         Notes
         -----
-        Uses ``torch.linalg.solve_triangular`` with the lower Cholesky factor
-        to avoid explicitly inverting the covariance.
+        Although ``torch.linalg.solve_triangular`` with the lower Cholesky factor
+        would avoid 
         """
         X_c = X_broadcasted - self.joint_means # [*lead_dims, *batch_dims, K, F]
+        X_c = X_c.unsqueeze(-1) # [*lead_dims, *batch_dims, K, F, 1]
 
-        v = (
-            torch.linalg.solve_triangular( 
-                self.joint_cov_chols,
-                X_c.unsqueeze(-1), # [*lead_dims, *batch_dims, K, F, 1]
-                upper=False
-            ) # [*lead_dims, *batch_dims, K, F, 1]
-            .squeeze_(-1) # [*lead_dims, *batch_dims, K, F]
-        )
+        mahal = (
+            X_c.mT @             # [*lead_dims, *batch_dims, K, 1, F]
+            self.joint_inv_covs @ # [*lead_dims, *batch_dims, K, F, F]
+            X_c                  # [*lead_dims, *batch_dims, K, F, 1]
+        ) # [*lead_dims, *batch_dims, K, 1, 1]
 
-        mahal = v.pow(2).sum(dim=-1) # squared euclician norm of v
-
-        return mahal # [*lead_dims, *batch_dims, K]
+        return mahal.squeeze(-2, -1) # [*lead_dims, *batch_dims, K]
     
     def log_component_pdf(self, X_broadcasted) -> torch.Tensor:
         r"""Compute log-probability density under each mixture component.
