@@ -1,9 +1,10 @@
 # Using the acceptance dynamics
 
 With a defined simulation framework, one can begin to formulate
-precisely how to use the acceptance dynamics. I base my belief
-on the possibility to take advantage of these dynamics on a hypothesis
-which gets first presented. Based on this hypothesis one can formulate
+precisely how to use the acceptance dynamics. The core idea is
+that if the bias exists or is economically relevant it should
+be observable in some manner and if so we can try to minimize
+the bias. Based on this hypothesis one can then formulate
 a scenario, using that we have full knowledge of the applicants' population,
 which allows gathering evidence on the plausibility of such hypothesis.
 Having delivered this evidence, a reward signal is defined along to a formulation
@@ -11,11 +12,55 @@ of the RI problem as a reinforcement learning problem.
 
 ## Hypothesis definition (Surprise, minimization of surprise)
 
+The most general case where we can assume unbiasedly (in the sense of this
+thesis) estimated scorecards while (implicitly) ignoring the missing data
+mechanism is MAR as defined on @eq-mar-only-model. Given the existence of
+regularity conditions allowing for well-defined joint and marginal densities,
+just like in the presented simulation framework in @sec-app-population-simulation,
+the MAR condition is equivalent to
+$$
+Z^{(t)} \perp\!\!\!\perp Y^{:t} \big | X^{:t}
+$$
+from which it follows almost everywhere
+$$
+p_{Y | X}(y, x) = p_{Y | X, Z^{:t}=s}(y, x)
+$${#eq-Y-cond-X-density-indep-Z}
+
+with $y \in \{g, b\}, x \in \mathbb{R}$ and $s \in \{a, r\}$. If we assume
+(as given in the simulation framework)
+
+1. $N_t$ is very large, so that at each round many applicants get accepted,
+2. the scorecard estimation algorithm is the same at every round, i. e.
+   $\ell_t = \ell_{t'}$, $t, t' \in \mathbf{T}$, 
+3. the estimation method is unbiased (in the sense of this thesis), and
+3. the method for choosing the cut-off scoring $c_t$ remains the same
+   across rounds, like choosing the validations' set optimal ROC-point,
+
+we can make an argument for the joint distribution of the accepts being
+(roughly) time invariant. For lack of a better notation, this distribution
+is written as $\mathbb{P}_{Y, X | Z^{(t)} = a}$, which is defined over
+$$
+\left\{
+    \left(Y(\omega), X(\omega) \right) \middle |
+    \omega \in \Omega, \hat{s}^{(t)}\left(X^{(t)}(\omega)\right) > c^{(t)} 
+\right\}
+$$
+
+
+
+Therefore, it is reasonable to believe that an unbiasedly estimated scorecard
+$\hat{s}^{(t)}$, given the threshold $c^{(t)}$ will accept applicants
+with features belonging to the same region of the distribution $\mathbb{P}_{X}$.
+This 
+
 ### Define Surprise, minimization of surprise
 
 ### Formulating the hypothesis
 
 ### Checking the hypothesis
+
+Although a theoretical check of the hypothesis might result interesting,
+it is neither straigh
 
 #### Classifiers definition
 
