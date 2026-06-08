@@ -112,8 +112,9 @@ the function looks like.
 
 ### Starting the loop: business rule
 
-### Scoring function estimation
 
+
+### Scoring function estimation
 
 ### CV based threshold
 
