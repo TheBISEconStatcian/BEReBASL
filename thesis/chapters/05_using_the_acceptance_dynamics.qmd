@@ -38,7 +38,7 @@ with $y \in \{g, b\}, x \in \mathbb{R}$ and $s \in \{a, r\}$. If we assume
 
 we can make an argument for the joint distribution of the accepts being
 (roughly) time invariant. For lack of a better notation, this distribution
-is written as $\mathbb{P}_{Y, X | Z^{(t)} = a}$, which is defined over
+is written as $\mathbb{P}_{Y, X | Z^{(t)} = a}$ which is defined over
 $$
 \left\{
     \left(Y(\omega), X(\omega) \right) \middle |
