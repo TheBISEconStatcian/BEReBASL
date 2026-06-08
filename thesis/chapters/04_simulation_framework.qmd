@@ -45,7 +45,7 @@ X | \{\tilde{Y}=o\} \sim \mathcal{N}\left(
     \end{pmatrix}
 \right)
 $$
-with $\Sigma, \Sigma_{m, o}$ and $\Sigma_{h, o}$ strictly positive definite (so, non-singular).
+with $\Sigma_o, \Sigma_{m, o}$ and $\Sigma_{h, o}$ strictly positive definite (so, non-singular).
 Letting $X_o$ be short for $X | \{\tilde{Y}=o\}$ also let $\phi_{X_o}$ denote its probability density
 function (pdf). Since $X_o$ is normally distributed the pdf is given by
 $$
@@ -104,6 +104,8 @@ $$
 $$
 which is the basis for the best possible prediction of a bad loan.
 
+
+
 ## Decision and scoring functions
 
 The decision function has two phases, the starting phase (where no data has been gathered yet)
@@ -112,7 +114,7 @@ the function looks like.
 
 ### Starting the loop: business rule
 
-
+Since it is hard to 
 
 ### Scoring function estimation
 
