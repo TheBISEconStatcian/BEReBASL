@@ -27,31 +27,45 @@ p_{Y | X}(y, x) = p_{Y | X, Z^{:t}=s}(y, x)
 $${#eq-Y-cond-X-density-indep-Z}
 
 with $y \in \{g, b\}, x \in \mathbb{R}$ and $s \in \{a, r\}$. If we assume
-(as given in the simulation framework)
 
 1. $N_t$ is very large, so that at each round many applicants get accepted,
 2. the scorecard estimation algorithm is the same at every round, i. e.
    $\ell_t = \ell_{t'}$, $t, t' \in \mathbf{T}$, 
-3. the estimation method is unbiased (in the sense of this thesis), and
-3. the method for choosing the cut-off scoring $c_t$ remains the same
-   across rounds, like choosing the validations' set optimal ROC-point,
+3. the estimation method is unbiased (in the sense of this thesis),
+. the method for choosing the cut-off scoring $c_t$ remains the same
+   across rounds, like choosing the validations' set optimal ROC-point and
+5. A MAR missing data process
 
 we can make an argument for the joint distribution of the accepts being
 (roughly) time invariant. For lack of a better notation, this distribution
-is written as $\mathbb{P}_{Y, X | Z^{(t)} = a}$ which is defined over
+is written as $\mathbb{P}_{Y, X | Z^{(t)} = a}$ and its defined for any
+measurable set $A \in 2^{E_Y} \otimes \mathcal{B}\left(\mathbb{R}^f\right)$
+as
 $$
-\left\{
-    \left(Y(\omega), X(\omega) \right) \middle |
-    \omega \in \Omega, \hat{s}^{(t)}\left(X^{(t)}(\omega)\right) > c^{(t)} 
-\right\}
+\mathbb{P}_{Y, X | Z^{(t)} = a}(A) = 
+\frac{
+    \mathbb{P}\left((Y, X) \in A, \hat{s}_t(X_m) > c \right)
+}{
+    \mathbb{P}\left(\hat{s}_t(X_m) > c \right)
+}
 $$
 
-
-
-Therefore, it is reasonable to believe that an unbiasedly estimated scorecard
-$\hat{s}^{(t)}$, given the threshold $c^{(t)}$ will accept applicants
-with features belonging to the same region of the distribution $\mathbb{P}_{X}$.
-This 
+Note that this definition directly uses @eq-Z-t-with-threshold-and-scorecard-no-overwrites
+by plugging in the definition of the acceptance process without overwrites,^[
+    which equals the acceptance process for $f_h = 0$
+] rendering it dependent on $\left(Y^{:t}, X^{:t} \right)$. Now considering that the applicants
+population is time constant, for large enough $N_t$ we should expect that
+each observable sample per acceptance round is roughly the same. If $\hat{s}_t$
+is unbiased, then the classification should always accept applicants of the
+same region of the population, as $\hat{s}_t$ would rank in a manner "alike" the
+new applicants. If this happens, then the distribution of the accepts at each round
+should be very alike.^[
+    One could more formally say that with $\delta$ the total variation distance
+    $\forall t, t' \in \mathbf{T} : \delta(\mathbb{P}_{Y, X | Z^{(t)} = a}, \mathbb{P}_{Y, X | Z^{(t')} = a}) \approx 0$
+]
+Given all of these conditions therefore the measured performance on the validation
+set of $\hat{s}_t$ should be roughly the same as the measured rank-based performance on the
+new accepts.
 
 ### Define Surprise, minimization of surprise
 

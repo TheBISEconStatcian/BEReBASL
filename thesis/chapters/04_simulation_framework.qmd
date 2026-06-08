@@ -141,14 +141,16 @@ Since it is hard to
 
 Then at each acceptance round, the chosen threshold by CV is denoted as $c_t$ and the
 decision function is therefore
-$$
-Z^{(t)}_i(\omega) = \begin{cases}
-a & \hat{s}_t \left(X^{(t)}_{m, i} (\omega) \right) > c_t \\
-r & \hat{s}_t \left(X^{(t)}_{m, i} (\omega) \right) \leq c_t
-\end{cases}
-$${#eq-Z-t-with-threshold-and-scorecard}
+
 
 ### Hidden features overwrites 
+
+$$
+Z^{(t)}_i(\omega) = \begin{cases}
+a & \hat{s}_t \left(X^{(t)}_{m, i} (\omega) \right) > c_t  \\
+r & \hat{s}_t \left(X^{(t)}_{m, i} (\omega) \right) \leq c_t
+\end{cases}
+$${#eq-Z-t-with-threshold-and-scorecard-no-overwrites}
 
 ## Acceptance loop algorithm
 
