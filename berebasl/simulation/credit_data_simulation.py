@@ -626,7 +626,7 @@ class CreditDataGenerator:
         if n_samples is None:
             n_samples = max(10_000, 500 * self.bad_mixture.K * self.F)
 
-        X, y        = self.sample(n_samples)
+        X, y, _     = self.sample(n_samples)
         log_p_bad   = self.log_prob_bad(X)
         log_p_good  = self.log_prob_good(X)
 
