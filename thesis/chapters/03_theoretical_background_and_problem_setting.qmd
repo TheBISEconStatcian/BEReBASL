@@ -205,7 +205,7 @@ $${#eq-joint-dist-feats-and-repayment}
 defined over the product space of the state spaces of the random variables,
 with marginals as above.^[
     Since all feature spaces are Borel spaces, their finite product is also
-    a Borel space. As $\left(Y, 2^{E_y}\right)$ is finite, the resulting
+    a Borel space. As $\left(E_Y, 2^{E_Y}\right)$ is finite, the resulting
     product space satisfies the regularity assumptions ensuring the existence
     of regular conditional probability kernels [@Pollard_2001, Ch. 4, Theorem 9],
     which will later be required for conditional modeling arguments.
