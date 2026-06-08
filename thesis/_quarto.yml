@@ -11,6 +11,7 @@ execute:
   warning: false     # Hides python warnings from the PDF
   python: ./../masters_venv/Scripts/python.exe
   results: asis
+  notebook-links: false
 
 format:
   pdf:
