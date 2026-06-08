@@ -82,6 +82,8 @@ opinion on naming.
 
 - [Designing logic for handling "batched CreditDataSamples" (labels.dim() > 1)](https://www.perplexity.ai/search/in-this-function-i-want-to-kee-hISfZ3XFQ6KMTW1Kyy6h2w#2)
 - [Small literature research and help understanding MAR vs MNAR](https://www.perplexity.ai/search/261ac5f8-71b6-4520-b949-ca2e1ea6b741)
+- [Trying to find literature on ML consistent estimators under MAR proof and trying to bring formalism for hypothesis fromulation](https://www.perplexity.ai/search/in-the-credit-risk-literature-OxEvKj8cRJmjW8C0WABg2g)
+- [Relationship between MAR and the conditional density of $Y|X$ given the acceptance status](https://www.perplexity.ai/search/well-i-am-realizing-that-from-lUQoNVX3Rt.ZnaDOz6gzLg)
 
 ## Links to `Claude` usage
 
