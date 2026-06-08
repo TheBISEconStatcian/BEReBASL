@@ -753,7 +753,7 @@ def acceptance_loop(
 
         # ── 3. Accept decissions ────────────
         # ── 3.1. Generate new applicant batch ───────────────────────────────
-        feats_new, lbls_new = data_generator.sample(sample_size)   # [S,F], [S]
+        feats_new, lbls_new, _ = data_generator.sample(sample_size)   # [S,F], [S]
 
         # ── 3.1b. MNAR forcing set ───────────────────────────────────────────
         # Applicants whose hidden-variable value is below the bias_percentage
@@ -1152,7 +1152,7 @@ if __name__ == "__main__":
         else "cpu"
     )
 
-    torch.set_num_threads(24)
-    torch.set_num_interop_threads(8)
+    torch.set_num_threads(64)
+    torch.set_num_interop_threads(32)
 
     run_cv_simulation(params, device, dtype)

@@ -36,8 +36,8 @@ from .acceptance_loop_cv_based_MNAR import (
 
 def main():
     # Torch set up
-    torch.set_num_threads(24)
-    torch.set_num_interop_threads(8)
+    torch.set_num_threads(64)
+    torch.set_num_interop_threads(32)
 
     # Parse base arguments (includes --var-to-hide, --bias-percentage,
     # --hidden-corr and all the shared loop args).
@@ -49,8 +49,8 @@ def main():
     params = process_args_cv_loop(args)
 
     # Override fixed values common to all grid cells
-    params["init_sample"] = 1500
-    params["sample_size"] = 300
+    params["init_sample"] = 6000
+    params["sample_size"] = 1000
 
     # ── Grid definition ───────────────────────────────────────────────────────
     # bias_percentage: quantile on the hidden variable that triggers forced

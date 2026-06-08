@@ -226,7 +226,7 @@ def generate_initial_and_holdout_population(
         top_percent: float = 0.2
 ) -> Tuple[CreditDataGenerator, CreditData, CreditData]:
     data_gen.manual_seed(initial_seed)
-    feats_new_applicants, def_flag_new_applicants = data_gen.sample(
+    feats_new_applicants, def_flag_new_applicants, _ = data_gen.sample(
         init_sample
     )
     
@@ -242,7 +242,7 @@ def generate_initial_and_holdout_population(
 
     # Holdout Population
     data_gen.manual_seed(-initial_seed)
-    holdout_features, holdout_flag = data_gen.sample(n=holdout_sample)
+    holdout_features, holdout_flag, _ = data_gen.sample(n=holdout_sample)
     holdout_data = CreditData(
         holdout_features, holdout_flag, 
         accepted_initial=torch.ones_like(holdout_flag, dtype=torch.bool) # All are "accepted"
