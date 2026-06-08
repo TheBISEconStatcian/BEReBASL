@@ -220,8 +220,8 @@ def mnar_default_dgp(
     
     cov_good = torch.tensor(
                 [
-                    [ 1.0, -0.2, hidden_corr], 
-                    [-0.2,  1.0, hidden_corr],
+                    [ 1.0, 0.2, hidden_corr], 
+                    [0.2,  1.0, hidden_corr],
                     [ hidden_corr,  hidden_corr, 1.0]
                 ], 
                 dtype=dtype, device=device
@@ -232,6 +232,7 @@ def mnar_default_dgp(
     # Original order: [0, 1, ..., n-2, n-1]
     perm = list(range(F - 1))
     # Insert last index at desired position
+    var_to_hide = var_to_hide % F # Normalize first
     perm.insert(var_to_hide, F - 1)
 
     cov_bad, cov_good = [cov[perm][:, perm] for cov in (cov_bad, cov_good)]
@@ -250,7 +251,7 @@ def mnar_default_dgp(
         device = device,
         dtype=dtype,
         seed_credit_data_gen=seed_credit_data_gen,
-        deterministic_weights_for_mixture_sampling = False
+        deterministic_weights_for_mixture_sampling = deterministic_weights_for_mixture_sampling
     )
 
     return dgp
