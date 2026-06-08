@@ -1,4 +1,4 @@
-from math import log
+from math import log, sqrt
 import torch
 from warnings import warn
 
@@ -865,6 +865,43 @@ class GaussianMixture:
         
 
         return text_obj, dist_strs
+    
+def standard_normal_cdf(x: torch.Tensor) -> torch.Tensor:
+    return 0.5 * (1 + torch.erf(x / sqrt(2)))
+
+def bayes_rate_two_class_mvn_gaussian_equal_cov(
+        mu1: torch.Tensor,
+        mu2: torch.Tensor,
+        cov_chol: torch.Tensor,
+        p1: float
+    ) -> torch.Tensor:
+    """
+    Based on the formula by Ripley (1996, 2nd Edition) Chapter 2, Page 22.
+    He calls it probability of missclassification
+    """
+    mu_diff = mu1 - mu2
+    if mu_diff.dim() == 1:
+        mu_diff = mu_diff.unsqueeze(-1)
+
+    delta = torch.linalg.norm(
+        torch.linalg.solve_triangular(cov_chol, mu_diff, upper=False).squeeze(-1),
+        ord=2
+    )
+    # Cache results for numeric stability
+    minus_half_delta = -0.5 * delta
+    p2 = 1 - p1
+    log_prob_ratio = log(p2/p1)
+    ratio_div_delta = log_prob_ratio / delta
+
+
+    pmc_1 = p1 * standard_normal_cdf(
+        minus_half_delta + ratio_div_delta
+    )
+    pmc_2 = p2 * standard_normal_cdf(
+        minus_half_delta - ratio_div_delta
+    )
+
+    return pmc_1 + pmc_2
 
 
 if __name__ == "__main__":
