@@ -16,8 +16,35 @@ format: pdf
 {{< pagebreak >}}
 
 ```{python}
-#| results: asis
+#| echo: false
+#| warning: false
+#| message: false
 
+## Imports
+import os
+import sys
+
+base_path = os.path.abspath("./..")
+if base_path not in sys.path:
+    sys.path.append(base_path)
+
+from IPython.display import display, Markdown
+import torch
+
+from berebasl.simulation.credit_data_simulation import CreditDataGenerator
+
+grid_path = '../berebasl/data/simulations/mnar_grid'
+base_sim = 'bias_0_0_corr_0_0'
+
+init_objs_path = os.path.join(grid_path, base_sim, 'initial_simulation_objects_cv_mnar.pt')
+dgp_base: CreditDataGenerator = torch.load(init_objs_path, map_location='cpu', weights_only=False)["data_generator"]
+```
+
+```{python}
+#| results: asis
+#| eval: false
+
+# Just to get the text below this one.
 ### The results asis is just a way to remember how to do that in the future
 import os
 from IPython.display import display_markdown
@@ -36,6 +63,30 @@ for ch in chapters:
 ```
 
 
+{{< include chapters/01_introduction.qmd >}}
 
+{{< pagebreak >}}
+
+{{< include chapters/02_related_work.qmd >}}
+
+{{< pagebreak >}}
+
+{{< include chapters/03_theoretical_background_and_problem_setting.qmd >}}
+
+{{< pagebreak >}}
+
+{{< include chapters/04_simulation_framework.qmd >}}
+
+{{< pagebreak >}}
+
+{{< include chapters/05_using_the_acceptance_dynamics.qmd >}}
+
+{{< pagebreak >}}
+
+{{< include chapters/06_results.qmd >}}
+
+{{< pagebreak >}}
+
+{{< include chapters/07_conclussion.qmd >}}
 
 {{< pagebreak >}}
