@@ -257,10 +257,10 @@ For $t=0$, $s_t$ is assumed to come from some external source (experts opinion, 
 trained on other data). For $t>0$, $s_t$ is assumed to be generated through a measurable
 learning procedure
 $$
-a_t : \left(O_{:t}, \mathcal{O}_{:t}\right) \to \left(S_t, \mathcal{S}_t \right)
+\ell_t : \left(O_{:t}, \mathcal{O}_{:t}\right) \to \left(S_t, \mathcal{S}_t \right)
 $$
 where the codomain denotes the measurable space of all admissible score functions for
-time $t$. See that $a_t$ does not restrict $s_t$ to always be estimated
+time $t$. See that $\ell_t$ does not restrict $s_t$ to always be estimated
 by some specific procedure, such that the score function at one acceptance round could
 be based on a XGB classification forest and in another by a support vector machine.
 Finally, it should be noted that although for $d$ a similar definition of some decision
