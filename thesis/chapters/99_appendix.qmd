@@ -1,0 +1,16 @@
+# Appendix
+
+## Mathematical derivations/proofs
+
+### Bayes error with idiosyncratic shocks
+
+A perfect Bayes classifier considering the idiosyncratic shock as defined in 
+@eq-pd-with-shock-perf-bayes has an analytical solution for the Bayes error.
+To get to this expression, I use the results of @Ripley_1996. The decision
+to classify an applicant as bad occurs if
+
+$$
+\mathbb{P}(Y=b | X = x) > \mathbb{P}(Y=g | X = x)
+$$
+
+
