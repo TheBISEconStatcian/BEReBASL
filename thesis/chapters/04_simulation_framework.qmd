@@ -99,10 +99,29 @@ and $\pi_{\varepsilon, b} := \mathbb{P}(\varepsilon = b) \in (0,1)$.
 With this we can further write down
 $$
 \mathbb{P}(Y = b | X = x) = 
-    \pi_{\varepsilon, b} \, p_{\tilde{Y} | X} (b, x) +
-    (1 - \pi_{\varepsilon, b}) \pi_{\varepsilon, b}
-$$
+    \pi_{\epsilon} \, p_{\tilde{Y} | X} (b, x) +
+    (1 - \pi_{\epsilon}) \pi_{\varepsilon, b}
+$${#eq-pd-with-shock-perf-bayes}
 which is the basis for the best possible prediction of a bad loan.
+
+It becomes quickly clear that the amount of metaparameters for the
+simulation is overwhelming, so that for a comparable study a relatively
+simple setting has been selected. Namely $f_m = 2$, $f_h = 0$,
+$\Sigma_g = \Sigma_b = \Sigma$ and $\Sigma_{mh}^\top = \sigma_{mh} \mathbf{1}_{f_m \times f_h}$
+with $\mathbf{1}_{f_m \times f_h} \in \mathbb{R}^{f_m \times f_h}$ a matrix
+of ones and $\sigma_{mh} \in \mathbb{R}$. Therefore the distributional
+differences between $X_o$ and $X_g$ are solely characterized by the mean difference. Their distributions are given by:
+```{python}
+#| notebook-links: false
+tex_obj_g, _ = dgp_base.good_mixture.univariate_mixture_as_tex("g")
+text_obj_b, _ = dgp_base.bad_mixture.univariate_mixture_as_tex("b")
+
+report_str = ("$$\n{ \\scriptsize " + tex_obj_g+
+              r", \," + text_obj_b + " }\n$$")
+
+display(Markdown(report_str))
+```
+
 
 
 
@@ -119,6 +138,15 @@ Since it is hard to
 ### Scoring function estimation
 
 ### CV based threshold
+
+Then at each acceptance round, the chosen threshold by CV is denoted as $c_t$ and the
+decision function is therefore
+$$
+Z^{(t)}_i(\omega) = \begin{cases}
+a & \hat{s}_t \left(X^{(t)}_{m, i} (\omega) \right) > c_t \\
+r & \hat{s}_t \left(X^{(t)}_{m, i} (\omega) \right) \leq c_t
+\end{cases}
+$${#eq-Z-t-with-threshold-and-scorecard}
 
 ### Hidden features overwrites 
 
