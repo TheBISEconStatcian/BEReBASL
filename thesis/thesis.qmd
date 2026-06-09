@@ -33,7 +33,7 @@ import torch
 
 from berebasl.simulation.credit_data_simulation import CreditDataGenerator
 
-grid_path = '../berebasl/data/simulations/mnar_grid'
+grid_path = '../berebasl/data/simulations/mnar_grid_hyp_testing'
 base_sim = 'bias_0_0_corr_0_0'
 
 init_objs_path = os.path.join(grid_path, base_sim, 'initial_simulation_objects_cv_mnar.pt')
