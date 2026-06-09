@@ -90,9 +90,12 @@ is violated. Although the assumptions may be restrictive, assumptions
 @item-time-invariant-population to @item-cutoff-chosen-consistently
 are enforced by the simulation framework. Consequently, within the
 simulated environment persistent surprise cannot be attributed to
-changes in the applicants population, the estimation procedure or
+changes in the applicants' population, the estimation procedure or
 the acceptance policy. Instead, surprise is expected to primarily
-reflect model misspecification and departures from MAR.
+reflect model misspecification and departures from MAR. Therefore,
+at least within the context of this thesis, surprise provides a
+natural candidate reward signal for learning policies that mitigate
+the effects of such departures.
 
 ### Empirical evidence of the bias observability as surprise
 
