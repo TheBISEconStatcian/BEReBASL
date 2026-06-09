@@ -98,7 +98,7 @@ with parameters $\pi_{\epsilon} := \mathbb{P}(\epsilon =\text{no idiosyncratic s
 and $\pi_{\varepsilon, b} := \mathbb{P}(\varepsilon = b) \in (0,1)$. 
 With this we can further write down
 $$
-\mathbb{P}(Y = b | X = x) = 
+\mathbb{P}(Y = b | X = x) = p_{Y=b | X}(x) = 
     \pi_{\epsilon} \, p_{\tilde{Y} | X} (b, x) +
     (1 - \pi_{\epsilon}) \pi_{\varepsilon, b}
 $${#eq-pd-with-shock-perf-bayes}
@@ -113,6 +113,9 @@ of ones and $\sigma_{mh} \in \mathbb{R}$. Therefore the distributional
 differences between $X_o$ and $X_g$ are solely characterized by the mean difference. Their distributions are given by:
 ```{python}
 #| notebook-links: false
+from berebasl.estimation.classifiers import PerfectBayesClassifier
+from berebasl.simulation.gaussian_mixture import bayes_rate_two_class_mvn_gaussian_equal_cov_no_shock
+
 tex_obj_g, _ = dgp_base.good_mixture.univariate_mixture_as_tex("g")
 text_obj_b, _ = dgp_base.bad_mixture.univariate_mixture_as_tex("b")
 
@@ -120,10 +123,120 @@ report_str = ("$$\n{ \\scriptsize " + tex_obj_g+
               r", \," + text_obj_b + " }\n$$")
 
 display(Markdown(report_str))
+
+def bayes_err_under_equal_covs(
+    dgp: CreditDataGenerator,
+    seed_if_sim: int = 1807
+) -> float:
+    perf_bayes_equals_case_no_noise = (
+        not dgp.simulate_idiosyncratic_shocks or
+        dgp.prob_bad_given_shock == 0.5
+    )
+    if perf_bayes_equals_case_no_noise:
+        return bayes_rate_two_class_mvn_gaussian_equal_cov_no_shock(
+            dgp.bad_mixture.mean,
+            dgp.good_mixture.mean,
+            dgp.bad_mixture.cov_chol_decomp,
+            dgp.prob_bad_given_no_shock
+        ).item()
+
+    trials = 200
+    mc_n = 20_000
+    dgp_base.manual_seed(seed_if_sim)
+    bayes_err = dgp_base.good_mixture.mean.new_empty((trials,))
+    for t in range(trials):
+        bayes_err[t] = dgp_base.bayes_error_rate(mc_n)
+
+    return bayes_err.mean().item()
+
+bayes_err_base = bayes_err_under_equal_covs(dgp_base)
+bayes_err_str = f"{bayes_err_base*100:.2f}"
 ```
 
+Its Bayes Error rate is `{python} bayes_err_str`$\%$. We can see a pairwise
+visualization in @fig-pairwise-base-dgp
 
 
+```{python}
+#| label: fig-pairwise-base-dgp
+#| fig-cap: "Pairwise covariates component representation of $Y, X$"
+from matplotlib import pyplot as plt
+from itertools import combinations
+from math import log
+
+fig = plt.figure(figsize=(12,4.5))
+F = dgp_base.F
+aes_dict = {}
+lbl_maker = lambda f: f"$X_{{m, {f+1}}}$" if f < F-1 else "$X_{h}$"
+for (f1, f2), a_idx in zip(combinations(range(F), 2), range(1, 4)):
+    aes_dict[f"{f1:02}{f2:02}"] = fig.add_subplot(1,3, a_idx)
+    aes_dict[f"{f1:02}{f2:02}"].set_xlabel(lbl_maker(f1))
+    aes_dict[f"{f1:02}{f2:02}"].set_ylabel(lbl_maker(f2))
+
+
+
+_, handles_2d, legends_2d = dgp_base.pairwise_plot_dgp(
+    sample_size=18_000, axes=[aes_dict]
+)
+
+inv_cov = torch.cholesky_inverse(dgp_base.bad_mixture.cov_chol_decomp)
+mu_b = dgp_base.bad_mixture.mean
+mu_g = dgp_base.good_mixture.mean
+pi = dgp_base.prob_bad_given_no_shock
+
+# --- Precompute everything once ---
+w = inv_cov @ (mu_b - mu_g)
+
+w0 = -0.5 * (mu_b + mu_g) @ (inv_cov @ (mu_b - mu_g)) + log(pi / (1 - pi))
+
+if dgp_base.simulate_idiosyncratic_shocks:
+    # --- Compute noisy shift gamma ---
+    pi_s = dgp_base.prob_idiosyncratic_shock
+    pi_eps = dgp_base.prob_bad_given_shock
+    c = 0.5 + (pi_eps / (1 - pi_eps)) * (0.5 - pi_s)
+    gamma = torch.log(c / (1 - c))
+else:
+    gamma = 0
+
+b = w0 - gamma   # final intercept
+
+# --- Add decision boundary to each 2D subplot ---
+# --- Add decision boundary to each 2D subplot ---
+for (f1, f2), a_idx in zip(combinations(range(F), 2), range(1, 4)):
+    ax = aes_dict[f"{f1:02}{f2:02}"]
+
+    # pick the remaining coordinate index
+    f_all = {0,1,2}
+    f3 = list(f_all - {f1, f2})[0]
+
+    # grid for x_f1
+    x1_vals = torch.linspace(-1.5, 3, 200) if f1==1 and f2==2 else torch.linspace(*ax.get_xlim(), 200)
+
+    # FIXED VALUE FOR THE UNPLOTTED COORDINATE
+    x3_fixed = (1 - pi) * mu_g[f3] + pi * mu_b[f3]
+
+    # compute x_f2 from plane equation
+    x2_vals = -(b + w[f1] * x1_vals + w[f3] * x3_fixed) / w[f2]
+
+    line, = ax.plot(x1_vals.numpy(), x2_vals.numpy(), color="gray", linestyle="--", linewidth=1.5)
+
+
+fig.legend(
+    handles_2d + [line],
+    legends_2d + ["Perf. Bayes boundary"],
+    loc='lower center',
+    bbox_to_anchor=(0.5, -0.07),
+    ncol=len(handles_2d) + 1,
+    frameon=False,
+    fontsize=10,
+    handlelength=1.5,
+    columnspacing=1.2
+)
+
+fig.tight_layout()
+
+plt.show()
+```
 
 ## Decision and scoring functions
 
