@@ -15,8 +15,9 @@ of the RI problem as a reinforcement learning problem.
 To formalize the statement "the bias should be observable and can be minimized"
 we need to first formulate what is understood as bias and how one can
 observe it. First I define what I understand as observable bias, which I call surprise.
-Second, I give a theoretical motivation of when this bias by showing when the bias should
-*not* be observable. Third, I give some simulation based evidence of my claims on observability
+Second, a theoretical motivation is presented of when this bias should
+*not* be observable, that gives an intuition of the plausibility of the observability
+of the bias. Third, I give some simulation based evidence of my claims on observability
 of the bias.
 
 ### Surprise signal
@@ -44,7 +45,9 @@ The claim on observability of the bias only on the accepted population
 is strong and should be justified. Therefore, I propose here a realistic
 setting for FIs with high volume of credits for which from a theoretical
 perspective one could hope to only find small values of $\eta^{(t)}$ when
-ignoring the missing data mechanism.
+ignoring the missing data mechanism. The purpose here is not mathematical
+rigourosity, but an intuition on the theoretical foundations to assume that
+the bias is observable as surprise.
 
 The most general case that still allows for unbiasedly estimated scorecards
 is MAR as defined on @eq-mar-only-model. Given the existence of
@@ -96,23 +99,49 @@ $$
 Now, $A_t$ has a theoretical optimal (cost unaware) counterpart, namely
 $$
 A = \left\{
-    x \in \mathbb{R}^{f_m} \middle | \mathbb{P}(Y = g | X_m = x) > 0.5
+    x \in \mathbb{R}^{f_m} \middle | s^*(x) > c
 \right\},
+$$
+with
+$$
+\forall x \in \mathbb{R}^{f_m}:
+\operatorname{sign}(s^*(x) - c) = \operatorname{sign}(\mathbb{P}(Y=g | X = x) - 0.5)
 $$
 i. e. the feature region corresponding to repayment being more likely than
 default. Since the choosing of $c_t$ optimizes discriminatory power
 (assumption @item-assumption-c-t-consistent-discriminatory), and $\hat{s}_t$ is
 estimated unbiasedely (assumption @item-assumption-estimation-method-unbiased),
-$A_t$ should converge towards $A$ in the sense
-$$
-\lim_{N_t \to \infty} A_t = A
-$$ {#eq-convergence-of-acceptance-region}
+one can conjecture that these objects converge (e.g. in probability) to their
+optimal counterparts $s*$ and $c$.^[
+    Note: This claim requires the training sample coming from the first acceptance
+    round (so at $t=1$) to be i.i.d. and to be MAR so that consistency arguments
+    for e.g. ML based estimators can hold. Through the proportionality of
+    $s*$ to $p_{Y=b | X}(x)$ from @eq-pd-with-shock-perf-bayes and the i.i.d. ness
+    of the applicants population at time step, one could make an argument using
+    a theorem like Glivenko-Cantelli. However, since we are working with certain
+    regions of the distribution of $X_m$, this argument would be lengthy, difficult
+    and would be outside of the scope of the thesis.
+]
 
-If @eq-convergence-of-acceptance-region does hold, this would mean that
-$\mathbb{P}_{Y, X | X \in A_t}$ would converge towards $\mathbb{P}_{Y, X | X \in A}$,
-meaning that the accepts would be equally distributed across acceptance rounds.
-Therefore, one could and should expect that $\hat{s}_t$ would perform the same in
-evaluation as well as in new accepts.
+With the convergence of the cut-off and the scorecard we would obtain a convergence
+in measure of $A_t \overset{\mathbb{P}_{X_m}}{\longrightarrow} A$.
+
+there should be almost everywhere a pointwise convergence of the scorecard
+with growing $N_t$ in the sense
+$$
+\operatorname{sign}\left(\hat{s}_t(x) - c \right) \to \operatorname{sign}\left(\mathbb{P}(Y = g | X_m = x) - 0.5 \right), x \in \mathbb{R}^{f_m}
+$$
+
+because of which $A_t$ should converge in measure to towards $A$ w.r.t.
+$\mathbb{P}_{X_m}$. From this convergence one could then argue a convergence
+in distribution
+$$
+\mathbb{P}_{Y, X | X \in A_t} \overset{d}{\longrightarrow} \mathbb{P}_{Y, X | X \in A}
+$$ {#eq-convergence-accepted-applicants}
+
+If @eq-convergence-accepted-applicants, one could and should expect that
+$\hat{s}_t$ would perform the same in evaluation as well as in new accepts,
+regardless of the covariate shift with respect to the full population.
 
 ### Empirical evidence of the bias observability as surprise
 
