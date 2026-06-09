@@ -166,6 +166,7 @@ R_implementation/.Rhistory
 /thesis/*_files/
 /thesis/*_cache/
 /thesis/site_libs/
+/thesis/_freeze/
 
 ## Manuscript scpecifics
 /thesis/_manuscript/
