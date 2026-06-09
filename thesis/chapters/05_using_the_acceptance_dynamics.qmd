@@ -86,13 +86,13 @@ small values of $\eta^{(t)}$
 This observation motivates the interpretation of surprise as a
 diagnostic signal. Persistent or systematically large values of
 $\eta^{(t)}$ suggest that at least one of the assumptions above
-is violated. Although the assumptions may be a bit restrictive,
-note that assumptions @item-time-invariant-population to
-@item-cutoff-chosen-consistently are ensured by the simulation
-framework, such that the surprise could be seen as coming from
-model misspecification and an MNAR mechanism. Therefore at least
-in the context of this thesis the surprise can be used as basis
-for learning to correct these cases.
+is violated. Although the assumptions may be restrictive, assumptions
+@item-time-invariant-population to @item-cutoff-chosen-consistently
+are enforced by the simulation framework. Consequently, within the
+simulated environment persistent surprise cannot be attributed to
+changes in the applicants population, the estimation procedure or
+the acceptance policy. Instead, surprise is expected to primarily
+reflect model misspecification and departures from MAR.
 
 ### Empirical evidence of the bias observability as surprise
 
