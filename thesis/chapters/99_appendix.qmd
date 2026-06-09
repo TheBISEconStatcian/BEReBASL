@@ -18,7 +18,7 @@ $$
 The argument in Section @sec-an-unsurprising-setting is intentionally
 heuristic. Nevertheless, it is useful to outline how one could
 attempt to formalize the claim that surprise should vanish in a
-stable MAR environment.
+stable MAR environment, which is the sole purpose of this appendix.
 
 Assume the conditions from Section @sec-an-unsurprising-setting hold.
 Define the acceptance region at round $t$ as
@@ -45,8 +45,7 @@ $$
 }
 $$
 
-for measurable
-$E \in 2^{E_Y}\otimes\mathcal{B}(\mathbb{R}^f)$.
+for measurable $E \in 2^{E_Y} \otimes \mathcal{B}(\mathbb{R}^f)$.
 
 Suppose additionally that the estimation method is unbiased in the
 sense of this thesis, namely that given enough representative data,
@@ -54,7 +53,7 @@ the estimated scorecard $\hat{s}_t$ provides a good approximation
 of a scoring proportional to $\mathbb{P}(Y=b\mid X)$. Under suitable
 regularity conditions and growing sample sizes, one could then
 expect the sequence of scorecards $\hat{s}_t$ to stabilize around
-some limiting scorecard $s^*$.
+some limiting scorecard $s^* \propto \mathbb{P}(Y=b\mid X)$.
 
 Likewise, if the cutoff selection criterion remains unchanged across
 rounds, one could expect the sequence of cutoffs $c_t$ to stabilize
@@ -95,7 +94,3 @@ through cross-validation on historical accepts to be close to the
 performance observed on future accepted applicants, implying only
 small values of the surprise signal $\eta^{(t)}$.
 
-The purpose of this discussion is not to establish a formal proof,
-but rather to indicate one possible route through which the
-heuristic argument of Section @sec-hypothesis-definition could be
-made mathematically rigorous.
