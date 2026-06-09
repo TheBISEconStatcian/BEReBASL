@@ -869,7 +869,7 @@ class GaussianMixture:
 def standard_normal_cdf(x: torch.Tensor) -> torch.Tensor:
     return 0.5 * (1 + torch.erf(x / sqrt(2)))
 
-def bayes_rate_two_class_mvn_gaussian_equal_cov(
+def bayes_rate_two_class_mvn_gaussian_equal_cov_no_shock(
         mu1: torch.Tensor,
         mu2: torch.Tensor,
         cov_chol: torch.Tensor,
