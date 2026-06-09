@@ -420,7 +420,7 @@ def plot_credit_dgp_3d(
             all_handles.append(coverage_handle)
             all_labels.append(coverage_handle.get_label())
 
-        if all_handles:
+        if all_handles and axes is not None:
             fig.legend(
                 all_handles,
                 all_labels,
@@ -622,7 +622,7 @@ def plot_credit_dgp_pairwise(
                 all_labels.append(coverage_label)
 
         # Place shared legend below the figure
-        if all_handles:
+        if all_handles and axes is None:
             ncol = max(max(data_gen.good_mixture.K, round((data_gen.good_mixture.K + data_gen.bad_mixture.K)/2)), 4) if data_gen.good_mixture.is_mixture else None
             if ncol is None:
                 ncol = len(all_handles)
@@ -643,9 +643,9 @@ def plot_credit_dgp_pairwise(
             plt.show()
     
     if return_figures:
-        return created_figures
+        return created_figures, all_handles, all_labels
 
-    return None
+    return None, all_handles, all_labels
 
 
 def credit_dgp_tex_report(credit_dgp: CreditDataGenerator) -> str:
