@@ -137,7 +137,7 @@ Since it is hard to
 
 ### Scoring function estimation
 
-### CV based threshold
+### CV based threshold {#sec-cv-based-threshold}
 
 Then at each acceptance round, the chosen threshold by CV is denoted as $c_t$ and the
 decision function is therefore

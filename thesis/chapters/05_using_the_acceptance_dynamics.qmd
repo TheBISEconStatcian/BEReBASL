@@ -15,57 +15,47 @@ of the RI problem as a reinforcement learning problem.
 The most general case where we can assume unbiasedly (in the sense of this
 thesis) estimated scorecards while (implicitly) ignoring the missing data
 mechanism is MAR as defined on @eq-mar-only-model. Given the existence of
-regularity conditions allowing for well-defined joint and marginal densities,
-just like in the presented simulation framework in @sec-app-population-simulation,
-the MAR condition is equivalent to
+regularity conditions ensuring well-defined joint and marginal densities
+(as in @sec-app-population-simulation) the MAR condition implies
 $$
 Z^{(t)} \perp\!\!\!\perp Y^{:t} \big | X^{:t}
 $$
-from which it follows almost everywhere
+which, almost everywhere, leads to
 $$
-p_{Y | X}(y, x) = p_{Y | X, Z^{:t}=s}(y, x)
+p_{Y | X}(y, x) = p_{Y | X, Z^{:t}=\alpha}(y, x)
 $${#eq-Y-cond-X-density-indep-Z}
 
-with $y \in \{g, b\}, x \in \mathbb{R}$ and $s \in \{a, r\}$. If we assume
+with $y \in \{g, b\}, x \in \mathbb{R}$ and $\alpha \in \{a, r\}$. Suppose
+the following conditions hold:
 
-1. $N_t$ is very large, so that at each round many applicants get accepted,
-2. the scorecard estimation algorithm is the same at every round, i. e.
+1. The number of applicants $N_t$ is sufficiently large at each round, so that
+   many applicants are accepted.
+2. the scorecard estimation algorithm remains unchanged across rounds, i. e.
    $\ell_t = \ell_{t'}$, $t, t' \in \mathbf{T}$, 
-3. the estimation method is unbiased (in the sense of this thesis),
-. the method for choosing the cut-off scoring $c_t$ remains the same
-   across rounds, like choosing the validations' set optimal ROC-point and
-5. A MAR missing data process
+3. The estimation method is unbiased in the sense of this thesis,
+4. The cutoff $c_t$ is chosen consistently across rounds (e.g., fixed ROC point)
+5. The missing data process satisfies the MAR assumption, meaning $f_h = 0$ and
+   $Z^{(t)}_i$ is fully determined by $\hat{s}_t, c_t$ and $X^{(t)}_{m, i}$
+   for $t \in \mathbf{T}, i \in \{1, \ldots, N_t\}$ $Z^{(t)}_i$^[Recall
+   @eq-Z-t-with-threshold-and-scorecard-no-overwrites].
 
-we can make an argument for the joint distribution of the accepts being
-(roughly) time invariant. For lack of a better notation, this distribution
-is written as $\mathbb{P}_{Y, X | Z^{(t)} = a}$ and its defined for any
-measurable set $A \in 2^{E_Y} \otimes \mathcal{B}\left(\mathbb{R}^f\right)$
+Under this assumptions and considering that the applicants population distribution
+is time invariant, one can expect the distribution of the accepted applicants at each
+round to be approximately the same. Formally, the joint distribution conditioned on
+acceptance can be defined for any measurable set $E \in 2^{E_Y} \otimes \mathcal{B}\left(\mathbb{R}^f\right)$
 as
 $$
-\mathbb{P}_{Y, X | Z^{(t)} = a}(A) = 
+\mathbb{P}_{Y, X | Z^{(t)} = a}(E) = 
 \frac{
-    \mathbb{P}\left((Y, X) \in A, \hat{s}_t(X_m) > c \right)
+    \mathbb{P}\left((Y, X) \in E, \hat{s}_t(X_m) > c \right)
 }{
     \mathbb{P}\left(\hat{s}_t(X_m) > c \right)
 }
 $$
 
-Note that this definition directly uses @eq-Z-t-with-threshold-and-scorecard-no-overwrites
-by plugging in the definition of the acceptance process without overwrites,^[
-    which equals the acceptance process for $f_h = 0$
-] rendering it dependent on $\left(Y^{:t}, X^{:t} \right)$. Now considering that the applicants
-population is time constant, for large enough $N_t$ we should expect that
-each observable sample per acceptance round is roughly the same. If $\hat{s}_t$
-is unbiased, then the classification should always accept applicants of the
-same region of the population, as $\hat{s}_t$ would rank in a manner "alike" the
-new applicants. If this happens, then the distribution of the accepts at each round
-should be very alike.^[
-    One could more formally say that with $\delta$ the total variation distance
-    $\forall t, t' \in \mathbf{T} : \delta(\mathbb{P}_{Y, X | Z^{(t)} = a}, \mathbb{P}_{Y, X | Z^{(t')} = a}) \approx 0$
-]
-Given all of these conditions therefore the measured performance on the validation
-set of $\hat{s}_t$ should be roughly the same as the measured rank-based performance on the
-new accepts.
+
+
+
 
 ### Define Surprise, minimization of surprise
 
