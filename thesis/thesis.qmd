@@ -90,3 +90,5 @@ for ch in chapters:
 {{< include chapters/07_conclussion.qmd >}}
 
 {{< pagebreak >}}
+
+{{< include chapters/99_appendix.qmd >}}
