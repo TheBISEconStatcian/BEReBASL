@@ -10,11 +10,44 @@ which allows gathering evidence on the plausibility of such hypothesis.
 Having delivered this evidence, a reward signal is defined along to a formulation
 of the RI problem as a reinforcement learning problem.
 
-## Hypothesis definition (Surprise, minimization of surprise)
+## Hypothesis definition
 
-The most general case where we can assume unbiasedly (in the sense of this
-thesis) estimated scorecards while (implicitly) ignoring the missing data
-mechanism is MAR as defined on @eq-mar-only-model. Given the existence of
+To formalize the statement "the bias should be observable and can be minimized"
+we need to first formulate what is understood as bias and how one can
+observe it. First I define what I understand as observable bias, which I call surprise.
+Second, I give a theoretical motivation of when this bias by showing when the bias should
+*not* be observable. Third, I give some simulation based evidence of my claims on observability
+of the bias.
+
+### Surprise signal
+
+It is well known that biased samples lead to biased evaluation of classifiers in the sense
+that is the performance is not representative on how the classifier performs on unseen data
+[@sugiyama2007covariate], as sampling bias results in covariate shifts. Most of the literature
+on this topic has a focus on the bias as measured on an unseen unbiased sample. However, I
+believe that this bias is also observed on the population of accepted applicants, and it
+can be used as an informative signal.
+
+My claim is that this bias is also observable on the accepted applicants as well. This means
+that the expected performance of a scorecard as evaluated on accepts does not correspond to the
+observed performance on accepted applicants of the next round. Then, I define the surprise
+$\eta^{(t)}$ at acceptance round $t$ analogously to the definition of evaluation bias, namely
+as the difference between expected performance $m_{CV}$ measured by a metric $m$ generated through
+CV on historical data and the realized performance on the new unseen data of the accepts.
+$$
+\eta^{(t)} := m_{CV}\left(\mathbf{X}_m^{:t}, \mathbf{Y}^{:t}\right) - m\left(\mathbf{X}_m^{(t)}, \mathbf{Y}^{(t)}\right)
+$$
+
+### An unsurprising setting
+
+The claim on observability of the bias only on the accepted population
+is strong and should be justified. Therefore, I propose here a realistic
+setting for FIs with high volume of credits for which from a theoretical
+perspective one could hope to only find small values of $\eta^{(t)}$ when
+ignoring the missing data mechanism.
+
+The most general case that still allows for unbiasedly estimated scorecards
+is MAR as defined on @eq-mar-only-model. Given the existence of
 regularity conditions ensuring well-defined joint and marginal densities
 (as in @sec-app-population-simulation) the MAR condition implies
 $$
@@ -28,36 +61,62 @@ $${#eq-Y-cond-X-density-indep-Z}
 with $y \in \{g, b\}, x \in \mathbb{R}$ and $\alpha \in \{a, r\}$. Suppose
 the following conditions hold:
 
-1. The number of applicants $N_t$ is sufficiently large at each round, so that
-   many applicants are accepted.
-2. the scorecard estimation algorithm remains unchanged across rounds, i. e.
+1. The number of applicants $N_t$ is sufficiently large at
+   each round, so that many applicants are accepted, i.e. *high volume of credits*.
+2. The scorecard *estimation algorithm remains unchanged* across rounds, i. e.
    $\ell_t = \ell_{t'}$, $t, t' \in \mathbf{T}$, 
-3. The estimation method is unbiased in the sense of this thesis,
-4. The cutoff $c_t$ is chosen consistently across rounds (e.g., fixed ROC point)
-5. The missing data process satisfies the MAR assumption, meaning $f_h = 0$ and
+3. The *estimation method is unbiased* in the sense of this thesis, {#item-assumption-estimation-method-unbiased}
+4. The *cutoff* $c_t$ is *chosen consistently* across rounds optimizing discriminatory
+   power (e.g., fixed ROC point) {#item-assumption-c-t-consistent-discriminatory}
+5. The missing data process satisfies the *MAR assumption*, meaning $f_h = 0$ and
    $Z^{(t)}_i$ is fully determined by $\hat{s}_t, c_t$ and $X^{(t)}_{m, i}$
    for $t \in \mathbf{T}, i \in \{1, \ldots, N_t\}$ $Z^{(t)}_i$^[Recall
    @eq-Z-t-with-threshold-and-scorecard-no-overwrites].
 
 Under this assumptions and considering that the applicants population distribution
 is time invariant, one can expect the distribution of the accepted applicants at each
-round to be approximately the same. Formally, the joint distribution conditioned on
-acceptance can be defined for any measurable set $E \in 2^{E_Y} \otimes \mathcal{B}\left(\mathbb{R}^f\right)$
-as
+round to be approximately the same. To describe this distribution first let
 $$
-\mathbb{P}_{Y, X | Z^{(t)} = a}(E) = 
+A_t := \left\{
+    x \in \mathbb{R}^{f_m} \middle | \hat{s}_t(x) > c_t
+\right\}
+$$
+denote the acceptance region under the assumptions above. Then the applicants distribution
+conditioned on acceptance can be defined for any measurable set
+$E \in 2^{E_Y} \otimes \mathcal{B}\left(\mathbb{R}^f\right)$ as
+$$
+\mathbb{P}_{Y, X | X \in A_t}(E) = 
 \frac{
-    \mathbb{P}\left((Y, X) \in E, \hat{s}_t(X_m) > c \right)
+    \mathbb{P}\left((Y, X) \in E, X \in A_t \right)
 }{
-    \mathbb{P}\left(\hat{s}_t(X_m) > c \right)
-}
+    \mathbb{P}\left(X \in A_t \right)
+}.
 $$
 
+Now, $A_t$ has a theoretical optimal (cost unaware) counterpart, namely
+$$
+A = \left\{
+    x \in \mathbb{R}^{f_m} \middle | \mathbb{P}(Y = g | X_m = x) > 0.5
+\right\},
+$$
+i. e. the feature region corresponding to repayment being more likely than
+default. Since the choosing of $c_t$ optimizes discriminatory power
+(assumption @item-assumption-c-t-consistent-discriminatory), and $\hat{s}_t$ is
+estimated unbiasedely (assumption @item-assumption-estimation-method-unbiased),
+$A_t$ should converge towards $A$ in the sense
+$$
+\lim_{N_t \to \infty} A_t = A
+$$ {#eq-convergence-of-acceptance-region}
 
+If @eq-convergence-of-acceptance-region does hold, this would mean that
+$\mathbb{P}_{Y, X | X \in A_t}$ would converge towards $\mathbb{P}_{Y, X | X \in A}$,
+meaning that the accepts would be equally distributed across acceptance rounds.
+Therefore, one could and should expect that $\hat{s}_t$ would perform the same in
+evaluation as well as in new accepts.
 
+### Empirical evidence of the bias observability as surprise
 
-
-### Define Surprise, minimization of surprise
+...
 
 ### Formulating the hypothesis
 
