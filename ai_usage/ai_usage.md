@@ -7,6 +7,7 @@ For the master's thesis the following AI's have been used
 * Perplexity
 * Claude
 * GitHub Copilot
+* DeepAI
 
 For each used chat a link is provided to be called if wished. I always add a small description on the general topic of the chat. When I see it necessary/sensible I also add some more notes on the purpose/themes of the chat as sub-bullet points. Further small chats have been used regarding variable
 naming, small refactoring, synonym finding, reformulation of single sentences or asking small and
@@ -57,6 +58,10 @@ opinion on naming.
   the chat.
 - [Metaprompting the MNAR adaptation for Claude](https://chatgpt.com/share/6a0165fb-7310-83eb-a67d-ef86851dd78d)
 - [Implementation of `PerfectBayesClassifier`](https://chatgpt.com/share/6a133ae4-7ee4-83eb-a3aa-d301b268f725)
+- [Shortening and sharpening the unsurprising setting subsusbsection](https://chatgpt.com/share/6a27e009-b740-83ed-b931-37ea0b8c6929). The copied text from the suggestions of the LLM can be seen in
+  - [7891f07de6887da0b78913720835801ab1154492](https://github.com/TheBISEconStatcian/BEReBASL/commit/7891f07de6887da0b78913720835801ab1154492)
+  - [f654c656c9428e493f81e44774bac9a06fc56175](https://github.com/TheBISEconStatcian/BEReBASL/commit/f654c656c9428e493f81e44774bac9a06fc56175)
+  - [9b8eb62526a026cd86d149778d781a1d583e3da8](https://github.com/TheBISEconStatcian/BEReBASL/commit/9b8eb62526a026cd86d149778d781a1d583e3da8)
 
 ## Links to `Copilot` usage
 
@@ -119,3 +124,10 @@ chat.
 ## Links to `Gemini`
 
 * [Decide which rendering tool to use and set up quarto project](https://gemini.google.com/share/c73006f0efb8)
+
+## Links to `Math AI` by [`DeepAI`](https://deepai.org/)
+
+* [Help organizing the idea of convergence of the accepts population under MAR assumptions.](https://deepai.org/chat/mathematics#f1ec7e34-48ec-4059-a123-a9134a7dd1c2) The commits corresponding to the respective usage of the generated content are
+  * [d879a3956d35d2217306c88fa655115bf53056dc](https://github.com/TheBISEconStatcian/BEReBASL/commit/d879a3956d35d2217306c88fa655115bf53056dc)
+  * [85b48080ca356cc855f33af1513503a675c98d1a](https://github.com/TheBISEconStatcian/BEReBASL/commit/85b48080ca356cc855f33af1513503a675c98d1a)
+  * [a50f1acdac1acf7bc2292b94cae7ef685f829178](https://github.com/TheBISEconStatcian/BEReBASL/commit/a50f1acdac1acf7bc2292b94cae7ef685f829178)
