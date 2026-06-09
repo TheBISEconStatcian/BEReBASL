@@ -48,13 +48,13 @@ intuition of when one should *not* expect to observe surprise.
 
 Consider a FI operating under the following assumptions:
 
-1. The applicants population distribution is time invariant. {#item-time-invariant-population}
+1. The applicants population distribution is time invariant.
 2. The number of applicants $N_t$ is sufficiently large at each round,
    so that many applicants are accepted.
 3. The scorecard estimation algorithm remains unchanged across rounds,
    i.e. $\ell_t = \ell_{t'}$ for $t, t' \in \mathbf{T}$.
 4. The cutoff $c_t$ is chosen consistently across rounds according
-   to the same business criterion. {#item-cutoff-chosen-consistently}
+   to the same business criterion.
 5. The missing data process satisfies the MAR assumption, meaning
    $f_h = 0$ and $Z^{(t)}_i$ is fully determined by $\hat{s}_t$,
    $c_t$ and $X^{(t)}_{m,i}$ for
@@ -87,8 +87,7 @@ This observation motivates the interpretation of surprise as a
 diagnostic signal. Persistent or systematically large values of
 $\eta^{(t)}$ suggest that at least one of the assumptions above
 is violated. Although the assumptions may be restrictive, assumptions
-@item-time-invariant-population to @item-cutoff-chosen-consistently
-are enforced by the simulation framework. Consequently, within the
+1 to 4 are enforced by the simulation framework. Consequently, within the
 simulated environment persistent surprise cannot be attributed to
 changes in the applicants' population, the estimation procedure or
 the acceptance policy. Instead, surprise is expected to primarily
