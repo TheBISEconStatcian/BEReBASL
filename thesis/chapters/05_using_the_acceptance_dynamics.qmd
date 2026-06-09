@@ -39,109 +39,54 @@ $$
 \eta^{(t)} := m_{CV}\left(\mathbf{X}_m^{:t}, \mathbf{Y}^{:t}\right) - m\left(\mathbf{X}_m^{(t)}, \mathbf{Y}^{(t)}\right)
 $$
 
-### An unsurprising setting
+### An unsurprising setting {#sec-an-unsurprising-setting}
 
-The claim on observability of the bias only on the accepted population
-is strong and should be justified. Therefore, I propose here a realistic
-setting for FIs with high volume of credits for which from a theoretical
-perspective one could hope to only find small values of $\eta^{(t)}$ when
-ignoring the missing data mechanism. The purpose here is not mathematical
-rigourosity, but an intuition on the theoretical foundations to assume that
-the bias is observable as surprise.
+The claim that the bias can be observed only through the accepted
+applicants is strong and should therefore be motivated. The purpose
+of this section is not to provide a rigorous proof, but rather an
+intuition of when one should *not* expect to observe surprise.
 
-The most general case that still allows for unbiasedly estimated scorecards
-is MAR as defined on @eq-mar-only-model. Given the existence of
-regularity conditions ensuring well-defined joint and marginal densities
-(as in @sec-app-population-simulation) the MAR condition implies
-$$
-Z^{(t)} \perp\!\!\!\perp Y^{:t} \big | X^{:t}
-$$
-which, almost everywhere, leads to
-$$
-p_{Y | X}(y, x) = p_{Y | X, Z^{:t}=\alpha}(y, x)
-$${#eq-Y-cond-X-density-indep-Z}
+Consider a FI operating under the following assumptions:
 
-with $y \in \{g, b\}, x \in \mathbb{R}$ and $\alpha \in \{a, r\}$. Suppose
-the following conditions hold:
+1. The applicants population distribution is time invariant.
+2. The number of applicants $N_t$ is sufficiently large at each round,
+   so that many applicants are accepted.
+3. The scorecard estimation algorithm remains unchanged across rounds,
+   i.e. $\ell_t = \ell_{t'}$ for $t, t' \in \mathbf{T}$.
+4. The cutoff $c_t$ is chosen consistently across rounds according
+   to the same business criterion.
+5. The missing data process satisfies the MAR assumption, meaning
+   $f_h = 0$ and $Z^{(t)}_i$ is fully determined by $\hat{s}_t$,
+   $c_t$ and $X^{(t)}_{m,i}$ for
+   $t \in \mathbf{T}, i \in \{1, \ldots, N_t\}$.^[
+   Recall @eq-Z-t-with-threshold-and-scorecard-no-overwrites.
+   ]
 
-1. The number of applicants $N_t$ is sufficiently large at
-   each round, so that many applicants are accepted, i.e. *high volume of credits*.
-2. The scorecard *estimation algorithm remains unchanged* across rounds, i. e.
-   $\ell_t = \ell_{t'}$, $t, t' \in \mathbf{T}$, 
-3. The *estimation method is unbiased* in the sense of this thesis, {#item-assumption-estimation-method-unbiased}
-4. The *cutoff* $c_t$ is *chosen consistently* across rounds optimizing discriminatory
-   power (e.g., fixed ROC point) {#item-assumption-c-t-consistent-discriminatory}
-5. The missing data process satisfies the *MAR assumption*, meaning $f_h = 0$ and
-   $Z^{(t)}_i$ is fully determined by $\hat{s}_t, c_t$ and $X^{(t)}_{m, i}$
-   for $t \in \mathbf{T}, i \in \{1, \ldots, N_t\}$ $Z^{(t)}_i$^[Recall
-   @eq-Z-t-with-threshold-and-scorecard-no-overwrites].
+Under MAR, the repayment behaviour of an applicant is independent
+of the acceptance decision once the observable characteristics are
+known. Therefore,
 
-Under this assumptions and considering that the applicants population distribution
-is time invariant, one can expect the distribution of the accepted applicants at each
-round to be approximately the same. To describe this distribution first let
 $$
-A_t := \left\{
-    x \in \mathbb{R}^{f_m} \middle | \hat{s}_t(x) > c_t
-\right\}
-$$
-denote the acceptance region under the assumptions above. Then the applicants distribution
-conditioned on acceptance can be defined for any measurable set
-$E \in 2^{E_Y} \otimes \mathcal{B}\left(\mathbb{R}^f\right)$ as
-$$
-\mathbb{P}_{Y, X | X \in A_t}(E) = 
-\frac{
-    \mathbb{P}\left((Y, X) \in E, X \in A_t \right)
-}{
-    \mathbb{P}\left(X \in A_t \right)
-}.
+Z^{(t)} \perp\!\!\!\perp Y^{:t} \mid X^{:t}
 $$
 
-Now, $A_t$ has a theoretical optimal (cost unaware) counterpart, namely
-$$
-A = \left\{
-    x \in \mathbb{R}^{f_m} \middle | s^*(x) > c
-\right\},
-$$
-with
-$$
-\forall x \in \mathbb{R}^{f_m}:
-\operatorname{sign}(s^*(x) - c) = \operatorname{sign}(\mathbb{P}(Y=g | X = x) - 0.5)
-$$
-i. e. the feature region corresponding to repayment being more likely than
-default. Since the choosing of $c_t$ optimizes discriminatory power
-(assumption @item-assumption-c-t-consistent-discriminatory), and $\hat{s}_t$ is
-estimated unbiasedely (assumption @item-assumption-estimation-method-unbiased),
-one can conjecture that these objects converge (e.g. in probability) to their
-optimal counterparts $s*$ and $c$.^[
-    Note: This claim requires the training sample coming from the first acceptance
-    round (so at $t=1$) to be i.i.d. and to be MAR so that consistency arguments
-    for e.g. ML based estimators can hold. Through the proportionality of
-    $s*$ to $p_{Y=b | X}(x)$ from @eq-pd-with-shock-perf-bayes and the i.i.d. ness
-    of the applicants population at time step, one could make an argument using
-    a theorem like Glivenko-Cantelli. However, since we are working with certain
-    regions of the distribution of $X_m$, this argument would be lengthy, difficult
-    and would be outside of the scope of the thesis.
-]
+which implies that the conditional relationship between repayment
+and features remains unchanged by the acceptance process. Together
+with a stationary applicants population and a stable estimation
+procedure, one would expect the distribution of accepted applicants
+to remain approximately stable across rounds.
 
-With the convergence of the cut-off and the scorecard we would obtain a convergence
-in measure of $A_t \overset{\mathbb{P}_{X_m}}{\longrightarrow} A$.
+In such a setting, the scorecard is repeatedly trained and evaluated
+on samples generated by essentially the same acceptance mechanism.
+Consequently, the performance estimated through cross-validation on
+historical accepts should be close to the realized performance on
+future accepted applicants. In other words, one would expect only
+small values of $\eta^{(t)}$
 
-there should be almost everywhere a pointwise convergence of the scorecard
-with growing $N_t$ in the sense
-$$
-\operatorname{sign}\left(\hat{s}_t(x) - c \right) \to \operatorname{sign}\left(\mathbb{P}(Y = g | X_m = x) - 0.5 \right), x \in \mathbb{R}^{f_m}
-$$
-
-because of which $A_t$ should converge in measure to towards $A$ w.r.t.
-$\mathbb{P}_{X_m}$. From this convergence one could then argue a convergence
-in distribution
-$$
-\mathbb{P}_{Y, X | X \in A_t} \overset{d}{\longrightarrow} \mathbb{P}_{Y, X | X \in A}
-$$ {#eq-convergence-accepted-applicants}
-
-If @eq-convergence-accepted-applicants, one could and should expect that
-$\hat{s}_t$ would perform the same in evaluation as well as in new accepts,
-regardless of the covariate shift with respect to the full population.
+This observation motivates the interpretation of surprise as a
+diagnostic signal. Persistent or systematically large values of
+$\eta^{(t)}$ suggest that at least one of the assumptions above
+is violated.
 
 ### Empirical evidence of the bias observability as surprise
 

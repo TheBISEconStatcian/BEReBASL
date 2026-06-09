@@ -13,4 +13,89 @@ $$
 \mathbb{P}(Y=b | X = x) > \mathbb{P}(Y=g | X = x)
 $$
 
+### A possible route towards a formal justification of surprise as a valid signal
 
+The argument in Section @sec-an-unsurprising-setting is intentionally
+heuristic. Nevertheless, it is useful to outline how one could
+attempt to formalize the claim that surprise should vanish in a
+stable MAR environment.
+
+Assume the conditions from Section @sec-an-unsurprising-setting hold.
+Define the acceptance region at round $t$ as
+
+$$
+A_t
+:=
+\left\{
+x \in \mathbb{R}^{f_m}
+\;\middle|\;
+\hat{s}_t(x) > c_t
+\right\}.
+$$
+
+The corresponding distribution of accepted applicants is then
+
+$$
+\mathbb{P}_{Y,X \mid X \in A_t}(E)
+=
+\frac{
+    \mathbb{P}\left((Y,X)\in E, X\in A_t\right)
+}{
+    \mathbb{P}\left(X\in A_t\right)
+}
+$$
+
+for measurable
+$E \in 2^{E_Y}\otimes\mathcal{B}(\mathbb{R}^f)$.
+
+Suppose additionally that the estimation method is unbiased in the
+sense of this thesis, namely that given enough representative data,
+the estimated scorecard $\hat{s}_t$ provides a good approximation
+of a scoring proportional to $\mathbb{P}(Y=b\mid X)$. Under suitable
+regularity conditions and growing sample sizes, one could then
+expect the sequence of scorecards $\hat{s}_t$ to stabilize around
+some limiting scorecard $s^*$.
+
+Likewise, if the cutoff selection criterion remains unchanged across
+rounds, one could expect the sequence of cutoffs $c_t$ to stabilize
+around a limiting value $c$. This motivates the introduction of the
+limiting acceptance region
+
+$$
+A
+:=
+\left\{
+x \in \mathbb{R}^{f_m}
+\;\middle|\;
+s^*(x) > c
+\right\}.
+$$
+
+Heuristically, stabilization of $\hat{s}_t$ and $c_t$ suggests that
+the acceptance regions $A_t$ become increasingly similar to $A$.
+As a consequence, one would expect the distributions of accepted
+applicants
+
+$$
+\mathbb{P}_{Y,X \mid X \in A_t}
+$$
+
+to become increasingly similar across rounds as well.
+
+Although turning this intuition into a rigorous theorem would require
+additional assumptions on the estimation method, the applicants
+distribution and the acceptance regions, the central idea is simple:
+in a stationary MAR environment the acceptance mechanism itself
+should eventually stabilize. Once this occurs, both the training
+data and future accepted applicants are generated from nearly the
+same distribution.
+
+Under such circumstances, one would expect the performance estimated
+through cross-validation on historical accepts to be close to the
+performance observed on future accepted applicants, implying only
+small values of the surprise signal $\eta^{(t)}$.
+
+The purpose of this discussion is not to establish a formal proof,
+but rather to indicate one possible route through which the
+heuristic argument of Section @sec-hypothesis-definition could be
+made mathematically rigorous.
