@@ -321,6 +321,11 @@ class CreditDataGenerator:
         return self.prob_idiosyncratic_shock > 0
 
     @property
+    def prob_bad(self):
+        p_shock = self.prob_idiosyncratic_shock
+        return (1-p_shock) * self.prob_bad_given_no_shock + p_shock * self.prob_bad_given_shock
+
+    @property
     def device(self) -> torch.device:
         """
         The device on which both the good and bad Gaussian mixture parameters reside.
