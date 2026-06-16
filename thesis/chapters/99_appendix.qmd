@@ -19,44 +19,7 @@ A close bookkeeping of the usage can be seen on [GitHub](https://github.com/TheB
 
 ## Mathematical derivations/proofs
 
-### Bayes error with idiosyncratic shocks
-
-A perfect Bayes classifier considering the idiosyncratic shock as defined in 
-@eq-pd-with-shock-perf-bayes has an analytical solution for the Bayes error.
-To get to this expression, I use the results of @Ripley_1996.
-
-
-The decision to classify an applicant as bad occurs if
-$$
-\mathbb{P}(Y=b | X = x) > \mathbb{P}(Y=g | X = x)
-$$
-
-Plugging in @eq-pd-with-shock-perf-bayes and @eq-posterior-of-Y with some simple
-algebra results in
-$$
-\Leftrightarrow
-\pi_{\epsilon} \, \frac{\phi_{X_b}(x) p_{\tilde{Y}}(b)}{p_X(x)} + (1 - \pi_{\epsilon}) \pi_{\varepsilon, b} >
-\pi_{\epsilon} \, \frac{\phi_{X_g}(x) p_{\tilde{Y}}(g)}{p_X(x)} + (1 - \pi_{\epsilon}) (1 -\pi_{\varepsilon, b})
-$$
-$$
-\Leftrightarrow \pi_{\epsilon} p_{\tilde{Y}}(b) \phi_{X_b}(x) >
-\pi_{\epsilon} p_{\tilde{Y}}(g) \phi_{X_g}(x) + (1 - \pi_{\epsilon}) (1 -2\pi_{\varepsilon, b})
-$$
-$$
-\Leftrightarrow \pi_{\epsilon} \left(
-    p_{\tilde{Y}}(b) \phi_{X_b}(x) - p_{\tilde{Y}}(g) \phi_{X_g}(x)
-\right) >
-(1 - \pi_{\epsilon}) (1 -2\pi_{\varepsilon, b})
-$$
-using that $\Sigma_b =  \Sigma_g = \Sigma$ we get
-$$
-\frac{\pi_{\epsilon}}{\sqrt{(2\pi)^f |\Sigma|}} \left(
-    p_{\tilde{Y}}(b) \phi_{X_b}(x) - p_{\tilde{Y}}(g) \phi_{X_g}(x)
-\right) >
-(1 - \pi_{\epsilon}) (1 -2\pi_{\varepsilon, b})
-$$
-
-### Decision boundary of the perfect Bayes with idiosyncratic shocks
+### Decision boundary of the perfect Bayes with idiosyncratic shocks {#sec-dec-boundary-perf-bayes-idyiosincratic-shocks}
 
 The decision boundary between two classes is defined as the equal probability
 region for both. For our case with two classes there is only one boundary and
@@ -72,10 +35,15 @@ Plugging in @eq-pd-with-shock-perf-bayes we get
 $$
 \pi_{\epsilon} \, p_{\tilde{Y} | X} (b, x) + (1 - \pi_{\epsilon}) \pi_{\varepsilon, b}
 = \frac{1}{2}
+$$ 
 $$
-$$
-\Leftrightarrow p_{\tilde{Y} | X} (b, x) = \underbrace{\frac{\frac{1}{2} - (1 - \pi_{\epsilon})}{\pi_{\epsilon}}}_{=: \xi}
-$$
+\Leftrightarrow p_{\tilde{Y} | X} (b, x) = \underbrace{\frac{\frac{1}{2} - (1 - \pi_{\epsilon}) \pi_{\varepsilon, b}}{\pi_{\epsilon}}}_{=: \xi}
+$$ {#eq-decision-boundary-in-terms-of-clean}
+
+Note that @eq-decision-boundary-in-terms-of-clean shows how considering the idiosyncratic shocks
+only moves the decision boundary. If there were no shocks ($\pi_\epsilon = 1$) or their effect
+was symmetric $\left(\pi_{\varepsilon, b} = \frac{1}{2} \right)$ then $\xi = \frac{1}{2}$, which
+equals the decision boundary based on a classifier ignoring the shocks.
 
 Using @eq-posterior-of-Y, @eq-marginal-of-X and @eq-marginal-of-Y we get
 $$
@@ -85,10 +53,79 @@ and using $\pi_g = 1 - \pi_b$
 $$
 \Leftrightarrow  \pi_b(1 - \xi)\phi_{X_b}(x) = \xi (1 - \pi_b) \phi_{X_g}(x)
 $$
+which allows for a odds ratio perspective
 $$
 \Leftrightarrow \frac{\phi_{X_b}(x)}{\phi_{X_g}(x)} = \frac{\xi (1 - \pi_b)}{\pi_b(1 - \xi)}
+$${#eq-odds-ratio-shock}
+
+Note thereby that
+$$
+(\pi_\epsilon = 1) \lor \left(\pi_{\varepsilon, b} = \frac{1}{2} \right) \Rightarrow \xi = \frac{1}{2}
 $$
 
+$\pi_\epsilon = 1$, $\xi = \frac{1}{2}$ and therefore
+the right hand side would be the odds of a good credit.
+
+### Bayes error with idiosyncratic shocks
+
+A perfect Bayes classifier considering the idiosyncratic shock as defined in 
+@eq-pd-with-shock-perf-bayes has an analytical solution for the Bayes error.
+To get to this expression, I use the results of @Ripley_1996.
+
+For any $\omega \in \Omega$, the decision to classify an applicant as bad with
+characteristics $x := X(\omega)$ occurs if
+$$
+\mathbb{P}(Y=b | X = x) > \mathbb{P}(Y=g | X = x)
+$$
+
+which following the same steps as before we get an expression like @eq-odds-ratio-shock
+$$
+\frac{\phi_{X_b}(x)}{\phi_{X_g}(x)} > \frac{\xi (1 - \pi_b)}{\pi_b(1 - \xi)} =: c
+$${#eq-decision-boundary-bad-no-logs}
+
+Applying logs we get
+$$
+x^\top \Sigma^{-1} (\mu_b - \mu_g) - \underbrace{\frac{1}{2} (\mu_b + \mu_g)}_{=:\bar{\mu}} \Sigma^{-1}(\mu_b - \mu_g) >
+\log c
+$$
+
+After factorizing and using the symmetry of $\Sigma^{-1}$ we get
+$$
+A(\omega) := (\mu_b - \mu_g)^\top \Sigma^{-1} (x - \bar{\mu}) >
+\log c
+$${#eq-decision-boundary-A}
+
+where, following @Ripley_1996, 
+$$
+A | Y = b \sim \mathcal{N}\left(\frac{1}{2} \delta^2, \delta^2 \right), \,
+A | Y = g \sim \mathcal{N}\left(-\frac{1}{2} \delta^2, \delta^2 \right)
+$$
+with
+$$
+\delta = \sqrt{(\mu_b - \mu_g)^\top \Sigma^{-1} (\mu_b - \mu_g)}
+$$
+
+Therefore the decision function $d_B$ of the bayes classifier can be written
+as
+$$
+d_B(x) = \begin{cases}
+    b & A > \log c \\
+    g & A \leq \log c
+\end{cases}
+$$
+
+The bayes error rate $E_B$ is then given by
+$$
+\begin{aligned}
+E_B &= 
+    \mathbb{P}(Y = b) \mathbb{P}(A \leq \log c | Y = b) +
+    \mathbb{P}(Y = g)  \mathbb{P}(A > \log c | Y = g)
+\\
+&=
+    \pi_b \Phi\left(-\frac{1}{2}\delta + \frac{1}{\delta} \log c\right) +
+    (1-\pi_b) \Phi\left(-\frac{1}{2}\delta - \frac{1}{\delta} \log c\right)
+\end{aligned}
+$$
 
 ### A possible route towards a formal justification of surprise as a valid signal
 
