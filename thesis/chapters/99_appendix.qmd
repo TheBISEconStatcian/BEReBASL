@@ -83,7 +83,7 @@ $$
 \frac{\phi_{X_b}(x)}{\phi_{X_g}(x)} > \frac{\xi (1 - \pi_b)}{\pi_b(1 - \xi)} =: c
 $${#eq-decision-boundary-bad-no-logs}
 
-Applying logs we get
+Applying logs and using that both populations have the same covariance matrix we get
 $$
 x^\top \Sigma^{-1} (\mu_b - \mu_g) - \underbrace{\frac{1}{2} (\mu_b + \mu_g)}_{=:\bar{\mu}} \Sigma^{-1}(\mu_b - \mu_g) >
 \log c
