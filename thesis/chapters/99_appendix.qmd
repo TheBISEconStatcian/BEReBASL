@@ -55,16 +55,19 @@ $$
 $$
 which allows for a odds ratio perspective
 $$
-\Leftrightarrow \frac{\phi_{X_b}(x)}{\phi_{X_g}(x)} = \frac{\xi (1 - \pi_b)}{\pi_b(1 - \xi)}
+\Leftrightarrow \frac{\phi_{X_b}(x)}{\phi_{X_g}(x)} = \frac{\xi (1 - \pi_b)}{\pi_b(1 - \xi)} =: c
 $${#eq-odds-ratio-shock}
 
-Note thereby that
+Since we assume equal covariances matrices we can get from taking loggs the familiar result
+(see e.g. @hastie2009elements, p. 108)
 $$
-(\pi_\epsilon = 1) \lor \left(\pi_{\varepsilon, b} = \frac{1}{2} \right) \Rightarrow \xi = \frac{1}{2}
+x^\top \Sigma^{-1} (\mu_b - \mu_g) - \underbrace{\frac{1}{2} (\mu_b + \mu_g)}_{=:\bar{\mu}} \Sigma^{-1}(\mu_b - \mu_g) =
+\log c
 $$
-
-$\pi_\epsilon = 1$, $\xi = \frac{1}{2}$ and therefore
-the right hand side would be the odds of a good credit.
+After factorizing and using the symmetry of $\Sigma^{-1}$ we get
+$$
+(\mu_b - \mu_g)^\top \Sigma^{-1} (x - \bar{\mu})  = \log c
+$${#eq-decision-boundary-equal-covs}
 
 ### Bayes error with idiosyncratic shocks
 
@@ -78,23 +81,12 @@ $$
 \mathbb{P}(Y=b | X = x) > \mathbb{P}(Y=g | X = x)
 $$
 
-which following the same steps as before we get an expression like @eq-odds-ratio-shock
-$$
-\frac{\phi_{X_b}(x)}{\phi_{X_g}(x)} > \frac{\xi (1 - \pi_b)}{\pi_b(1 - \xi)} =: c
-$${#eq-decision-boundary-bad-no-logs}
-
-Applying logs and using that both populations have the same covariance matrix we get
-$$
-x^\top \Sigma^{-1} (\mu_b - \mu_g) - \underbrace{\frac{1}{2} (\mu_b + \mu_g)}_{=:\bar{\mu}} \Sigma^{-1}(\mu_b - \mu_g) >
-\log c
-$$
-
-After factorizing and using the symmetry of $\Sigma^{-1}$ we get
+which following the same steps as before we get an expression like @eq-decision-boundary-equal-covs
+that we can use to also define a random variable
 $$
 A(\omega) := (\mu_b - \mu_g)^\top \Sigma^{-1} (x - \bar{\mu}) >
 \log c
-$${#eq-decision-boundary-A}
-
+$$
 where, following @Ripley_1996, 
 $$
 A | Y = b \sim \mathcal{N}\left(\frac{1}{2} \delta^2, \delta^2 \right), \,
