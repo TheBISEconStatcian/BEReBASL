@@ -159,14 +159,18 @@ corresponds to the classification boundary of a classifier given by
 @eq-pd-with-shock-perf-bayes. This boundary is calculated in the appendix
 (see @sec-dec-boundary-perf-bayes-idyiosincratic-shocks) and is given by 
 $$
-\frac{\phi_{X_b}(x)}{\phi_{X_g}(x)} = \underbrace{\frac{\xi (1 - \pi_b)}{\pi_b(1 - \xi)}}_{:=b}
+\frac{\phi_{X_b}(x)}{\phi_{X_g}(x)} = \underbrace{\frac{\xi}{(1 - \xi)}\frac{ (1 - \pi_b)}{\pi_b}}_{:=c}
 $$
 with $\xi$ a real constant depending on the parameters governing the 
-shocks' dynamics $(\pi_{\epsilon}$ and $\pi_{\varepsilon, b})$. Using the
-equal covariance matrices the equation simplifies to
+shocks' dynamics ($\pi_{\epsilon}$ and $\pi_{\varepsilon, b}$). Using the
+equal covariance matrices the equation simplifies to the hyperplane^[
+    See @eq-decision-boundary-A to get an idea of the steps inbetween
+]
 $$
-(\mu_b - \mu_g)^\top \Sigma^{-1} \left(x - \frac{\mu_b + \mu_g}{2} \right) = \log b
+W x - \beta = \log c
 $$
+with $W=(\mu_b - \mu_g)^\top \Sigma^{-1} = \Sigma^{-1}(\mu_b - \mu_g)$ and $\beta = W\frac{\mu_b + \mu_g}{2}$
+
 
 ```{python}
 #| label: fig-pairwise-base-dgp
@@ -191,31 +195,32 @@ _, handles_2d, legends_2d = dgp_base.pairwise_plot_dgp(
 inv_cov = torch.cholesky_inverse(dgp_base.bad_mixture.cov_chol_decomp)
 mu_b = dgp_base.bad_mixture.mean
 mu_g = dgp_base.good_mixture.mean
-pi = dgp_base.prob_bad_given_no_shock
+pi_b = dgp_base.prob_bad_given_no_shock
 
 # --- Precompute everything once ---
-w = inv_cov @ (mu_b - mu_g)
+W = inv_cov @ (mu_b - mu_g)
 
-w0 = -0.5 * (mu_b + mu_g) @ (inv_cov @ (mu_b - mu_g)) + log(pi / (1 - pi))
+beta = W @ ((mu_b + mu_g)/2)
+
+c = (1-pi_b)/pi_b
 
 if dgp_base.simulate_idiosyncratic_shocks:
-    # --- Compute noisy shift gamma ---
-    pi_s = dgp_base.prob_idiosyncratic_shock
-    pi_eps = dgp_base.prob_bad_given_shock
-    c = 0.5 + (pi_eps / (1 - pi_eps)) * (0.5 - pi_s)
-    gamma = torch.log(c / (1 - c))
-else:
-    gamma = 0
+    # --- Compute noisy shift ---
+    pi_eps = 1 - dgp_base.prob_idiosyncratic_shock
+    pi_vareps_b = dgp_base.prob_bad_given_shock
 
-b = w0 - gamma   # final intercept
+    xi = (0.5 - (1-pi_eps)*pi_vareps_b) / pi_eps
+    c *= xi / (1-xi)
+
+bias = beta + log(c)   # final intercept
 
 # --- Add decision boundary to each 2D subplot ---
 # --- Add decision boundary to each 2D subplot ---
+f_all = set(range(F))
 for (f1, f2), a_idx in zip(combinations(range(F), 2), range(1, 4)):
     ax = aes_dict[f"{f1:02}{f2:02}"]
 
     # pick the remaining coordinate index
-    f_all = {0,1,2}
     f3 = list(f_all - {f1, f2})[0]
 
     # grid for x_f1
@@ -225,7 +230,7 @@ for (f1, f2), a_idx in zip(combinations(range(F), 2), range(1, 4)):
     x3_fixed = (1 - pi) * mu_g[f3] + pi * mu_b[f3]
 
     # compute x_f2 from plane equation
-    x2_vals = -(b + w[f1] * x1_vals + w[f3] * x3_fixed) / w[f2]
+    x2_vals = (bias - w[f1] * x1_vals - w[f3] * x3_fixed) / w[f2]
 
     line, = ax.plot(x1_vals.numpy(), x2_vals.numpy(), color="gray", linestyle="--", linewidth=1.5)
 
