@@ -32,12 +32,19 @@ from IPython.display import display, Markdown
 import torch
 
 from berebasl.simulation.credit_data_simulation import CreditDataGenerator
+from helper_scripts.general import extract_objs_from_sim_dir
+from helper_scripts.hypothesis_visualization import (
+  plot_lines_and_mains,
+  generate_line_collections_for_exp_real_plot,
+  generate_lines_for_diffs,
+  gen_lines_from_diff_dict
+)
 
 grid_path = '../berebasl/data/simulations/mnar_grid_hyp_testing'
 base_sim = 'bias_0_0_corr_0_0'
 
-init_objs_path = os.path.join(grid_path, base_sim, 'initial_simulation_objects_cv_mnar.pt')
-dgp_base: CreditDataGenerator = torch.load(init_objs_path, map_location='cpu', weights_only=False)["data_generator"]
+base_sim_objs = extract_objs_from_sim_dir(grid_path, base_sim)
+dgp_base: CreditDataGenerator = base_sim_objs["data_generator"]
 ```
 
 ```{python}
