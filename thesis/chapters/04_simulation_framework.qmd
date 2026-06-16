@@ -348,11 +348,6 @@ fig.tight_layout()
 plt.show()
 ```
 
-Finally it is also interesting to take a look at the 3D representation of the DGP as shown in
-@fig-3d-base-dgp
-
-
-
 ## Decision and scoring functions
 
 The decision function has two phases, the starting phase (where no data has been gathered yet)
