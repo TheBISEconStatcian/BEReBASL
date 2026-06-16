@@ -98,7 +98,33 @@ the effects of such departures.
 
 ### Empirical evidence of the bias observability as surprise
 
-...
+Lets see
+
+```{python}
+#| label: fig-expectation-vs-observed-performance
+#| fig-cap: "Performance on the expectation samples and realized samples"
+plot_lines_and_mains(
+    generate_line_collections_for_exp_real_plot(base_sim_objs),
+    sample_sizes=base_sim_objs["sample_sizes"],
+    add_fig_legend=True,
+    add_legend=False
+)
+```
+
+```{python}
+#| label: fig-difference-between-exp-and-obseved-performance
+#| fig-cap: "Absolute difference between the performance on the expectation samples and realized samples $(W_{MA}=5)$"
+exp_to_real_diffs_base = generate_lines_for_diffs(base_sim_objs, make_abs=True, W=5)
+
+plot_lines_and_mains(
+    gen_lines_from_diff_dict(exp_to_real_diffs_base),
+    sample_sizes=exp_to_real_diffs_base["sample_sizes"],
+    add_fig_legend=True,
+    add_legend=False,
+    only_related_exp=True,
+    diff_plot=True
+)
+```
 
 ### Formulating the hypothesis
 
