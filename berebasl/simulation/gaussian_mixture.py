@@ -869,11 +869,12 @@ class GaussianMixture:
 def standard_normal_cdf(x: torch.Tensor) -> torch.Tensor:
     return 0.5 * (1 + torch.erf(x / sqrt(2)))
 
-def bayes_rate_two_class_mvn_gaussian_equal_cov_no_shock(
+def bayes_rate_two_class_mvn_gaussian_equal_cov(
         mu1: torch.Tensor,
         mu2: torch.Tensor,
         cov_chol: torch.Tensor,
-        p1: float
+        p1: float,
+        odds_factor: float = 1.0
     ) -> torch.Tensor:
     """
     Based on the formula by Ripley (1996, 2nd Edition) Chapter 2, Page 22.
@@ -890,7 +891,8 @@ def bayes_rate_two_class_mvn_gaussian_equal_cov_no_shock(
     # Cache results for numeric stability
     minus_half_delta = -0.5 * delta
     p2 = 1 - p1
-    log_prob_ratio = log(p2/p1)
+    odds = p2/p1
+    log_prob_ratio = log(odds*odds_factor)
     ratio_div_delta = log_prob_ratio / delta
 
 
@@ -902,6 +904,7 @@ def bayes_rate_two_class_mvn_gaussian_equal_cov_no_shock(
     )
 
     return pmc_1 + pmc_2
+
 
 
 if __name__ == "__main__":

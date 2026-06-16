@@ -114,7 +114,7 @@ differences between $X_o$ and $X_g$ are solely characterized by the mean differe
 ```{python}
 #| notebook-links: false
 from berebasl.estimation.classifiers import PerfectBayesClassifier
-from berebasl.simulation.gaussian_mixture import bayes_rate_two_class_mvn_gaussian_equal_cov_no_shock
+from berebasl.simulation.gaussian_mixture import bayes_rate_two_class_mvn_gaussian_equal_cov
 
 tex_obj_g, _ = dgp_base.good_mixture.univariate_mixture_as_tex("g")
 text_obj_b, _ = dgp_base.bad_mixture.univariate_mixture_as_tex("b")
@@ -133,21 +133,20 @@ def bayes_err_under_equal_covs(
         dgp.prob_bad_given_shock == 0.5
     )
     if perf_bayes_equals_case_no_noise:
-        return bayes_rate_two_class_mvn_gaussian_equal_cov_no_shock(
-            dgp.bad_mixture.mean,
-            dgp.good_mixture.mean,
-            dgp.bad_mixture.cov_chol_decomp,
-            dgp.prob_bad_given_no_shock
-        ).item()
+        odds_factor = 1.0
+    else:
+        pi_eps = 1 - dgp.prob_idiosyncratic_shock
+        pi_vareps_b = dgp.prob_bad_given_shock
 
-    trials = 200
-    mc_n = 20_000
-    dgp_base.manual_seed(seed_if_sim)
-    bayes_err = dgp_base.good_mixture.mean.new_empty((trials,))
-    for t in range(trials):
-        bayes_err[t] = dgp_base.bayes_error_rate(mc_n)
-
-    return bayes_err.mean().item()
+        odds_factor = xi = (0.5 - (1-pi_eps)*pi_vareps_b) / pi_eps
+        
+    return bayes_rate_two_class_mvn_gaussian_equal_cov(
+        dgp.bad_mixture.mean,
+        dgp.good_mixture.mean,
+        dgp.bad_mixture.cov_chol_decomp,
+        dgp.prob_bad_given_no_shock,
+        odds_factor
+    ).item()
 
 bayes_err_base = bayes_err_under_equal_covs(dgp_base)
 bayes_err_str = f"{bayes_err_base*100:.2f}"
