@@ -56,6 +56,40 @@ $$
 (1 - \pi_{\epsilon}) (1 -2\pi_{\varepsilon, b})
 $$
 
+### Decision boundary of the perfect Bayes with idiosyncratic shocks
+
+The decision boundary between two classes is defined as the equal probability
+region for both. For our case with two classes there is only one boundary and
+it is given by
+$$
+\mathbb{P}(Y=b | X=x) = \mathbb{P}(Y=g | X=x)
+$$
+$$
+\Leftrightarrow \mathbb{P}(Y=b | X=x) = \frac{1}{2}
+$$
+
+Plugging in @eq-pd-with-shock-perf-bayes we get
+$$
+\pi_{\epsilon} \, p_{\tilde{Y} | X} (b, x) + (1 - \pi_{\epsilon}) \pi_{\varepsilon, b}
+= \frac{1}{2}
+$$
+$$
+\Leftrightarrow p_{\tilde{Y} | X} (b, x) = \underbrace{\frac{\frac{1}{2} - (1 - \pi_{\epsilon})}{\pi_{\epsilon}}}_{=: \xi}
+$$
+
+Using @eq-posterior-of-Y, @eq-marginal-of-X and @eq-marginal-of-Y we get
+$$
+p_{\tilde{Y} | X} (b, x) = \frac{\phi_{X_b}(x) \pi_b}{\pi_b \phi_{X_b}(x) + \pi_g \phi_{X_g}(x)} = \xi
+$$
+and using $\pi_g = 1 - \pi_b$
+$$
+\Leftrightarrow  \pi_b(1 - \xi)\phi_{X_b}(x) = \xi (1 - \pi_b) \phi_{X_g}(x)
+$$
+$$
+\Leftrightarrow \frac{\phi_{X_b}(x)}{\phi_{X_g}(x)} = \frac{\xi (1 - \pi_b)}{\pi_b(1 - \xi)}
+$$
+
+
 ### A possible route towards a formal justification of surprise as a valid signal
 
 The argument in Section @sec-an-unsurprising-setting is intentionally
