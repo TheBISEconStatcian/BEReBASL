@@ -678,6 +678,13 @@ class CreditDataGenerator:
     def bayes_error_under_equal_covs(
         self,
     ) -> torch.Tensor:
+        if self.good_mixture.is_mixture or self.bad_mixture.is_mixture:
+            raise RuntimeError(
+                "The analytical method bayes_error_under_equal_covs only works for "
+                "the two class Gaussian classification problem, therefore "
+                "self.bad_mixture and self.good_mixture must be MVNs, not mixtures "
+                "themselves."
+            )
         perf_bayes_equals_case_no_noise = (
             not self.simulate_idiosyncratic_shocks or
             self.prob_bad_given_shock == 0.5
