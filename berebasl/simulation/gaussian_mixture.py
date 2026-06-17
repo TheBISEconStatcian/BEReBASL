@@ -881,12 +881,12 @@ def bayes_rate_two_class_mvn_gaussian_equal_cov(
     He calls it probability of missclassification
     """
     mu_diff = mu1 - mu2
-    if mu_diff.dim() == 1:
-        mu_diff = mu_diff.unsqueeze(-1)
+    mu_diff.unsqueeze_(-1)
 
     delta = torch.linalg.norm(
         torch.linalg.solve_triangular(cov_chol, mu_diff, upper=False).squeeze(-1),
-        ord=2
+        ord=2,
+        dim=-1
     )
     # Cache results for numeric stability
     minus_half_delta = -0.5 * delta
