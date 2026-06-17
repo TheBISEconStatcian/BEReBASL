@@ -19,7 +19,9 @@ A close bookkeeping of the usage can be seen on [GitHub](https://github.com/TheB
 
 ## Mathematical derivations/proofs
 
-### Decision boundary of the perfect Bayes with idiosyncratic shocks {#sec-dec-boundary-perf-bayes-idyiosincratic-shocks}
+### On the Bayes Classifier with idiosyncratic shocks
+
+#### Decision boundary {#sec-dec-boundary-perf-bayes-idyiosincratic-shocks}
 
 The decision boundary between two classes is defined as the equal probability
 region for both. For our case with two classes there is only one boundary and
@@ -69,7 +71,7 @@ $$
 (\mu_b - \mu_g)^\top \Sigma^{-1} (x - \bar{\mu})  = \log c
 $${#eq-decision-boundary-equal-covs}
 
-### Bayes error with idiosyncratic shocks
+#### Bayes error rate
 
 A perfect Bayes classifier considering the idiosyncratic shock as defined in 
 @eq-pd-with-shock-perf-bayes has an analytical solution for the Bayes error.
