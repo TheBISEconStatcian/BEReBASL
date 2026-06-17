@@ -14,6 +14,7 @@ import torch
 
 ##### Internal imports
 from berebasl.simulation.gaussian_mixture import (
+    bayes_rate_two_class_mvn_gaussian_equal_cov,
     eigen_decomp_proj_to_pd,
     GaussianMixture,
     random_vcov_matrix
@@ -673,6 +674,29 @@ class CreditDataGenerator:
 
         result = errors.to(self.good_mixture.dtype).mean(dim=-1) # scalar or (b,)
         return result.item() if result.dim() == 0 else result
+
+    def bayes_error_under_equal_covs(
+        self,
+    ) -> torch.Tensor:
+        perf_bayes_equals_case_no_noise = (
+            not self.simulate_idiosyncratic_shocks or
+            self.prob_bad_given_shock == 0.5
+        )
+        if perf_bayes_equals_case_no_noise:
+            odds_factor = 1.0
+        else:
+            pi_eps = 1 - self.prob_idiosyncratic_shock
+            pi_vareps_b = self.prob_bad_given_shock
+
+            odds_factor = (0.5 - (1-pi_eps)*pi_vareps_b) / pi_eps # $\xi$ in the thesis
+            
+        return bayes_rate_two_class_mvn_gaussian_equal_cov(
+            self.bad_mixture.mean,
+            self.good_mixture.mean,
+            self.bad_mixture.cov_chol_decomp,
+            self.prob_bad_given_no_shock,
+            odds_factor
+        ).item()
 
 
     def confusion_probability(
