@@ -13,17 +13,99 @@ def insert_piecewise_breaks_along_last_dimension(
         order_by_x_first: bool = True,
         security_checks: bool = True,
     ) -> torch.Tensor:
+    r"""
+    Insert zero-height breakpoints around contiguous valid regions.
+
+    This function expands the last dimension of ``x``, ``y`` and ``mask`` so
+    that each contiguous valid region becomes an independent piecewise curve.
+    Around every contiguous region of valid samples, two additional points are
+    inserted:
+
+    * an opening point immediately before the first valid sample,
+    * a closing point immediately after the last valid sample.
+
+    Both inserted points have the same ``x`` coordinate as the adjacent valid
+    sample and a function value of zero. Consequently, applying the trapezoidal
+    rule to the transformed tensors computes the integral over each contiguous
+    region independently instead of implicitly interpolating across invalid
+    regions.
+
+    Internally, one additional leading column is allocated in the temporary
+    buffers. Index ``0`` acts as a dummy sink for every scatter operation
+    corresponding to an invalid position. This allows all scatter indices to
+    remain non-negative without requiring conditional indexing. The dummy column
+    is removed before returning.
+
+    Args:
+        x (Tensor):
+            Tensor of shape ``(*batch_dims, N)`` containing the sample
+            locations along the last dimension.
+        y (Tensor):
+            Tensor of shape ``(*batch_dims, N)`` containing the function values
+            corresponding to ``x``.
+        mask (Tensor):
+            Boolean tensor of shape ``(*batch_dims, N)`` indicating which
+            entries are valid.
+        order_by_x_first (bool, optional):
+            Whether to sort ``x``, ``y`` and ``mask`` by increasing ``x`` before
+            inserting breakpoints. Default: ``True``.
+
+            Keeping this enabled is generally recommended. The purpose of this
+            function is to transform the input into a representation suitable
+            for piecewise trapezoidal integration over the domain defined by
+            ``x``. If disabled, the inserted breakpoints follow the existing
+            ordering of the samples, which may produce incorrect piecewise
+            integrals whenever ``x`` is not already sorted.
+        security_checks (bool, optional):
+            Whether to validate input shapes, devices and dtypes before
+            execution. Default: ``True``.
+
+    Returns:
+        tuple[Tensor, Tensor, Tensor]:
+
+        * **x_new** -- Tensor of shape ``(*batch_dims, M)`` containing the
+          expanded sample locations.
+        * **y_new** -- Tensor of shape ``(*batch_dims, M)`` containing the
+          expanded function values.
+        * **mask_new** -- Boolean tensor of shape ``(*batch_dims, M)``
+          indicating the valid entries in the expanded representation.
+
+        Here ``M = N + max_extra``, where ``max_extra`` denotes the maximum
+        number of inserted breakpoints over all batch elements.
+
+    Raises:
+        AssertionError:
+            If ``x``, ``y`` and ``mask`` have incompatible shapes or reside on
+            different devices.
+        ValueError:
+            If ``mask`` is not boolean.
+
+    Example:
+        .. code-block:: python
+
+            x = torch.tensor([[300., 400., 600., 900., 1000.]])
+            y = torch.tensor([[0.5, 0.6, float("nan"), 0.6, 0.7]])
+            mask = ~torch.isnan(y)
+
+            x_pw, y_pw, mask_pw = insert_piecewise_breaks_along_last_dimension(
+                x, y, mask
+            )
+    """
     if security_checks:
-        assert_tensors(y, x, mask, tensor_names="y, x, mask",
-                    checks=["are_tensors", "same_device", "same_shape"])
-        if not mask.dtype == torch.bool:
+        assert_tensors(
+            y, x, mask, tensor_names="y, x, mask",
+            checks=["are_tensors", "same_device", "same_shape"]
+        )
+        if mask.dtype != torch.bool:
             raise ValueError("mask was expected to be boolean")
+        
     *batch_dims,  N = y.shape
 
     if order_by_x_first:
         ordering = x.argsort(dim=-1)
         x, y, mask = [t.gather(dim=-1, index=ordering) for t in (x, y, mask)]
 
+    # Detect the beginning and end of every contiguous valid region.
     close = mask & torch.nn.functional.pad(~mask[..., 1:], (0,1), value=False)
     open_ = mask & torch.nn.functional.pad(~mask[..., :-1], (1,0), value=False)
 
@@ -34,32 +116,66 @@ def insert_piecewise_breaks_along_last_dimension(
 
     new_N = N + max_extra
 
+    # Allocate one additional leading column.
+    #
+    # All invalid positions are intentionally mapped to index 0 during the
+    # scatter operations below. This dummy column is discarded before
+    # returning, avoiding negative indices and conditional scatter logic.
     x_new = x.new_full((*batch_dims, new_N + 1), torch.nan)
     y_new = y.new_full((*batch_dims, new_N + 1), torch.nan)
-    valid_new = mask.new_zeros((*batch_dims, new_N + 1))
+    mask_new = mask.new_zeros((*batch_dims, new_N + 1))
 
-    cumsum_mask_valid = mask.cumsum(dim=-1)
-    new_offset = open_.cumsum(dim=-1)
-    new_offset[..., 1:] += close[..., :-1].cumsum(dim=-1)
-    idxs_map_orig = cumsum_mask_valid.clone() + new_offset
-    idxs_map_orig *= mask
+    # Compute the destination index of every original valid sample.
+    #
+    # The mapping consists of:
+    #
+    #   - the running count of valid samples,
+    #   - one additional position for every opening breakpoint,
+    #   - one additional position for every previously inserted closing
+    #     breakpoint.
+    #
+    # Invalid samples remain mapped to index 0.
+    cumsum_mask = mask.cumsum(dim=-1)
 
-    idxs_map_dummies_for_next_close = (idxs_map_orig + 1) * close
-    idxs_map_dummies_for_last_close = (idxs_map_orig-1) * open_
-
-    is_y_buffer = True
+    offset = open_.cumsum(dim=-1)
+    offset[..., 1:] += close[..., :-1].cumsum(dim=-1)
     
-    for buffer, src in [(y_new, y), (x_new, x), (valid_new, mask)]:
-        isnot_orig_map = False
-        for index in (idxs_map_orig, idxs_map_dummies_for_next_close, idxs_map_dummies_for_last_close):
-            if is_y_buffer and isnot_orig_map:
+    idxs_map_orig = (cumsum_mask + offset) * mask
+
+    # Closing breakpoints are inserted immediately after the corresponding
+    # original sample.
+    #
+    # Multiplication by 'close' intentionally maps every non-closing position
+    # to the dummy index 0.
+    idxs_map_dummies_for_next_close = (idxs_map_orig + 1) * close
+
+    # Opening breakpoints are inserted immediately before the corresponding
+    # original sample.
+    #
+    # Multiplication by 'open_' intentionally maps every non-opening position
+    # to the dummy index 0.
+    idxs_map_dummies_for_last_close = (idxs_map_orig - 1) * open_
+
+
+    buffers = (
+        (y_new, y, True),
+        (x_new, x, False),
+        (mask_new, mask, False),
+    )
+    idx_maps = [
+        (idxs_map_orig, True),
+        (idxs_map_dummies_for_next_close, False),
+        (idxs_map_dummies_for_last_close, False)
+    ]
+    
+    for buffer, src, zero_dummy_for_breaks in buffers:
+        for index, is_orig_map in idx_maps:
+            if zero_dummy_for_breaks and not is_orig_map:
                 buffer.scatter_(dim=-1, index=index, value=0)
                 continue
             buffer.scatter_(dim=-1, index=index, src=src)
-            isnot_orig_map = True
-        is_y_buffer=False
 
-    return x_new[..., 1:], y_new[..., 1:], valid_new[..., 1:] # All of them are [*batch_dims, new_N]
+    return x_new[..., 1:], y_new[..., 1:], mask_new[..., 1:] # All of them are [*batch_dims, new_N]
 
 def masked_batched_trapz(
     y: torch.Tensor,
