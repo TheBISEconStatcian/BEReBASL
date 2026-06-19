@@ -12,7 +12,7 @@ def insert_piecewise_breaks_along_last_dimension(
         mask: torch.Tensor,
         order_by_x_first: bool = True,
         security_checks: bool = True,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor]:
     r"""
     Insert zero-height breakpoints around contiguous valid regions.
 
@@ -105,15 +105,18 @@ def insert_piecewise_breaks_along_last_dimension(
         ordering = x.argsort(dim=-1)
         x, y, mask = [t.gather(dim=-1, index=ordering) for t in (x, y, mask)]
 
-    # Detect the beginning and end of every contiguous valid region.
-    # Next one is open but current is closed
-    close = mask & torch.nn.functional.pad(~mask[..., 1:], (0,1), value=False)
-    # next one is closed but current is open
-    open_ = mask & torch.nn.functional.pad(~mask[..., :-1], (1,0), value=False)
+    # Detect the boundaries of every contiguous valid region.
+    #
+    # open_[..., i]  == True  iff sample i is the first valid sample of a region.
+    # close[..., i] == True  iff sample i is the last valid sample of a region.
+    # Last one is closed and current is open
+    is_region_end = mask & torch.nn.functional.pad(~mask[..., 1:], (0,1), value=False)
+    # next one is closed and current is open
+    is_region_start = mask & torch.nn.functional.pad(~mask[..., :-1], (1,0), value=False)
 
-    extra = close | open_
+    breakpoint_flags  = is_region_end | is_region_start
 
-    extra_per_batch = extra.sum(dim=-1)
+    extra_per_batch = breakpoint_flags .sum(dim=-1)
     max_extra = extra_per_batch.max().item()
 
     new_N = N + max_extra
@@ -139,29 +142,32 @@ def insert_piecewise_breaks_along_last_dimension(
     # Invalid samples remain mapped to index 0.
     cumsum_mask = mask.cumsum(dim=-1)
 
-    # The offset is calculated by first considering the flags "next one is close
-    # but current is open. See that through padding the first column is always zero
-    offset = open_.cumsum(dim=-1)
-    # Then get the closing positions. This shift makes clear that the 
-    # inserting of the x position of the next open comes right before that original
-    # mapping of the next one that is open.
-    offset[..., 1:] += close[..., :-1].cumsum(dim=-1)
+    # Compute the offset introduced by inserted breakpoints.
+    #
+    # Every opening breakpoint shifts the current and all subsequent valid samples
+    # by one position.
+    insertion_offset = is_region_start.cumsum(dim=-1)
+    # Closing breakpoints shift only the samples that follow them.
+    #
+    # The one-column shift ensures that the closing breakpoint is inserted after
+    # the current sample and before the next valid sample.
+    insertion_offset[..., 1:] += is_region_end[..., :-1].cumsum(dim=-1)
     
-    idxs_map_orig = (cumsum_mask + offset) * mask
+    idxs_map_orig = (cumsum_mask + insertion_offset) * mask
 
     # Closing breakpoints are inserted immediately after the corresponding
     # original sample.
     #
     # Multiplication by 'close' intentionally maps every non-closing position
     # to the dummy index 0.
-    idxs_map_dummies_for_next_close = (idxs_map_orig + 1) * close
+    idxs_map_dummies_for_next_close = (idxs_map_orig + 1) * is_region_end
 
     # Opening breakpoints are inserted immediately before the corresponding
     # original sample.
     #
     # Multiplication by 'open_' intentionally maps every non-opening position
     # to the dummy index 0.
-    idxs_map_dummies_for_last_close = (idxs_map_orig - 1) * open_
+    idxs_map_dummies_for_last_close = (idxs_map_orig - 1) * is_region_start
 
 
     buffers = (
