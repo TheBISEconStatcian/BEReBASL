@@ -196,47 +196,79 @@ def masked_batched_trapz(
     mask: torch.Tensor,
     dim: int = -1,
     keepdim: bool = False,
-    nans_option: Literal["interpolate", "set_to_zero_region"] = "interpolate",
+    nans_option: Literal["interpolate", "segment_isolation"] = "interpolate",
     x_is_ordered: bool = False
 ) -> torch.Tensor:
     r"""
     Compute a masked, batched trapezoidal integration along dimension ``dim``.
 
-    The integration is performed only over entries where ``mask`` is ``True``.
-    All other entries are ignored. The operation is applied independently to
-    each mini-dataset along ``dim``; all remaining dimensions are treated as
-    batch dimensions.
+    This function computes a trapezoidal approximation of the integral of ``y`` with
+    respect to ``x`` over the entries selected by ``mask``. The computation is
+    performed independently for each batch element, while all non-integration
+    dimensions are treated as batch dimensions.
+
+    Two different treatments of invalid (``False`` in ``mask``) regions are
+    supported via ``nans_option``:
+
+    - ``"interpolate"``:
+        Standard masked trapezoidal integration. Valid points are connected
+        sequentially within each contiguous valid region, effectively performing
+        linear interpolation across the masked structure.
+
+    - ``"segment_isolation"``:
+        Piecewise integration mode. Each contiguous valid region is treated as an
+        independent segment. Artificial zero-valued breakpoints are inserted at
+        region boundaries (via
+        :func:`insert_piecewise_breaks_along_last_dimension`), ensuring that no
+        trapezoids span across invalid regions. This enforces *piecewise
+        independence* of the integral over disconnected segments.
 
     Internally, the integration dimension is moved to the last axis to simplify
     indexing and reshaping, and restored to its original position afterwards.
 
     Args:
         y (Tensor):
-            Tensor of shape ``(*batch_dims, N)`` containing function values
-            along dimension ``dim``.
+            Tensor of shape ``(*batch_dims, N)`` containing function values along
+            dimension ``dim``.
         x (Tensor):
-            Tensor of shape ``(*batch_dims, N)`` containing sample locations
-            along dimension ``dim``.
+            Tensor of shape ``(*batch_dims, N)`` containing sample locations along
+            dimension ``dim``.
         mask (Tensor):
-            Boolean tensor of shape ``(*batch_dims, N)`` indicating which
-            entries are valid and should contribute to the integration.
+            Boolean tensor of shape ``(*batch_dims, N)`` indicating which entries
+            are valid and should contribute to the integration.
         dim (int, optional):
             Dimension along which to integrate. Must satisfy
             ``-y.ndim <= dim < y.ndim``. Default: ``-1``.
         keepdim (bool, optional):
             Whether to retain dimension ``dim`` with size 1 in the output.
             Default: ``False``.
+        nans_option (Literal["interpolate", "segment_isolation"], optional):
+            Strategy for handling invalid (masked-out) entries:
+
+            - ``"interpolate"``:
+                Perform standard masked trapezoidal integration, connecting
+                consecutive valid points within each batch.
+            - ``"segment_isolation"``:
+                Perform piecewise integration by explicitly inserting zero-valued
+                boundary points so that no trapezoid spans across invalid regions.
+
+            Default: ``"interpolate"``.
+        x_is_ordered (bool, optional):
+            Whether ``x`` is already sorted in increasing order along ``dim``.
+            If ``False`` and ``nans_option="segment_isolation"``, the inputs are
+            internally sorted before inserting breakpoints. Default: ``False``.
 
     Returns:
         Tensor:
             Tensor of shape ``(*batch_dims,)`` if ``keepdim=False``, otherwise
-            ``(*batch_dims, 1)`` with the integration result along ``dim``.
+            ``(*batch_dims, 1)``, containing the integrated values along ``dim``.
 
     Raises:
         IndexError:
             If ``dim`` is not a valid dimension index for the inputs.
         AssertionError:
-            If ``y``, ``x`` and ``mask`` do not have matching shapes or devices.
+            If ``y``, ``x`` and ``mask`` do not have matching shapes or devices,
+            or if ``nans_option`` is not recognized.
         ValueError:
             If ``mask`` is not boolean.
 
@@ -244,13 +276,12 @@ def masked_batched_trapz(
         .. code-block:: python
 
             y = torch.tensor([[1., 2., 3.],
-                              [4., 5., 6.]])
+                            [4., 5., 6.]])
             x = torch.tensor([[0., 1., 2.],
-                              [0., 1., 2.]])
+                            [0., 1., 2.]])
             mask = torch.tensor([[True, True, False],
-                                 [True, True, True]])
+                                [True, True, True]])
 
-            # Integrate along last dimension
             res = masked_batched_trapz(y, x, mask, dim=-1)
     """
 
@@ -264,13 +295,6 @@ def masked_batched_trapz(
         raise IndexError("dim has to be valid w. r. t. the amount of dims of inputs")
     
     y, x, mask = [ten.movedim(dim, -1) for ten in (y, x, mask)]
-
-    if nans_option == "set_to_zero_region":
-        x, y, mask = insert_piecewise_breaks_along_last_dimension(
-            x, y, mask, order_by_x_first=not x_is_ordered, security_checks=False
-        )
-    elif nans_option != "interpolate":
-        raise AssertionError(f"nans_option {nans_option} is not recognized")
     
     *batch_dims, N = y.shape
 
@@ -280,6 +304,13 @@ def masked_batched_trapz(
     y = y.reshape(B, N)
     x = x.reshape(B, N)
     mask = mask.reshape(B, N)
+
+    if nans_option == "segment_isolation":
+        x, y, mask = insert_piecewise_breaks_along_last_dimension(
+            x, y, mask, order_by_x_first=not x_is_ordered, security_checks=False
+        )
+    elif nans_option != "interpolate":
+        raise AssertionError(f"nans_option {nans_option} is not recognized")
 
     valid_count_per_batch = mask.sum(dim=-1)
     cumsums_valid_counts_batch = valid_count_per_batch.cumsum(dim=-1) - 1
