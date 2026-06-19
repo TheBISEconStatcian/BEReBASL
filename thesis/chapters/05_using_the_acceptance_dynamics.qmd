@@ -127,34 +127,11 @@ plot_lines_and_mains(
 ```
 
 ```{python}
-#| label: fig-difference-between-exp-and-obseved-performance
+#| label: fig-areas-diff-logit-in-grid
 #| fig-cap: "Absolute difference between the performance on the expectation samples and realized samples $(W_{MA}=5)$"
-exp_to_real_diffs_base = generate_lines_for_diffs(base_sim_objs, make_abs=True, W=5)
-
-plot_lines_and_mains(
-    gen_lines_from_diff_dict(exp_to_real_diffs_base),
-    sample_sizes=exp_to_real_diffs_base["sample_sizes"],
-    add_fig_legend=True,
-    add_legend=False,
-    only_related_exp=True,
-    diff_plot=True
-)
+wrapper_plot_grid_of_diffs_between_logit_and_acc(all_sim_objs, grid_biases, grid_corrs)
 ```
 
-```{python}
-#| label: fig-difference-between-exp-and-obseved-performance
-#| fig-cap: "Absolute difference between the performance on the expectation samples and realized samples $(W_{MA}=5)$"
-exp_to_real_diffs_base = generate_lines_for_diffs(base_sim_objs, make_abs=True, W=5)
-
-plot_lines_and_mains(
-    gen_lines_from_diff_dict(exp_to_real_diffs_base),
-    sample_sizes=exp_to_real_diffs_base["sample_sizes"],
-    add_fig_legend=True,
-    add_legend=False,
-    only_related_exp=True,
-    diff_plot=True
-)
-```
 
 ### Formulating the hypothesis
 

@@ -1,5 +1,7 @@
 import os
 
+from typing import Any, Dict, Tuple
+
 import torch
 
 from berebasl.simulation.credit_data_simulation import CreditDataGenerator
@@ -44,3 +46,49 @@ def extract_objs_from_sim_dir(grid_path: str, sim_dir: str, device: torch.device
             "k_folds" : init_objs["configs"]["k_folds"],
             "cv_count" : init_objs["configs"]["cv_count"]
         }
+
+def extract_all_sim_objs(
+        grid_path,
+        biases: Dict[str, float],
+        corrs: Dict[str, float]
+        ) -> Dict[str, Dict[str, Any]]:
+    all_sim_objs = {}
+    for b_s in biases.keys():
+        all_sim_objs[b_s] = {}
+        for c_s in corrs.keys():
+            all_sim_objs[b_s][c_s] = extract_objs_from_sim_dir(grid_path, f"bias_{b_s}_corr_{c_s}")
+    return all_sim_objs
+
+def extract_biases_and_corrs_from_dirnames(dir_path: str) -> Tuple[Dict[str, float], Dict[str, float]]:
+    """
+    Extract bias and correlation dictionaries from directory names.
+    
+    Args:
+        dir_path: Path to directory containing simulation folders
+        
+    Returns:
+        Tuple of (biases_dict, corrs_dict) where keys are string representations
+        and values are float values
+    """
+    biases = {}
+    corrs = {}
+    
+    corr_ider = "_corr_"
+    len_corr = len(corr_ider)
+    bias_ider = "bias_"
+    len_bias = len(bias_ider)
+    
+    for sim_name in os.listdir(dir_path):
+        corr_pos = sim_name.find(corr_ider)
+        if corr_pos == -1:
+            continue
+            
+        b = sim_name[len_bias:corr_pos]
+        if b not in biases:
+            biases[b] = float(b.replace('_', '.'))
+        
+        c = sim_name[corr_pos + len_corr:]
+        if c not in corrs:
+            corrs[c] = float(c.replace('_', '.'))
+    
+    return biases, corrs

@@ -32,18 +32,28 @@ from IPython.display import display, Markdown
 import torch
 
 from berebasl.simulation.credit_data_simulation import CreditDataGenerator
-from helper_scripts.general import extract_objs_from_sim_dir
+from helper_scripts.general import extract_all_sim_objs, extract_biases_and_corrs_from_dirnames
+from helper_scripts.sensitivity_analysis import extract_bayes_errors
 from helper_scripts.hypothesis_visualization import (
   plot_lines_and_mains,
   generate_line_collections_for_exp_real_plot,
   generate_lines_for_diffs,
-  gen_lines_from_diff_dict
+  gen_lines_from_diff_dict,
+  construct_all_diffs_tensor,
+  get_areas,
+  normalize_areas,
+  plot_heatmap_grid,
+  wrapper_plot_grid_of_diffs_between_logit_and_acc
 )
 
 grid_path = '../berebasl/data/simulations/mnar_grid_hyp_testing'
-base_sim = 'bias_0_0_corr_0_0'
 
-base_sim_objs = extract_objs_from_sim_dir(grid_path, base_sim)
+grid_biases, grid_corrs = extract_biases_and_corrs_from_dirnames(grid_path)
+grid_biases = dict(sorted(grid_biases.items(), key=lambda x: x[1]))
+grid_corrs = dict(sorted(grid_corrs.items(), key=lambda x: x[1]))
+all_sim_objs = extract_all_sim_objs(grid_path, grid_biases, grid_corrs)
+
+base_sim_objs = all_sim_objs['0_0']['0_0'] # 0 bias, 0 correlation
 dgp_base: CreditDataGenerator = base_sim_objs["data_generator"]
 ```
 

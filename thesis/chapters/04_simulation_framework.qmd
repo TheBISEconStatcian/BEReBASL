@@ -124,31 +124,9 @@ report_str = ("$$\n{ \\scriptsize " + tex_obj_g+
 
 display(Markdown(report_str))
 
-def bayes_err_under_equal_covs(
-    dgp: CreditDataGenerator,
-    seed_if_sim: int = 1807
-) -> float:
-    perf_bayes_equals_case_no_noise = (
-        not dgp.simulate_idiosyncratic_shocks or
-        dgp.prob_bad_given_shock == 0.5
-    )
-    if perf_bayes_equals_case_no_noise:
-        odds_factor = 1.0
-    else:
-        pi_eps = 1 - dgp.prob_idiosyncratic_shock
-        pi_vareps_b = dgp.prob_bad_given_shock
+bayes_errors = extract_bayes_errors(all_sim_objs, grid_biases, grid_corrs)
 
-        odds_factor = xi = (0.5 - (1-pi_eps)*pi_vareps_b) / pi_eps
-        
-    return bayes_rate_two_class_mvn_gaussian_equal_cov(
-        dgp.bad_mixture.mean,
-        dgp.good_mixture.mean,
-        dgp.bad_mixture.cov_chol_decomp,
-        dgp.prob_bad_given_no_shock,
-        odds_factor
-    ).item()
-
-bayes_err_base = bayes_err_under_equal_covs(dgp_base)
+bayes_err_base = bayes_errors[0,0].item()
 bayes_err_str = f"{bayes_err_base*100:.2f}"
 ```
 

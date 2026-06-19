@@ -1,15 +1,28 @@
+from matplotlib import gridspec
 from matplotlib.collections import LineCollection
 from matplotlib.lines import Line2D
 from matplotlib.colors import to_rgb
-from typing import Any, Dict, List, Tuple, Union
-from experiments.acceptance_loop_cv_based_MNAR import EXPECTATION_TYPES, METRIC_CATEGORIES, THRESHOLD_BASIS, REAL_PERFORMANCE_TYPES
 from matplotlib import pyplot as plt
 
+from numpy import ndarray, ix_
 import torch
 
-from numpy import ndarray
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from berebasl.simulation.credit_data_simulation import CreditData
+from berebasl.utils.normalized_shape_tensor_ops import masked_batched_trapz
+from experiments.acceptance_loop_cv_based_MNAR import EXPECTATION_TYPES, METRIC_CATEGORIES, THRESHOLD_BASIS, REAL_PERFORMANCE_TYPES
+
+
+import numpy as np
+import torch
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+from matplotlib.patches import Rectangle
+from matplotlib.colors import Normalize
+from typing import Iterable
+
+# Calculate "Absolute" expectation and realization lines
 
 def gen_lines_colors_and_main(
         stat: torch.Tensor, 
@@ -102,10 +115,11 @@ def linetypes_labels_and_colors_for_exp_real_plot(
 
     return linetypes, labels_linetypes, colors_map
 
+ALL_THRESHOLD_LBLS = [t+'_'+m for m in METRIC_CATEGORIES for t in THRESHOLD_BASIS]
+
 def get_acc_defaults_counts_per_round(sim_objs) -> Dict[str, torch.Tensor]:
-    all_threshold_lbls = [t+'_'+m for m in METRIC_CATEGORIES for t in THRESHOLD_BASIS]
     acc_flags: Dict[str, torch.Tensor] = {k : v.clone() for k, v in sim_objs['alternative_accepted'].items()}
-    lbl_acc_flag_in_data = set(all_threshold_lbls) - set(acc_flags.keys())
+    lbl_acc_flag_in_data = set(ALL_THRESHOLD_LBLS) - set(acc_flags.keys())
     assert len(lbl_acc_flag_in_data) == 1
     lbl_acc_flag_in_data = next(lbl_acc_flag_in_data.__iter__())
 
@@ -369,7 +383,7 @@ def plot_lines_and_mains(
 
     plt.show()
 
-from typing import Optional
+### Exp-real diffs calculation
 
 def moving_average_with_nans(x: torch.Tensor, W: int, dim: int = -1, with_tails: bool = True) -> torch.Tensor:
     assert x.dim() > 0
@@ -558,3 +572,464 @@ def gen_lines_from_diff_dict(exp_to_real_diffs):
 
     return line_collections_data
     
+
+## Diff areas calculation
+
+def construct_all_diffs_tensor(
+    all_sim_objs,
+    biases: Dict[str, float],
+    corrs: Dict[str, float],
+    expectation_types: list,
+    metric_categories: list,
+    diff_types: list,
+    classifiers: list
+) -> Tuple[torch.Tensor, int, int, int, int, int]:
+    """
+    Construct the all_diffs tensor by iterating over parameter combinations.
+    
+    Args:
+        grid_path: Path to simulation directory
+        biases: Dictionary of bias values
+        corrs: Dictionary of correlation values
+        expectation_types: List of expectation types
+        metric_categories: List of metric categories
+        diff_types: List of diff types
+        sample_sizes: Tensor of sample sizes
+        
+    Returns:
+        Tuple of (all_diffs_tensor, B, Co, E, M, D) with shapes and counts
+    """
+    all_diffs = []
+    
+    for b_s in biases.keys():
+        for c_s in corrs.keys():
+            sim_objs = all_sim_objs[b_s][c_s]
+            exp_to_real_diffs = generate_lines_for_diffs(sim_objs, make_abs=True, W=5)
+            
+            for e in expectation_types:
+                for m in metric_categories:
+                    case_lbl = e + '_' + m
+                    case_data = exp_to_real_diffs["diff_data"][case_lbl]
+                    
+                    for classif in classifiers:
+                        for dt in diff_types:
+                            all_diffs.append(case_data[classif][dt])
+    
+    B = len(biases)
+    Co = len(corrs)
+    E = len(expectation_types)
+    M = len(metric_categories)
+    Cl = 2  # logit, bayes
+    D = len(diff_types)
+    sample_sizes = exp_to_real_diffs["sample_sizes"]
+    N = sample_sizes.size(0)
+    
+    all_diffs = torch.stack(all_diffs, dim=0).reshape(B, Co, E, M, Cl, D, N)
+    return all_diffs, sample_sizes, B, Co, E, M, D
+
+
+def get_areas(
+    all_diffs: torch.Tensor,
+    sample_sizes: torch.Tensor
+) -> torch.Tensor:
+    """
+    Compute areas under curves using trapezoidal integration.
+    D is [abs_diffs, ma_diffs]
+    
+    Args:
+        all_diffs: Tensor of shape [B, Co, E, M, Cl, D, N]
+        sample_sizes: Tensor of sample sizes
+        metric_categories: List of metric categories
+        
+    Returns:
+        Areas tensor of shape [B, Co, E, M, Cl, D + 1]
+    """
+    mask_valid = ~all_diffs.isnan()
+    areas_interpolated = masked_batched_trapz(
+        y=all_diffs,
+        x=sample_sizes.expand_as(all_diffs),
+        mask=mask_valid,
+        dim=-1
+    )
+    idx_abs_diffs = 0
+    sum_performance = all_diffs[..., idx_abs_diffs, :].nansum(dim=-1, keepdim=True) # [B, Co, E, M, Cl, 1]
+    return torch.cat(
+            [
+                areas_interpolated,
+                sum_performance
+            ],
+            dim=-1
+        ) # [B, Co, E, M, Cl, D + 1]
+
+
+def normalize_areas(
+    areas: torch.Tensor,
+    valid_mask_diffs: torch.Tensor,
+    sample_sizes: torch.Tensor,
+    ordered_worse_per_cat: Dict[str, float] = {"ks": 1, "roc": 0.5}
+) -> torch.Tensor:
+    """
+    Normalize areas by worst-case areas for each metric category.
+    
+    Args:
+        areas: Tensor of shape [B, Co, E, M, Cl, D+1]
+        valid_mask_diffs: Tensor of shape [B, Co, E, M, Cl, D, N]
+        metric_categories: List of metric categories
+        sample_sizes: Tensor of sample sizes
+        
+    Returns:
+        Normalized areas tensor of shape [B, Co, E, M, Cl, D+1]
+    """
+    B, Co, E, M, Cl, D, N = valid_mask_diffs.shape
+    if not (len(ordered_worse_per_cat) == M):
+        raise RuntimeError("Wrong metric categories size")
+    
+    worst_case_ten = areas.new_tensor(list(ordered_worse_per_cat.values()))
+    worst_case_ten_exp = worst_case_ten.unsqueeze(-1).expand(M, N)
+    
+    worst_possible_areas = masked_batched_trapz(
+        y=worst_case_ten_exp,
+        x=sample_sizes.expand(M, N),
+        mask=torch.ones_like(worst_case_ten_exp, dtype=bool)
+    ) # [M]
+
+    mask_valid_abs_diffs = valid_mask_diffs[..., 0, :] # [B, Co, E, M, Cl, N]
+    worst_possible_sums = torch.sum(
+        worst_case_ten_exp.view(M, 1, N) * mask_valid_abs_diffs, # [B, Co, E, M, Cl, N]
+        dim=-1
+    )  # [B, Co, E, M, Cl]
+
+    normed_areas = areas.clone() # [B, Co, E, M, Cl, D+1]
+    normed_areas[..., :-1] /= worst_possible_areas.view(M, 1, 1) # div result shape = [B, Co, E, M, Cl, D]
+    normed_areas[..., -1] /= worst_possible_sums
+    
+    return normed_areas
+
+
+def plot_heatmap_grid(
+    data: torch.Tensor,
+    metric_categories: list,
+    expectation_types: list,
+    biases: Dict[str, float],
+    corrs: Dict[str, float],
+    cmap: str = 'RdBu_r',
+    suptitle: Optional[str] = None,
+    title_bold: bool = True,
+    cbar_label: str = 'Logit - Bayes\n(Normalized Area)',
+    title_mapping: Optional[Callable[[str, str], str]] = None
+) -> None:
+    M_len = len(metric_categories)
+    E_len = len(expectation_types)
+
+    # Sort biases and corrs for consistent ordering
+    sorted_bias_keys = sorted(biases.keys(), key=lambda x: biases[x])
+    sorted_corr_keys = sorted(corrs.keys(), key=lambda x: corrs[x])
+    
+    bias_key_list = list(biases.keys())
+    corr_key_list = list(corrs.keys())
+    sorted_bias_idxs = [bias_key_list.index(k) for k in sorted_bias_keys]
+    sorted_corr_idxs = [corr_key_list.index(k) for k in sorted_corr_keys]
+
+    # Labels
+    bias_labels = [f'{biases[k]:.2f}' for k in sorted_bias_keys]
+    corr_labels = [f'{corrs[k]:.2f}' for k in sorted_corr_keys]
+
+    fig = plt.figure(figsize=(5 * E_len, 4 * M_len + 0.5))
+    gs = gridspec.GridSpec(
+        M_len, E_len + 1,
+        figure=fig,
+        width_ratios=[1] * E_len + [0.05],
+        wspace=0.3,
+        hspace=0.4
+    )
+    
+    im = None
+
+    
+    v_min = data.min().item()
+    v_max = data.max().item()
+    
+    # Create heatmaps
+    for m_idx, m_cat in enumerate(metric_categories):
+        for e_idx, e_type in enumerate(expectation_types):
+            ax = fig.add_subplot(gs[m_idx, e_idx])
+            
+            # Extract and reorder data
+            raw_data = data[:, :, e_idx, m_idx].numpy()
+            heatmap_data = raw_data[ix_(sorted_bias_idxs, sorted_corr_idxs)]
+            
+            # Plot heatmap
+            im = ax.imshow(heatmap_data, cmap=cmap, aspect='auto', vmin=v_min, vmax=v_max)
+            
+            # Add black dots to negative values
+            for i in range(heatmap_data.shape[0]):
+                for j in range(heatmap_data.shape[1]):
+                    if heatmap_data[i, j] < 0:
+                        ax.plot(j, i, 'k.', markersize=8)
+            
+            # Set title
+            if title_mapping is not None:
+                title = title_mapping(e_type, m_cat)
+            else:
+                title = f'{e_type}_{m_cat}'
+            
+            title_weight = 'bold' if title_bold else 'normal'
+            ax.set_title(title, fontsize=10, fontweight=title_weight)
+            
+            # Set labels
+            ax.set_xlabel('Correlation', fontsize=9)
+            ax.set_ylabel('Bias', fontsize=9)
+            
+            # Set tick labels
+            ax.set_xticks(range(len(sorted_corr_keys)))
+            ax.set_xticklabels(corr_labels, fontsize=8)
+            
+            ax.set_yticks(range(len(sorted_bias_keys)))
+            ax.set_yticklabels(bias_labels, fontsize=8)
+    
+    # Add colorbar in its own subplot
+    cbar_ax = fig.add_subplot(gs[:, E_len])
+    cbar = fig.colorbar(im, cax=cbar_ax)
+    cbar.set_label(cbar_label, fontsize=10)
+    
+    # Add super title if provided
+    if suptitle and len(suptitle) > 0:
+        fig.suptitle(suptitle, fontsize=14, fontweight='bold', y=0.98)
+    
+    plt.show()
+
+def plot_heatmap_grid_multiD(
+    data: torch.Tensor,
+    metric_categories: list,
+    expectation_types: list,
+    biases: Dict[str, float],
+    corrs: Dict[str, float],
+    cmap: str = "RdBu_r",
+    suptitle: Optional[str] = None,
+    title_bold: bool = True,
+    cbar_label: str = "Logit - Bayes\n(Normalized Area)",
+    title_mapping: Optional[Callable[[str, str], str]] = None,
+    d_lbls: Optional[Iterable[str]] = None
+) -> None:
+    """
+    data has shape
+
+        [Bias, Corr, Expectation, Metric, D]
+
+    Every heatmap cell is split horizontally into D equal pieces.
+    """
+
+    M_len = len(metric_categories)
+    E_len = len(expectation_types)
+
+    # ------------------------------------------------------------------
+    # ordering
+    # ------------------------------------------------------------------
+
+    sorted_bias_keys = sorted(biases.keys(), key=lambda x: biases[x])
+    sorted_corr_keys = sorted(corrs.keys(), key=lambda x: corrs[x])
+
+    bias_key_list = list(biases.keys())
+    corr_key_list = list(corrs.keys())
+
+    sorted_bias_idxs = [bias_key_list.index(k) for k in sorted_bias_keys]
+    sorted_corr_idxs = [corr_key_list.index(k) for k in sorted_corr_keys]
+
+    bias_labels = [f"{biases[k]:.2f}" for k in sorted_bias_keys]
+    corr_labels = [f"{corrs[k]:.2f}" for k in sorted_corr_keys]
+
+    # ------------------------------------------------------------------
+    # figure
+    # ------------------------------------------------------------------
+
+    fig = plt.figure(figsize=(5 * E_len, 4 * M_len + 0.5))
+    D = data.shape[-1]
+
+    d_lbls_is_not_none = d_lbls is not None
+    if d_lbls_is_not_none:
+        assert len(d_lbls) == D
+    gs = gridspec.GridSpec(
+        M_len + int(d_lbls_is_not_none),
+        E_len + 1,
+        figure=fig,
+        width_ratios=[1] * E_len + [0.05],
+        height_ratios= [1] * M_len + [0.05] * int(d_lbls_is_not_none),
+        wspace=0.3,
+        hspace=0.4,
+    )
+
+    data_np = data.numpy() # [B, Co, E, M, D]
+
+    vmin = data_np.min()
+    vmax = data_np.max()
+
+    cmap_obj = plt.get_cmap(cmap)
+    norm = Normalize(vmin=vmin, vmax=vmax)
+
+    
+
+    # ------------------------------------------------------------------
+    # draw all heatmaps
+    # ------------------------------------------------------------------
+
+    for m_idx, m_cat in enumerate(metric_categories):
+
+        for e_idx, e_type in enumerate(expectation_types):
+
+            ax = fig.add_subplot(gs[m_idx, e_idx])
+
+            heatmap_data = data_np[:, :, e_idx, m_idx, :] # [B, Co, D]
+            heatmap_data = heatmap_data[
+                np.ix_(sorted_bias_idxs, sorted_corr_idxs, np.arange(D))
+            ]
+
+            n_bias, n_corr, _ = heatmap_data.shape
+
+            width = 1.0 / D
+
+            for i in range(n_bias):
+                for j in range(n_corr):
+
+                    for d in range(D):
+
+                        value = heatmap_data[i, j, d]
+
+                        rect = Rectangle(
+                            (j - 0.5 + d * width, i - 0.5),
+                            width,
+                            1,
+                            facecolor=cmap_obj(norm(value)),
+                            edgecolor="none",
+                        )
+
+                        ax.add_patch(rect)
+
+                        if value < 0:
+                            ax.plot(
+                                j - 0.5 + (d + 0.5) * width,
+                                i,
+                                "k.",
+                                markersize=5,
+                            )
+
+            # draw grid
+            for x in range(n_corr + 1):
+                ax.axvline(x - 0.5, color="black", lw=0.8)
+
+            for y in range(n_bias + 1):
+                ax.axhline(y - 0.5, color="black", lw=0.8)
+
+            # optional separators between D pieces
+            if D > 1:
+                for x in range(n_corr):
+                    for d in range(1, D):
+                        ax.axvline(x=x - 0.5 + d * width, ymin = -0.5, ymax=n_bias - 0.5,
+                                   color='k', alpha=.5, lw=0.5, ls="--")
+
+            ax.set_xlim(-0.5, n_corr - 0.5)
+            ax.set_ylim(n_bias - 0.5, -0.5)
+
+            ax.set_xticks(range(n_corr))
+            ax.set_xticklabels(corr_labels, fontsize=8)
+
+            ax.set_yticks(range(n_bias))
+            ax.set_yticklabels(bias_labels, fontsize=8)
+
+            ax.set_xlabel("Correlation", fontsize=9)
+            ax.set_ylabel("Bias", fontsize=9)
+
+            if title_mapping is None:
+                title = f"{e_type}_{m_cat}"
+            else:
+                title = title_mapping(e_type, m_cat)
+
+            ax.set_title(
+                title,
+                fontsize=10,
+                fontweight="bold" if title_bold else "normal",
+            )
+
+    # ------------------------------------------------------------------
+    # colorbar
+    # ------------------------------------------------------------------
+
+    cbar_ax = fig.add_subplot(gs[:, E_len])
+
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap_obj)
+    sm.set_array([])
+
+    cbar = fig.colorbar(sm, cax=cbar_ax)
+    cbar.set_label(cbar_label)
+
+    if suptitle:
+        fig.suptitle(
+            suptitle,
+            fontsize=14,
+            fontweight="bold",
+            y=0.98,
+        )
+
+    if d_lbls_is_not_none:
+        ax = fig.add_subplot(gs[-1, :])
+        diffs_as_str = "".join([l + (', ' if i < D-2 else " and " if i == D-2 else "") for i, l in enumerate(d_lbls)])
+        ax.axis('off')
+        ax.text(
+            y=0, x=0,
+            s = (
+                "Each subplot shows the data acoording to differences of " +
+                diffs_as_str
+            )
+        )
+
+
+    plt.show()
+
+def wrapper_plot_grid_of_diffs_between_logit_and_acc(all_sim_objs, grid_biases, grid_corrs):
+    diff_types = ["diffs", "ma_diffs"]
+    # Construct all_diffs tensor
+    ## [B, Co, E, M, Cl, D, N], [N]
+    all_diffs_new, sample_sizes, B, Co, E, M, D = construct_all_diffs_tensor(
+        all_sim_objs,
+        biases=grid_biases,
+        corrs=grid_corrs,
+        expectation_types=EXPECTATION_TYPES,
+        metric_categories=METRIC_CATEGORIES,
+        diff_types=diff_types,
+        classifiers=["logit", "bayes"]
+    )
+
+    # Get areas
+    areas = get_areas(all_diffs_new, sample_sizes)
+
+    # Normalize areas
+    normed_areas = normalize_areas(areas, ~all_diffs_new.isnan(), sample_sizes)
+
+    # # Compute logit - bayes difference
+    logit_area_minus_bayes_normed = normed_areas[..., 0, :] - normed_areas[..., 1, :]
+
+
+    def custom_title_mapping(e_type: str, m_cat: str) -> str:
+        e_type_map = {
+            "acc_based" : "Accepts based",
+            "oracle_naive" : "Oracle naive",
+            "oracle_comparable" : "Oracle comparable"
+        }
+        m_cat_mapper = {
+            "roc" : "AUROC",
+            "ks" : "KS"
+        }
+        return f'{e_type_map[e_type]} ({m_cat_mapper[m_cat]})'
+
+    plot_heatmap_grid_multiD(
+        data=logit_area_minus_bayes_normed,
+        metric_categories=METRIC_CATEGORIES,
+        expectation_types=EXPECTATION_TYPES,
+        biases=grid_biases,
+        corrs=grid_corrs,
+        cmap="RdBu_r",
+        suptitle="",
+        title_bold=True,
+        cbar_label="Logit - Bayes\n(Normalized Area)",
+        title_mapping=custom_title_mapping,
+        d_lbls=["Absolute", "Moving Average", "Pointwise sum"]
+    )
