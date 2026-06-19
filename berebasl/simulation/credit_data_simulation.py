@@ -703,7 +703,7 @@ class CreditDataGenerator:
             self.bad_mixture.cov_chol_decomp,
             self.prob_bad_given_no_shock,
             odds_factor
-        ).item()
+        )
 
 
     def confusion_probability(
