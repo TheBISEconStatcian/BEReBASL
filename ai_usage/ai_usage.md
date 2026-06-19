@@ -65,6 +65,7 @@ opinion on naming.
 - [Tackling down vectorization for inserting piecewise 0 regions for region wise integration, commenting and readibility of function](https://chatgpt.com/share/6a350308-bf90-83eb-80ea-34350ebb07fa). Commits
   - [36b60f2bfb09e11864a40a8c0682c5c55246d1b8](https://github.com/TheBISEconStatcian/BEReBASL/commit/36b60f2bfb09e11864a40a8c0682c5c55246d1b8)
   - [5a621a767d71690946400653c56d4117f0ee67dd](https://github.com/TheBISEconStatcian/BEReBASL/commit/5a621a767d71690946400653c56d4117f0ee67dd)
+  - [a201b10ed9ae47595d9da4dec27c90d7496a0e8b](https://github.com/TheBISEconStatcian/BEReBASL/commit/a201b10ed9ae47595d9da4dec27c90d7496a0e8b)
 
 
 ## Links to `Copilot` usage
