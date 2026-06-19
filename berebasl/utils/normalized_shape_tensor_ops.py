@@ -1,6 +1,6 @@
 from math import prod
 
-from typing import Optional, Union
+from typing import Optional, Union, Literal, Tuple
 
 import torch
 
@@ -195,7 +195,9 @@ def masked_batched_trapz(
     x: torch.Tensor,
     mask: torch.Tensor,
     dim: int = -1,
-    keepdim: bool = False
+    keepdim: bool = False,
+    nans_option: Literal["interpolate", "set_to_zero_region"] = "interpolate",
+    x_is_ordered: bool = False
 ) -> torch.Tensor:
     r"""
     Compute a masked, batched trapezoidal integration along dimension ``dim``.
@@ -262,6 +264,13 @@ def masked_batched_trapz(
         raise IndexError("dim has to be valid w. r. t. the amount of dims of inputs")
     
     y, x, mask = [ten.movedim(dim, -1) for ten in (y, x, mask)]
+
+    if nans_option == "set_to_zero_region":
+        x, y, mask = insert_piecewise_breaks_along_last_dimension(
+            x, y, mask, order_by_x_first=not x_is_ordered, security_checks=False
+        )
+    elif nans_option != "interpolate":
+        raise AssertionError(f"nans_option {nans_option} is not recognized")
     
     *batch_dims, N = y.shape
 
