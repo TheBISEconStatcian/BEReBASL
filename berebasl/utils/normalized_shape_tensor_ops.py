@@ -6,6 +6,61 @@ import torch
 
 from .tensor_validation import assert_tensors
 
+def insert_piecewise_breaks_along_last_dimension(
+        x: torch.Tensor,
+        y: torch.Tensor,
+        mask: torch.Tensor,
+        order_by_x_first: bool = True,
+        security_checks: bool = True,
+    ) -> torch.Tensor:
+    if security_checks:
+        assert_tensors(y, x, mask, tensor_names="y, x, mask",
+                    checks=["are_tensors", "same_device", "same_shape"])
+        if not mask.dtype == torch.bool:
+            raise ValueError("mask was expected to be boolean")
+    *batch_dims,  N = y.shape
+
+    if order_by_x_first:
+        ordering = x.argsort(dim=-1)
+        x, y, mask = [t.gather(dim=-1, index=ordering) for t in (x, y, mask)]
+
+    close = mask & torch.nn.functional.pad(~mask[..., 1:], (0,1), value=False)
+    open_ = mask & torch.nn.functional.pad(~mask[..., :-1], (1,0), value=False)
+
+    extra = close | open_
+
+    extra_per_batch = extra.sum(dim=-1)
+    max_extra = extra_per_batch.max().item()
+
+    new_N = N + max_extra
+
+    x_new = x.new_full((*batch_dims, new_N + 1), torch.nan)
+    y_new = y.new_full((*batch_dims, new_N + 1), torch.nan)
+    valid_new = mask.new_zeros((*batch_dims, new_N + 1))
+
+    cumsum_mask_valid = mask.cumsum(dim=-1)
+    new_offset = open_.cumsum(dim=-1)
+    new_offset[..., 1:] += close[..., :-1].cumsum(dim=-1)
+    idxs_map_orig = cumsum_mask_valid.clone() + new_offset
+    idxs_map_orig *= mask
+
+    idxs_map_dummies_for_next_close = (idxs_map_orig + 1) * close
+    idxs_map_dummies_for_last_close = (idxs_map_orig-1) * open_
+
+    is_y_buffer = True
+    
+    for buffer, src in [(y_new, y), (x_new, x), (valid_new, mask)]:
+        isnot_orig_map = False
+        for index in (idxs_map_orig, idxs_map_dummies_for_next_close, idxs_map_dummies_for_last_close):
+            if is_y_buffer and isnot_orig_map:
+                buffer.scatter_(dim=-1, index=index, value=0)
+                continue
+            buffer.scatter_(dim=-1, index=index, src=src)
+            isnot_orig_map = True
+        is_y_buffer=False
+
+    return x_new[..., 1:], y_new[..., 1:], valid_new[..., 1:] # All of them are [*batch_dims, new_N]
+
 def masked_batched_trapz(
     y: torch.Tensor,
     x: torch.Tensor,
