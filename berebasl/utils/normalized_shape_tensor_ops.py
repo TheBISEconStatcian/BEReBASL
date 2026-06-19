@@ -106,7 +106,9 @@ def insert_piecewise_breaks_along_last_dimension(
         x, y, mask = [t.gather(dim=-1, index=ordering) for t in (x, y, mask)]
 
     # Detect the beginning and end of every contiguous valid region.
+    # Next one is open but current is closed
     close = mask & torch.nn.functional.pad(~mask[..., 1:], (0,1), value=False)
+    # next one is closed but current is open
     open_ = mask & torch.nn.functional.pad(~mask[..., :-1], (1,0), value=False)
 
     extra = close | open_
@@ -137,7 +139,12 @@ def insert_piecewise_breaks_along_last_dimension(
     # Invalid samples remain mapped to index 0.
     cumsum_mask = mask.cumsum(dim=-1)
 
+    # The offset is calculated by first considering the flags "next one is close
+    # but current is open. See that through padding the first column is always zero
     offset = open_.cumsum(dim=-1)
+    # Then get the closing positions. This shift makes clear that the 
+    # inserting of the x position of the next open comes right before that original
+    # mapping of the next one that is open.
     offset[..., 1:] += close[..., :-1].cumsum(dim=-1)
     
     idxs_map_orig = (cumsum_mask + offset) * mask
