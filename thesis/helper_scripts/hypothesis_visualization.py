@@ -1,26 +1,19 @@
-from matplotlib import gridspec
+from matplotlib.gridspec import GridSpec
 from matplotlib.collections import LineCollection
 from matplotlib.lines import Line2D
+from matplotlib.colors import Normalize
+from matplotlib.patches import Rectangle
 from matplotlib.colors import to_rgb
 from matplotlib import pyplot as plt
 
-from numpy import ndarray, ix_
+import numpy as np
 import torch
 
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 from berebasl.simulation.credit_data_simulation import CreditData
 from berebasl.utils.normalized_shape_tensor_ops import masked_batched_trapz
 from experiments.acceptance_loop_cv_based_MNAR import EXPECTATION_TYPES, METRIC_CATEGORIES, THRESHOLD_BASIS, REAL_PERFORMANCE_TYPES
-
-
-import numpy as np
-import torch
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-from matplotlib.patches import Rectangle
-from matplotlib.colors import Normalize
-from typing import Iterable
 
 # Calculate "Absolute" expectation and realization lines
 
@@ -30,10 +23,10 @@ def gen_lines_colors_and_main(
         base_color: Tuple[float],
         main_lbl: str, 
         alpha_dict: Dict[int, float], 
-        lines: List[ndarray] = None, 
+        lines: List[np.ndarray] = None, 
         colors: List[Tuple[float]] = None,
         sort_stat: bool = True
-    )-> Tuple[List[ndarray], List[Tuple[float]], Dict[str, Union[List[ndarray], Dict[str, Any]]]]:
+    )-> Tuple[List[np.ndarray], List[Tuple[float]], Dict[str, Union[List[np.ndarray], Dict[str, Any]]]]:
     stat_dim = stat.dim()
     if stat_dim == 0:
         raise ValueError("stat should have at least one dim")
@@ -117,7 +110,7 @@ def linetypes_labels_and_colors_for_exp_real_plot(
 
 ALL_THRESHOLD_LBLS = [t+'_'+m for m in METRIC_CATEGORIES for t in THRESHOLD_BASIS]
 
-def get_acc_defaults_counts_per_round(sim_objs) -> Dict[str, torch.Tensor]:
+def gather_all_acc_flags(sim_objs) -> Dict[str, torch.Tensor]:
     acc_flags: Dict[str, torch.Tensor] = {k : v.clone() for k, v in sim_objs['alternative_accepted'].items()}
     lbl_acc_flag_in_data = set(ALL_THRESHOLD_LBLS) - set(acc_flags.keys())
     assert len(lbl_acc_flag_in_data) == 1
@@ -125,6 +118,12 @@ def get_acc_defaults_counts_per_round(sim_objs) -> Dict[str, torch.Tensor]:
 
     credit_data: CreditData = sim_objs["credit_data"]
     acc_flags[lbl_acc_flag_in_data] = credit_data.accepted.clone()
+
+    return acc_flags
+
+def get_acc_defaults_counts_per_round(sim_objs) -> Dict[str, torch.Tensor]:
+    acc_flags = gather_all_acc_flags(sim_objs)
+    credit_data: CreditData = sim_objs["credit_data"]
 
     rounds = credit_data.gen_round
     G = credit_data.last_gen_round + 1 # Count rounds
@@ -139,6 +138,57 @@ def get_acc_defaults_counts_per_round(sim_objs) -> Dict[str, torch.Tensor]:
         )
         for k, v in acc_flags.items()
     }
+
+def simulation_counts_per_round(
+        sim_objs,
+        dtype_counts: torch.dtype = torch.int32
+    ) -> Dict[str, torch.Tensor]:
+    credit_data: CreditData = sim_objs["credit_data"]
+
+    rounds = credit_data.gen_round
+    N = rounds.size(0)
+    G = credit_data.last_gen_round + 1 # Count rounds
+
+    
+    accepts_per_th = gather_all_acc_flags(sim_objs)
+    threshold_types = [
+        "through_the_door"
+    ] + list(accepts_per_th.keys())
+    TT = len(threshold_types)
+    AR = 2 # acc reject
+
+    th_flags = rounds.new_ones((TT, N), dtype=bool)
+
+    for t_idx, a_t in enumerate(accepts_per_th.values()):
+        th_flags[t_idx+1] = a_t
+
+    th_ar_flags = th_flags.unsqueeze(1).repeat(1,2,1) # [TH, AR, N]
+    th_ar_flags[:, 1] = ~th_ar_flags[:, 0]
+
+    
+    BG = 2
+    bg_flags = th_ar_flags.new_empty((BG, N))
+    bg_flags[0] = credit_data.default_flag.to(bool) # bad flag
+    bg_flags[1] = ~bg_flags[0]
+
+    count_base = (
+        th_ar_flags.unsqueeze(2) & # [TT, AR, 1, N]
+        bg_flags.view(1, 1, BG, N)
+    ).to(dtype_counts) # [TT, AR, BG, N]
+
+    TBG = 1 + BG
+
+    counts = count_base.new_zeros((TT, AR, TBG, G))
+
+    counts[:, :, 1:].scatter_add_(
+        dim=-1,
+        index = rounds.expand(TT, AR, BG, N),
+        src = count_base
+    )
+
+    counts[:, :, 0] = counts[:, :, 1:].sum(dim=2)
+
+    return counts, threshold_types # [TT, AR, TBG, G]
 
 def generate_line_collections_for_exp_real_plot(
         sim_objs : Dict[str, torch.Tensor],
@@ -735,7 +785,7 @@ def plot_heatmap_grid(
     corr_labels = [f'{corrs[k]:.2f}' for k in sorted_corr_keys]
 
     fig = plt.figure(figsize=(5 * E_len, 4 * M_len + 0.5))
-    gs = gridspec.GridSpec(
+    gs = GridSpec(
         M_len, E_len + 1,
         figure=fig,
         width_ratios=[1] * E_len + [0.05],
@@ -756,7 +806,7 @@ def plot_heatmap_grid(
             
             # Extract and reorder data
             raw_data = data[:, :, e_idx, m_idx].numpy()
-            heatmap_data = raw_data[ix_(sorted_bias_idxs, sorted_corr_idxs)]
+            heatmap_data = raw_data[np.ix_(sorted_bias_idxs, sorted_corr_idxs)]
             
             # Plot heatmap
             im = ax.imshow(heatmap_data, cmap=cmap, aspect='auto', vmin=v_min, vmax=v_max)
@@ -848,7 +898,7 @@ def plot_heatmap_grid_multiD(
     d_lbls_is_not_none = d_lbls is not None
     if d_lbls_is_not_none:
         assert len(d_lbls) == D
-    gs = gridspec.GridSpec(
+    gs = GridSpec(
         M_len + int(d_lbls_is_not_none),
         E_len + 1,
         figure=fig,
@@ -1033,3 +1083,72 @@ def wrapper_plot_grid_of_diffs_between_logit_and_acc(all_sim_objs, grid_biases, 
         title_mapping=custom_title_mapping,
         d_lbls=["Absolute", "Moving Average", "Pointwise sum"]
     )
+
+
+## Accept rates
+
+def plot_acc_rates_per_round(sim_objs):
+    counts_per_round_base, th_meaning = simulation_counts_per_round(sim_objs) # [TT, AR, TBG, G]
+
+    total_acc_count_per_threshold_and_round = counts_per_round_base[1:, 0, 0, 1:]
+    total_applicants_per_round = counts_per_round_base[0, 0, 0, 1:]
+
+    acc_rate_per_threshold_and_round = total_acc_count_per_threshold_and_round/total_applicants_per_round
+
+    thresholds_orig_order = th_meaning[1:]
+    sorted_indices_thresholds = sorted(range(len(thresholds_orig_order)), key=thresholds_orig_order.__getitem__)
+    sorted_thresholds = [th_meaning[i+1] for i in sorted_indices_thresholds]
+    sorted_acc_rates = acc_rate_per_threshold_and_round[sorted_indices_thresholds]
+
+    count_rounds = acc_rate_per_threshold_and_round.size(-1)
+
+    arange_R_np = torch.arange(1, count_rounds+1).numpy()
+
+    fig_w, fig_h = 12, 9
+    fig = plt.figure(figsize=(fig_w, fig_h))
+    gs = GridSpec(
+        2,
+        2,
+        figure=fig,
+        wspace=0.2,
+        hspace=0.3,
+        bottom=0.1
+    )
+
+    axes = [fig.add_subplot(gs[r, c]) for r in range(2) for c in range(2)]
+
+    th_mapper = {
+        "acc_based_ks" : "Accepts Based (KS)",
+        "acc_based_roc" : "Accepts Based (ROC-Optimal)",
+        "oracle_ks" : "Oracle Comparable (KS)",
+        "oracle_roc" : "Oracle Comparable (ROC-Optimal)"
+    }
+
+    for th, acceptance_rate, ax in zip(sorted_thresholds, sorted_acc_rates, axes):
+        ax.plot(arange_R_np, acceptance_rate.numpy(), label="Acceptance Rate (AR)")
+
+        window = 5
+        ax.plot(arange_R_np, moving_average_with_nans(acceptance_rate, W=window, with_tails=True).numpy(),
+                label="MA(AR), W="+str(window), ls="--")
+        
+        ax.axhline(y=sim_objs["data_generator"].prob_bad,
+                color='black', linestyle='--', linewidth=1.5, label="$\\mathbb{P}(Y=b)$")
+
+
+        ax.set_title(th_mapper[th])
+
+        ax.set_xlabel("Acceptance Round")
+        ax.set_ylabel("Acceptance Rate")
+
+        #ax.legend()
+
+    handles, labels = ax.get_legend_handles_labels()
+
+    fig.legend(
+        handles,
+        labels,
+        loc = "lower center",
+        ncol=len(handles)
+    )
+
+    plt.show()

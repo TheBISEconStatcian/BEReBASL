@@ -43,7 +43,8 @@ from helper_scripts.hypothesis_visualization import (
   get_areas,
   normalize_areas,
   plot_heatmap_grid,
-  wrapper_plot_grid_of_diffs_between_logit_and_acc
+  wrapper_plot_grid_of_diffs_between_logit_and_acc,
+  plot_acc_rates_per_round
 )
 
 grid_path = '../berebasl/data/simulations/mnar_grid_hyp_testing'

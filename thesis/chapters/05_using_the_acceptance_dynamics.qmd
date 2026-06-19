@@ -132,6 +132,14 @@ plot_lines_and_mains(
 wrapper_plot_grid_of_diffs_between_logit_and_acc(all_sim_objs, grid_biases, grid_corrs)
 ```
 
+NEED TO FIND A WAY TO MAKE THIS SMALLER
+
+```{python}
+#| label: fig-diminishing-accepts
+#| fig-cap: "Oracle's vs. Biased model Accept rates per generation round of base simulation"
+#| out-width: "1%"
+plot_acc_rates_per_round(base_sim_objs)
+```
 
 ### Formulating the hypothesis
 
