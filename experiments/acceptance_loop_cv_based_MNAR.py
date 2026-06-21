@@ -873,6 +873,9 @@ def acceptance_loop(
 
         times_needed.append(time.time() - begin_round)
         if gen_round_nr % report_every == 0:
+            total_count = credit_data.count_all
+            defaults_count = credit_data.default_flag.sum().item()
+            non_def_count = total_count-defaults_count
             print(
                 _timestamp(),
                 "-- Finished Iteration",
@@ -880,7 +883,8 @@ def acceptance_loop(
                 credit_data.count_accepts,
                 "accepts and",
                 credit_data.count_rejects,
-                "rejects",
+                "rejects. Bads:", total_count,
+                "Goods:", non_def_count
             )
             gen_rounds_left = num_gens - gen_round_nr
             times_tensor = torch.tensor(times_needed, device=credit_data.device, dtype=torch.float32)
