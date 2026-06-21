@@ -51,6 +51,7 @@ def main():
     # Override fixed values common to all grid cells
     params["init_sample"] = 6000
     params["sample_size"] = 1000
+    params["deterministic_weights"] = False
 
     # ── Grid definition ───────────────────────────────────────────────────────
     # bias_percentage: quantile on the hidden variable that triggers forced

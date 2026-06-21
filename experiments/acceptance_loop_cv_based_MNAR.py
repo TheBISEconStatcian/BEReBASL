@@ -218,14 +218,7 @@ def mnar_default_dgp(
                 dtype=dtype, device=device
             )
     
-    cov_good = torch.tensor(
-                [
-                    [ 1.0, 0.2, hidden_corr], 
-                    [0.2,  1.0, hidden_corr],
-                    [ hidden_corr,  hidden_corr, 1.0]
-                ], 
-                dtype=dtype, device=device
-            )
+    cov_good = cov_bad.clone()
     ## Get index to permute cov_bad and cov_good making sure they
     ## have the hidden variable in the right place
     F = 3
