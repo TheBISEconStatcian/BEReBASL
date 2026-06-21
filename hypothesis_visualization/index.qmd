@@ -62,13 +62,20 @@ rev_dict_grid_biases = {v : k for k, v in grid_biases.items()}
 rev_dict_grid_corrs = {v : k for k, v in grid_corrs.items()}
 
 for bias_val in bias_options:
+    print()
+    display(f"# Bias level: {bias_val}")
+    print()
     for corr_val in corrs_options:
         sim_objs = all_sim_objs[rev_dict_grid_biases[bias_val]][rev_dict_grid_corrs[corr_val]]
-        display(Markdown("## " + sim_objs["Description"]))
+        print()
+        display(Markdown(f"## Correlation to hidden feature: {corr_val}"))
+        print()
 
         dgp = sim_objs["data_generator"]
         dgp_info_for_boundaries = extract_dgp_info_for_boundaries(dgp)
+        print()
         display(Markdown("### DGP Representation"))
+        print()
 
         bayes_err = dgp.bayes_error_under_equal_covs()
         bayes_err_str = f"{bayes_err*100:.2f}"
@@ -79,11 +86,14 @@ for bias_val in bias_options:
         report_str = ("$$\n " + tex_obj_g+
                       r", \," + text_obj_b + " \n$$")
 
+        print()
         display(Markdown(
             "The DGP has a Bayes Error Rate of $" + bayes_err_str + r"\%$, " +
             "and its parameters equation is given by:"
         ))
+        print()
         display(Markdown(report_str))
+        print()
 
         plot3d_with_perf_bayes_boundary(
             dgp,
@@ -96,7 +106,9 @@ for bias_val in bias_options:
             **dgp_info_for_boundaries,
             fig_title="DGP's Pairwise Visualization"
         )
+        print()
         display(Markdown("### Raw Realization and Expectation comparision plots"))
+        print()
         for show_option in what_to_show_options:
             match show_option:
                 case "All":
@@ -106,7 +118,9 @@ for bias_val in bias_options:
                 case "Logit and Bayes on related Realizations":
                     add_real_bayes, only_related_exp = True, True
 
+            print()
             display(Markdown("#### " + show_option))
+            print()
 
             plot_lines_and_mains(
                 generate_line_collections_for_exp_real_plot(sim_objs, only_related_exp, add_real_bayes),
@@ -117,11 +131,17 @@ for bias_val in bias_options:
                 only_related_exp=only_related_exp
             )
 
+        print()
         display(Markdown("### Plots of differences"))
+        print()
         for make_abs in make_abs_options:
+            print()
             display(Markdown("#### " + ("Absolute" if make_abs else "Raw") + " differences"))
+            print()
             for W in ma_window_options:
+                print()
                 display(Markdown(f"#### MA window: {W}"))
+                print()
                 exp_to_real_diffs_base = generate_lines_for_diffs(sim_objs, make_abs=make_abs, W=W)
                 plot_lines_and_mains(
                     gen_lines_from_diff_dict(exp_to_real_diffs_base),
@@ -133,6 +153,8 @@ for bias_val in bias_options:
                     sup_title="Differences between Expectation and Realization"
                 )
 
+        print()
         display(Markdown("### Acceptance Rate development"))
+        print()
         plot_acc_rates_per_round(sim_objs, fig_title="Acceptance Rate development of Logit models")
 ```
