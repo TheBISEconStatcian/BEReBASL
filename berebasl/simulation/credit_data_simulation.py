@@ -2601,6 +2601,24 @@ class CreditData(Dataset):
             [self.gen_round, new_gen_round.expand(features_new.size(0))]
         )
 
+    def change_acceptance_flag(self, accepted_flag: torch.Tensor) -> torch.Tensor:
+        if accepted_flag.shape != self.accepted.shape:
+            raise AssertionError("The current accept flag has different shape as the new one")
+        
+        old_acc_flag = self.accepted.clone()
+
+        N = self.count_all
+        dev = self.device
+        arange_N = torch.arange(N, device=dev)
+        self.accepted = accepted_flag.clone()
+
+        arange_N = torch.arange(N, device=dev)
+        self.accepted_idx = arange_N[accepted_flag]
+        self.reject_idx = arange_N[~accepted_flag]
+
+        return old_acc_flag
+
+
     # -------------------------------------------------------------------------
     # Accessors
     # -------------------------------------------------------------------------
