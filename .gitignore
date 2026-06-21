@@ -181,3 +181,4 @@ thesis/.gitignore
 ## vs code files
 .vscode/
 thesis/_freeze/thesis/execute-results/tex.json
+hypothesis_visualization/index.html
