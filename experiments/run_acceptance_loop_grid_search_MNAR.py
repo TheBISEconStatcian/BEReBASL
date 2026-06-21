@@ -36,8 +36,8 @@ from .acceptance_loop_cv_based_MNAR import (
 
 def main():
     # Torch set up
-    torch.set_num_threads(64)
-    torch.set_num_interop_threads(32)
+    torch.set_num_threads(128)
+    torch.set_num_interop_threads(64)
 
     # Parse base arguments (includes --var-to-hide, --bias-percentage,
     # --hidden-corr and all the shared loop args).
