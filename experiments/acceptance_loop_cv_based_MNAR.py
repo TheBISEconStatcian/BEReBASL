@@ -672,6 +672,8 @@ def acceptance_loop(
     times_needed: List[float] = []
     print(_timestamp(), "Checks passed — beginning CV-based acceptance loop")
 
+    print("Deterministic weights of dgp:", data_generator.determinstic_mixture_weights)
+
     for gen_round_nr in range(current_gen, num_gens + 1):
         begin_round = time.time()
 
@@ -883,7 +885,7 @@ def acceptance_loop(
                 credit_data.count_accepts,
                 "accepts and",
                 credit_data.count_rejects,
-                "rejects. Bads:", total_count,
+                "rejects. Bads:", defaults_count,
                 "Goods:", non_def_count
             )
             gen_rounds_left = num_gens - gen_round_nr
