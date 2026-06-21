@@ -1087,7 +1087,7 @@ def wrapper_plot_grid_of_diffs_between_logit_and_acc(all_sim_objs, grid_biases, 
 
 ## Accept rates
 
-def plot_acc_rates_per_round(sim_objs):
+def plot_acc_rates_per_round(sim_objs, fig_title: str = ""):
     counts_per_round_base, th_meaning = simulation_counts_per_round(sim_objs) # [TT, AR, TBG, G]
 
     total_acc_count_per_threshold_and_round = counts_per_round_base[1:, 0, 0, 1:]
@@ -1150,5 +1150,8 @@ def plot_acc_rates_per_round(sim_objs):
         loc = "lower center",
         ncol=len(handles)
     )
+
+    if len(fig_title) > 0:
+        fig.suptitle(fig_title, fontsize=16)
 
     plt.show()
