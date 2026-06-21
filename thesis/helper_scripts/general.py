@@ -44,7 +44,8 @@ def extract_objs_from_sim_dir(grid_path: str, sim_dir: str, device: torch.device
             "credit_data" : sim_results["credit_data"].to(device),
             "data_generator" : data_generator,
             "k_folds" : init_objs["configs"]["k_folds"],
-            "cv_count" : init_objs["configs"]["cv_count"]
+            "cv_count" : init_objs["configs"]["cv_count"],
+            "var_to_hide" : init_objs["configs"]["var_to_hide"]
         }
 
 def extract_all_sim_objs(
