@@ -1540,7 +1540,8 @@ class PerfectBayesClassifier:
             self,
             dgp: CreditDataGenerator,
             consider_idiosyncratic_shock: bool,
-            consider_feats_noise: bool
+            consider_feats_noise: bool,
+            var_to_hide: Optional[int] = None
         ):
         r"""
         Initialize the perfect Bayesian classifier from a data generating process.
@@ -1583,14 +1584,16 @@ class PerfectBayesClassifier:
             dgp.bad_mixture,
             prior_prob_given_no_shock=self.prob_bad_given_no_shock,
             consider_feats_noise=consider_feats_noise,
-            feats_noise_std= dgp.feats_noise_std
+            feats_noise_std= dgp.feats_noise_std,
+            var_to_hide=var_to_hide
         )
         # [*batch_dims, K_good, F], [*batch_dims, K_good, F, F], [*batch_dims, K_good]
         mean_good, cov_chol_good, weights_good = self.extract_mixture_comps(
             dgp.good_mixture,
             prior_prob_given_no_shock=1-self.prob_bad_given_no_shock,
             consider_feats_noise=consider_feats_noise,
-            feats_noise_std= dgp.feats_noise_std
+            feats_noise_std= dgp.feats_noise_std,
+            var_to_hide=var_to_hide
         )
 
         self.joint_means = torch.cat([mean_bad, mean_good], dim=-2)             # [*batch_dims, K, F]
@@ -1696,6 +1699,7 @@ class PerfectBayesClassifier:
         prior_prob_given_no_shock: float,
         consider_feats_noise: bool,
         feats_noise_std: float,
+        var_to_hide: Optional[int] = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         r"""Extract and optionally augment components from a Gaussian mixture.
 
@@ -1727,6 +1731,16 @@ class PerfectBayesClassifier:
             Mixture weights scaled by class prior, shape ``[K]`` or ``[B, K]``.
         """
         mean, cov_chol, weights = mixture._normalized_params() # [B, K, F], [B, K, F, F], [B, K]
+        if var_to_hide is not None:
+            F = mean.size(-1)
+            if not (-F <= var_to_hide < F):
+                raise AssertionError("var_to_hide outside of limit")
+            model_vars = [f for f in range(F) if f != var_to_hide]
+            mean = mean[..., model_vars]
+
+            cov = cov_chol @ cov_chol.mT
+            cov = cov[..., model_vars, :][..., :, model_vars]
+            cov_chol = torch.linalg.cholesky(cov)
         if consider_feats_noise and feats_noise_std > 0:
             cov = mixture._effective_cov_additive(cov_chol @ cov_chol.mT, noise_var=feats_noise_std**2)
             cov_chol = torch.linalg.cholesky(cov)
