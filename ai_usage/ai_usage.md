@@ -66,6 +66,7 @@ opinion on naming.
   - [36b60f2bfb09e11864a40a8c0682c5c55246d1b8](https://github.com/TheBISEconStatcian/BEReBASL/commit/36b60f2bfb09e11864a40a8c0682c5c55246d1b8)
   - [5a621a767d71690946400653c56d4117f0ee67dd](https://github.com/TheBISEconStatcian/BEReBASL/commit/5a621a767d71690946400653c56d4117f0ee67dd)
   - [a201b10ed9ae47595d9da4dec27c90d7496a0e8b](https://github.com/TheBISEconStatcian/BEReBASL/commit/a201b10ed9ae47595d9da4dec27c90d7496a0e8b)
+- [Rewriting the (first) abstract](https://chatgpt.com/share/6a390caf-0204-83eb-bfd7-7fbe861fef2b)
 
 
 ## Links to `Copilot` usage
