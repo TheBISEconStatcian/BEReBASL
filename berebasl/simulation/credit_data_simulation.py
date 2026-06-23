@@ -2497,7 +2497,7 @@ class CreditDataSample(Dataset):
 
 
 
-class CreditData(Dataset):
+class CreditData:
     """Dataset for credit rating simulation with reject inference.
 
     This dataset stores applicant features, default flags (binary repayment outcome),
@@ -2848,69 +2848,6 @@ class CreditData(Dataset):
                           up_to_round_idx=up_to_round_idx),
             retrieve_only_labeled=retrieve_only_accepted,
         )
-
-    # -------------------------------------------------------------------------
-    # Dataset interface
-    # -------------------------------------------------------------------------
-
-    def __len__(self) -> int:
-        """Number of samples available under the current retrieval policy.
-
-        Returns:
-            int:
-                - If ``retrieval_mode == "accepts"``: number of accepted samples.
-                - If ``retrieval_mode == "rejects"``: number of rejected samples.
-                - If ``retrieval_mode == "unbiased"``: total number of samples.
-        """
-        if self.retrieval_mode == "accepts":
-            return self.count_accepts
-        elif self.retrieval_mode == "rejects":
-            return self.count_rejects
-        elif self.retrieval_mode == "unbiased":
-            return self.count_all
-        else:
-            raise ValueError("saved retrieval_mode not recognized")
-
-    def __getitem__(self, idx: int) -> Dict[str, Any]:
-        """Retrieve a single sample as a dictionary.
-
-        Indexing respects the current ``retrieval_mode``:
-        - ``"accepts"``: ``idx`` is mapped through ``accepted_idx``.
-        - ``"rejects"``: ``idx`` is mapped through ``reject_idx``.
-        - ``"unbiased"``: ``idx`` addresses the full dataset.
-
-        Args:
-            idx (int):
-                Sample index under the current retrieval mode.
-
-        Returns:
-            Dict[str, Any]:
-                A dictionary with keys:
-                    - ``"features"`` (torch.Tensor): Feature vector.
-                    - ``"default_flag"`` (torch.Tensor): Repayment outcome.
-                    - ``"accepted"`` (torch.Tensor): Boolean acceptance flag.
-                    - ``"gen_round"`` (torch.Tensor): Generation round index.
-        """
-        if self.retrieval_mode == "accepts":
-            idx = self.accepted_idx[idx]
-        elif self.retrieval_mode == "rejects":
-            idx = self.reject_idx[idx]
-        elif self.retrieval_mode == "unbiased":
-            pass
-        else:
-            raise ValueError("saved retrieval_mode not recognized")
-
-        features = self.features[idx]
-        default_flag = self.default_flag[idx]
-        accepted = self.accepted[idx]
-        gen_round = self.gen_round[idx]
-
-        return {
-            "features": features,
-            "default_flag": default_flag,
-            "accepted": accepted,
-            "gen_round": gen_round,
-        }
 
     # -------------------------------------------------------------------------
     # Diagnostics
