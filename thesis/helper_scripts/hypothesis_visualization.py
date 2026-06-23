@@ -193,7 +193,8 @@ def simulation_counts_per_round(
 def generate_line_collections_for_exp_real_plot(
         sim_objs : Dict[str, torch.Tensor],
         only_related_exp: bool = True,
-        add_real_bayes: bool = True
+        add_real_bayes: bool = True,
+        use_bayes_with_missing: bool = True
     ):
     linetypes, labels_linetypes, colors = linetypes_labels_and_colors_for_exp_real_plot(
         only_related_exp
@@ -207,7 +208,11 @@ def generate_line_collections_for_exp_real_plot(
     }
 
     stats = sim_objs["stats"]
-    bayes_stats = sim_objs["perf_bayes_stats"]
+    bayes_stats_lbl = "perf_bayes_"
+    if use_bayes_with_missing:
+        bayes_stats_lbl += "missing_"
+    bayes_stats_lbl += "stats"
+    bayes_stats = sim_objs[bayes_stats_lbl]
     sample_sizes = sim_objs["sample_sizes"]
 
     line_collections_data: Dict[str, Dict[str, List]] = {}
@@ -471,7 +476,8 @@ def generate_lines_for_diffs(
         sim_objs : Dict[str, torch.Tensor],
         add_real_bayes: bool = True,
         make_abs: bool = False,
-        W: Optional[int] = None
+        W: Optional[int] = None,
+        use_bayes_with_missing: bool = True
     ):
     add_ma = W is not None
     if add_ma:
@@ -480,7 +486,12 @@ def generate_lines_for_diffs(
     
     only_related_exp: bool = True
     stats = sim_objs["stats"]
-    bayes_stats = sim_objs["perf_bayes_stats"]
+    
+    bayes_stats_lbl = "perf_bayes_"
+    if use_bayes_with_missing:
+        bayes_stats_lbl += "missing_"
+    bayes_stats_lbl += "stats"
+    bayes_stats = sim_objs[bayes_stats_lbl]
 
     exp_to_real_diffs_complete = {
         "sample_sizes" : sim_objs["sample_sizes"],

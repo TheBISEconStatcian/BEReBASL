@@ -677,6 +677,7 @@ class CreditDataGenerator:
 
     def bayes_error_under_equal_covs(
         self,
+        hidden_vars: Optional[Iterable[int]] = None
     ) -> torch.Tensor:
         if self.good_mixture.is_mixture or self.bad_mixture.is_mixture:
             raise RuntimeError(
@@ -685,6 +686,27 @@ class CreditDataGenerator:
                 "self.bad_mixture and self.good_mixture must be MVNs, not mixtures "
                 "themselves."
             )
+        if hidden_vars is not None:
+            F = self.F
+            model_vars = set(range(F))
+            if not isinstance(hidden_vars, Iterable):
+                raise TypeError("hidden_vars was expected to be an iterable")
+            
+            for i, hv in enumerate(hidden_vars):
+                if not (-F <= hv < F):
+                    raise IndexError(
+                        f"Each element in hidden_vars must be in [-F, F-1] = [{-F}, {F-1}]. hidden_vars[{i}] was {hv}"
+                    )
+                model_vars.discard(hv%F)
+            
+            model_vars = list(model_vars)
+            cut_col = self.bad_mixture.cov[..., model_vars, :][..., :, model_vars]
+            common_cov_chol = torch.linalg.cholesky(cut_col)
+        else:
+            model_vars = list(range(self.F))
+            common_cov_chol = self.bad_mixture.cov_chol_decomp
+        
+            
         perf_bayes_equals_case_no_noise = (
             not self.simulate_idiosyncratic_shocks or
             self.prob_bad_given_shock == 0.5
@@ -698,9 +720,9 @@ class CreditDataGenerator:
             odds_factor = (0.5 - (1-pi_eps)*pi_vareps_b) / pi_eps # $\xi$ in the thesis
             
         return bayes_rate_two_class_mvn_gaussian_equal_cov(
-            self.bad_mixture.mean,
-            self.good_mixture.mean,
-            self.bad_mixture.cov_chol_decomp,
+            self.bad_mixture.mean[..., model_vars],
+            self.good_mixture.mean[..., model_vars],
+            common_cov_chol,
             self.prob_bad_given_no_shock,
             odds_factor
         )

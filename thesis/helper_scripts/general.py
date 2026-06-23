@@ -10,12 +10,14 @@ def extract_objs_from_sim_dir(grid_path: str, sim_dir: str, device: torch.device
     sim_results_path = os.path.join(grid_path, sim_dir, 'simulation_results_cv_mnar.pt')
     init_objs_path = os.path.join(grid_path, sim_dir, 'initial_simulation_objects_cv_mnar.pt')
     perf_bayes_stats_path = os.path.join(grid_path, sim_dir, "stats_perf_bayes.pt")
+    perf_bayes_missing_stats_path = os.path.join(grid_path, sim_dir, "stats_perf_bayes_missing.pt")
 
     assert all([os.path.exists(p) for p in (sim_results_path, init_objs_path, perf_bayes_stats_path)])
-    
-    sim_results = torch.load(sim_results_path, map_location='cpu', weights_only=False)
-    init_objs = torch.load(init_objs_path, map_location='cpu', weights_only=False)
-    perf_bayes_stats = torch.load(perf_bayes_stats_path, map_location='cpu', weights_only=False)
+
+    sim_results, init_objs, perf_bayes_stats, perf_bayes_missing_stats = [
+        torch.load(p, map_location='cpu', weights_only=False)
+        for p in (sim_results_path, init_objs_path, perf_bayes_stats_path, perf_bayes_missing_stats_path)
+    ]
 
     data_generator: CreditDataGenerator = init_objs['data_generator'].to(device)
     stats = sim_results['stats']
@@ -26,7 +28,7 @@ def extract_objs_from_sim_dir(grid_path: str, sim_dir: str, device: torch.device
         k : (torch.stack(v) if isinstance(v[0], torch.Tensor) else torch.tensor(v)).to(device) 
         for k, v in stats.items()
     }
-    perf_bayes_stats = {k: v.clone() for k, v in perf_bayes_stats.items()}
+    perf_bayes_stats, perf_bayes_missing_stats = [{k: v.clone() for k, v in pbs.items()} for pbs in (perf_bayes_stats, perf_bayes_missing_stats)]
 
     corr_pos = sim_dir.find("_corr")
     bias_prop = float(sim_dir[len("bias_"):corr_pos].replace("_", "."))
@@ -39,6 +41,7 @@ def extract_objs_from_sim_dir(grid_path: str, sim_dir: str, device: torch.device
             "bias_prop" : bias_prop,
             "stats" : stats,
             "perf_bayes_stats" : perf_bayes_stats,
+            "perf_bayes_missing_stats" : perf_bayes_missing_stats,
             "alternative_accepted" : sim_results["alternative_accepted"],
             "sample_sizes" : sample_sizes,
             "credit_data" : sim_results["credit_data"].to(device),
