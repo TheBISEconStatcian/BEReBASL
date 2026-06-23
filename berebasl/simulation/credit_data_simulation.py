@@ -2498,7 +2498,7 @@ class CreditDataSample(Dataset):
 
 
 class CreditData:
-    """Dataset for credit rating simulation with reject inference.
+    """Data Container for credit rating simulation with reject inference.
 
     This dataset stores applicant features, default flags (binary repayment outcome),
     acceptance indicators, and per-sample generation round identifiers. It supports
@@ -2719,7 +2719,7 @@ class CreditData:
                     "no gen_round_filtering is being applied")
                 
         return (from_round_idx <= self.gen_round) & (self.gen_round <= up_to_round_idx)
-
+    
     def select_given_mask(self, mask_valid, what_to_select: List[Literal["gen_round", "default_flag", "features", "accepted", "mask_valid"]]) -> Dict[str, torch.Tensor]:
         try:
             mask_valid = mask_valid.expand_as(self.accepted)
@@ -2889,7 +2889,7 @@ class CreditData:
         return return_tuple
 
     def to_sample_dataset(
-        self,
+        self: CreditData,
         retrieve_only_accepted: bool = True,
         from_round_idx: Optional[int] = None,
         up_to_round_idx : Optional[int] = None
@@ -2913,12 +2913,18 @@ class CreditData:
                 A leakage-safe dataset containing the current accepted and rejected
                 observations, suitable for training, evaluation, or splitting.
         """
+        feats_rej, mask_valid_rej, _ = self.rejects(include_gen_round=False, include_mask_valid=True,
+                                                 from_round_idx=from_round_idx, up_to_round_idx=up_to_round_idx)
+        
+        ids_rejects = torch.arange(mask_valid_rej.numel(), device=mask_valid_rej.device).reshape_as(mask_valid_rej)
+        ids_rejects.masked_fill_(~mask_valid_rej, value=-1)
         return CreditDataSample(
-            self.rejects(include_gen_round=False, from_round_idx=from_round_idx,
-                         up_to_round_idx=up_to_round_idx),
-            *self.accepts(include_gen_round=False, from_round_idx=from_round_idx,
-                          up_to_round_idx=up_to_round_idx),
+            feats_rej,
+            *(self.accepts(include_gen_round=False, include_mask_valid=False, from_round_idx=from_round_idx,
+                          up_to_round_idx=up_to_round_idx)[:2]),
+            ids_rejects,
             retrieve_only_labeled=retrieve_only_accepted,
+            nan_value_ids_rejects=-1
         )
 
     # -------------------------------------------------------------------------
@@ -2949,19 +2955,17 @@ class CreditData:
                 If there are no accepted and no rejected applications when computing
                 the corresponding unbiased bad rate.
         """
-        bads_count_among_accepts = self.default_flag[self.accepted_idx].sum().item()
-        bads_count_among_rejects = self.default_flag[self.reject_idx].sum().item()
+        mask_is_default = self.default_flag==1
+
+        bads_count_among_accepts = (mask_is_default & self.accepted).sum(dim=-1)
+        bads_count_among_rejects = (mask_is_default & (~self.accepted)).sum(dim=-1)
         all_obs_count = self.count_all
 
         stats = {
             "sample_size": all_obs_count,
             "accept_ratio": self.count_accepts / all_obs_count,
-            "bad_ratio_accepts": float("nan")
-            if self.count_accepts == 0
-            else bads_count_among_accepts / self.count_accepts,
-            "bad_ratio_rejects": float("nan")
-            if self.count_rejects == 0
-            else bads_count_among_rejects / self.count_rejects,
+            "bad_ratio_accepts": bads_count_among_accepts / self.count_accepts,
+            "bad_ratio_rejects": bads_count_among_rejects / self.count_rejects,
             "bad_ratio_unbiased": (bads_count_among_accepts + bads_count_among_rejects)
             / all_obs_count,
         }
