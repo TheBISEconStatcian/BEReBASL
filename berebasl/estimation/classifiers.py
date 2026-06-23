@@ -1792,44 +1792,32 @@ class PerfectBayesClassifier:
         return log_norm
 
 
-    def broadcast_X(self, X: torch.Tensor, safety_checks: bool = True) -> torch.Tensor:
-        r"""Reshape features to align with batch and component dimensions.
-
-        Inserts singleton dimensions to make feature matrix broadcastable with
-        the mixture parameters for vectorized density evaluation.
-
-        Parameters
-        ----------
-        X : torch.Tensor
-            Feature matrix of shape ``[*lead_dims, F]``.
-        safety_checks : bool, default=True
-            If ``True``, validates that ``X`` has the correct feature dimension
-            and is floating-point.
-
-        Returns
-        -------
-        torch.Tensor
-            Reshaped features of shape ``[*lead_dims, *bb_dims, 1, F]``. Whereby
-            ``bb_dims = [1 for _ in self.batch_dims]``
-
-        Raises
-        ------
-        AssertionError
-            If ``safety_checks=True`` and feature dimension or dtype is incorrect.
-        """
-        *lead_dims, F = X.shape
+    def broadcast_X(self, X: torch.Tensor, X_contains_batch_dims: bool = True, safety_checks: bool = True) -> torch.Tensor:
+        F = X.size(-1)
         if safety_checks:
             if F != self.F:
                 raise AssertionError("X has the wrong features dimension")
             if not X.is_floating_point():
                 raise AssertionError("X should be a floating point")
             
+        len_batch_dims = len(self.batch_dims)
+        if X_contains_batch_dims:
+            *batch_dims_X, N = X.shape[-(len_batch_dims+2):-1]
+            lead_dims = X.shape[:-(len_batch_dims+2)]
+            if safety_checks:
+                if torch.Size(batch_dims_X)!=self.batch_dims:
+                    raise AssertionError("Batch dims does not correspond!!")
+            count_to_add_inbetween = 1 # 1 for the mixture component dimension
+        else:
+            batch_dims_X = []
+            *lead_dims, N = X.shape[:-1]
+            count_to_add_inbetween = len_batch_dims + 1 # 1 for the mixture component dimension
+            
         X = X.to(dtype=self.dtype)
-        count_to_add_inbetween = len(self.batch_dims) + 1 # 1 for the channel dimension
         helper_add_dims = (1,) * count_to_add_inbetween
 
-        X = X.reshape(*lead_dims, *helper_add_dims, F) # [*lead_dims, *bb_dims, F]
-
+        X = X.reshape(*lead_dims, *batch_dims_X, *helper_add_dims, N, F) # [*lead_dims, *bb_dims, N, F]
+        X = X.movedim(-2, 0) # [N, *lead_dims, *bb_dims, F]
         return X
     
     def mahalanobis_X(self, X_broadcasted) -> torch.Tensor:
@@ -1936,7 +1924,7 @@ class PerfectBayesClassifier:
         return log_likelihood_X_bad - log_marginal_pdf_X # [*lead_dims, *batch_dims]
         
 
-    def predict_prob_bad(self, X: torch.Tensor, safety_checks: bool = True) -> torch.Tensor:
+    def predict_prob_bad(self, X: torch.Tensor, X_contains_batch_dims: bool = True, safety_checks: bool = True) -> torch.Tensor:
         r"""Compute posterior probability of bad outcome (including shocks if enabled).
 
         Parameters
@@ -1963,7 +1951,7 @@ class PerfectBayesClassifier:
         Otherwise returns only the shock-free posterior.
         """
         #  *lead_dims, F = X.shape, bb_dims = (1,) * len(self.batch_dims)
-        X = self.broadcast_X(X, safety_checks) # [*lead_dims, *bb_dims, 1, F]
+        X = self.broadcast_X(X, X_contains_batch_dims, safety_checks) # [*lead_dims, *bb_dims, 1, F]
 
         # \log \mathbb{P}(Y=b | X = \textt{X})
         log_posterior = self.log_prob_bad_given_no_shock(X) # [*lead_dims, *batch_dims]
@@ -1973,6 +1961,9 @@ class PerfectBayesClassifier:
         if self.consider_idiosyncratic_shock:
             prob_bad *= 1-self.prob_shock
             prob_bad += self.prob_bad_because_of_shock
+
+        if X_contains_batch_dims:
+            prob_bad = prob_bad.movedim(0, -1)
 
         return prob_bad  # [*lead_dims, *batch_dims]
     
