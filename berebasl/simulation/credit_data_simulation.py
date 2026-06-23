@@ -2637,6 +2637,10 @@ class CreditData(Dataset):
     @property
     def features_count(self) -> int:
         return self.features.size(-1)
+    
+    @property
+    def batch_shape(self) -> torch.Size:
+        return self.accepted.shape[:-1]
 
     # -------------------------------------------------------------------------
     # Mutation
@@ -2667,42 +2671,33 @@ class CreditData(Dataset):
             ValueError: If feature dimensionality of ``features_new`` does not match
                 existing ``features``.
         """
-        if features_new.size(1) != self.features.size(1):
-            raise ValueError("Feature dimension mismatch in features_new")
-        
-        self.features = torch.cat([self.features, features_new])
-        self.default_flag = torch.cat([self.default_flag, default_flag_new.to(self.features.dtype)])
+        if (features_new.size(-1) != self.features.size(-1)) or (features_new.shape[:-2] != self.features.shape[:-2]):
+            raise ValueError("Feature or leading dimension mismatch in features_new")
+        if not (features_new.shape[:-1] == default_flag_new.shape == accepted_new.shape):
+            raise ValueError("Arguments did not have compatible shapes")
 
-        obs_count_before_adding_new_gen = self.count_all
+        self.features = torch.cat([self.features, features_new], dim=-2)
+        self.default_flag = torch.cat([self.default_flag, default_flag_new.to(self.features.dtype)], dim=-1)
 
-        # Update accepted and rejected indices
-        new_accepted_idx = torch.nonzero(accepted_new).flatten() + obs_count_before_adding_new_gen
-        new_reject_idx = torch.nonzero(~accepted_new).flatten() + obs_count_before_adding_new_gen
 
-        self.accepted_idx = torch.cat([self.accepted_idx, new_accepted_idx])
-        self.reject_idx = torch.cat([self.reject_idx, new_reject_idx])
-
-        self.accepted = torch.cat([self.accepted, accepted_new])
+        self.accepted = torch.cat([self.accepted, accepted_new], dim=-1)
 
         new_gen_round = self.last_gen_round + 1
-        self.gen_round = torch.cat(
-            [self.gen_round, new_gen_round.expand(features_new.size(0))]
+        self.gen_round = torch.nn.functional.pad(
+            self.gen_round,
+            pad=(0, default_flag_new.size(-1)),
+            mode="constant",
+            value=new_gen_round
         )
-
+        
     def change_acceptance_flag(self, accepted_flag: torch.Tensor) -> torch.Tensor:
         if accepted_flag.shape != self.accepted.shape:
             raise AssertionError("The current accept flag has different shape as the new one")
         
         old_acc_flag = self.accepted.clone()
-
-        N = self.count_all
+        
         dev = self.device
-        arange_N = torch.arange(N, device=dev)
-        self.accepted = accepted_flag.clone()
-
-        arange_N = torch.arange(N, device=dev)
-        self.accepted_idx = arange_N[accepted_flag]
-        self.reject_idx = arange_N[~accepted_flag]
+        self.accepted = accepted_flag.clone().to(dev).to(old_acc_flag.dtype)
 
         return old_acc_flag
 
@@ -2711,7 +2706,7 @@ class CreditData(Dataset):
     # Accessors
     # -------------------------------------------------------------------------
 
-    def round_selection_mask(self, from_round_idx: Optional[int] = None, up_to_round_idx: Optional[int] = None):
+    def round_selection_mask(self, from_round_idx: Optional[int] = None, up_to_round_idx: Optional[int] = None) -> torch.Tensor:
         from_round_idx = 0 if from_round_idx is None else int(from_round_idx)
         up_to_round_idx = self.last_gen_round if up_to_round_idx is None else int(up_to_round_idx)
 
