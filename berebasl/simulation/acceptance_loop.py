@@ -191,14 +191,16 @@ def accept_based_on_top_percentent_of_arbitrary_var(
         default_value : int = 1, # 1 or 0
         min_count_bads : int = 4
 ) -> torch.Tensor:
-    if var_for_rule >= features.shape[1]:
+    if var_for_rule >= features.size(-1):
         raise ValueError("var_for_rule outside of index")
     
-    cutoff = torch.quantile(features[:, var_for_rule], 1 - top_percent)
-    accepts = features[:, var_for_rule] >= cutoff
+    cutoff = torch.quantile(features[..., var_for_rule], 1 - top_percent, dim=-1, keepdim=True)
+    accepts = features[..., var_for_rule] >= cutoff
 
-    count_defaults_within_accepts = (default_flag[accepts] == default_value).sum()
-    if count_defaults_within_accepts < min_count_bads:
+    count_defaults_within_accepts = torch.sum((default_flag== default_value) & accepts, dim=-1)
+    if torch.any(count_defaults_within_accepts < min_count_bads):
+        if accepts.dim() > 1:
+            raise NotImplementedError("Still to implement this logic")
         mask_defaults_non_accepted = (~accepts) & (default_flag == default_value)
         defaults_still_selectable = mask_defaults_non_accepted.sum()
         if defaults_still_selectable == 0:

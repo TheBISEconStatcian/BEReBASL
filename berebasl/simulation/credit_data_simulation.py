@@ -2539,33 +2539,25 @@ class CreditData(Dataset):
             features_initial : torch.Tensor, 
             default_flag_initial : torch.Tensor, 
             accepted_initial : torch.Tensor,
-            retrieval_mode : Literal["accepts", "rejects", "unbiased"] = "accepts"
+            names_leading_dims: Optional[List[str]] = None
     ):
+        self.names_leading_dims = names_leading_dims
         if not (features_initial.device == default_flag_initial.device == accepted_initial.device):
             raise ValueError("Not all args have the same device")
         
-        if not (features_initial.size(0) == default_flag_initial.size(0) == accepted_initial.size(0)):
+        if not (features_initial.shape[:-1] == default_flag_initial.shape == accepted_initial.shape):
             raise ValueError("Shapes are non-compatible")
         
-        if accepted_initial.dim() != 1:
-            raise ValueError("accepted_initial needs to be one dimensional")
-
-        if retrieval_mode not in ("accepts", "rejects", "unbiased"):
-            raise ValueError('retrieval_mode must be one of "accepts", "rejects", "unbiased"')
+        if accepted_initial.dim() == 0:
+            raise ValueError("accepted_initial needs to have more than one dimension")
 
         self.features = features_initial.detach().clone()
         self.default_flag = default_flag_initial.detach().clone().to(self.features.dtype)
         self.accepted = accepted_initial.detach().clone().to(bool)
 
-        # Cache indices for accepts and rejects as 1D tensors
-        self.accepted_idx = torch.nonzero(self.accepted).flatten()
-        self.reject_idx = torch.nonzero(~self.accepted).flatten()
-
         self.gen_round = torch.tensor(
             0, dtype=torch.long, device=features_initial.device
-        ).expand(features_initial.size(0))
-
-        self.retrieval_mode = retrieval_mode
+        ).expand(features_initial.size(-2))
 
     # -------------------------------------------------------------------------
     # Device handling
@@ -2613,14 +2605,14 @@ class CreditData(Dataset):
         return self.gen_round[-1]
     
     @property
-    def count_accepts(self) -> int:
+    def count_accepts(self) -> torch.Tensor:
         """Number of accepted applications in the dataset.
 
         Returns:
             int:
                 Count of samples where the acceptance flag is ``True``.
         """
-        return self.accepted_idx.size(0)
+        return self.accepted.sum(dim=-1)
     
     @property
     def count_all(self) -> int:
@@ -2630,7 +2622,7 @@ class CreditData(Dataset):
             int:
                 Total number of samples stored in the dataset.
         """
-        return self.accepted.size(0)
+        return self.accepted.size(-1)
     
     @property
     def count_rejects(self) -> int:
@@ -2640,7 +2632,7 @@ class CreditData(Dataset):
             int:
                 Count of samples where the acceptance flag is ``False``.
         """
-        return self.count_all - self.count_accepts
+        return torch.sum(~self.accepted, dim=-1)
     
     @property
     def features_count(self) -> int:
