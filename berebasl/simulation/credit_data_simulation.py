@@ -2902,25 +2902,66 @@ class CreditData:
         there are.
 
         Returns:
-            Dict[str, torch.Tensor]:
-                Each count is contained in a tensor where the counts of
-                ``gen_idx`` is found in ``counts[gen_idx]``. The keys
-                of the dict are ``['total', 'accepts', 'rejects']``
+           torch.Tensor:
+                Shape: [*self.batch_shape, TAR, BG, G],
+                TAR is total, Accepts, Rejects
+                TBG is total, bads, goods,
+                G is generation
         """
-        unique_gen_round_idxs = torch.arange(self.last_gen_round+1, device=self.device) # [g]
+        N = self.count_all
+        TAR = 3 # accepts rejects
+        G = self.last_gen_round+1
+        TBG = 3
 
-        flag_is_from_round = unique_gen_round_idxs.unsqueeze(1) == self.gen_round.unsqueeze(0) # [g, N]
-        counts_per_round = flag_is_from_round.sum(dim=-1) # [g]
-        accepts_per_round = (flag_is_from_round & self.accepted.unsqueeze(0)).sum(dim=-1) # [g]
-        rejects_per_round = counts_per_round - accepts_per_round
+        unique_gen_round_idxs = torch.arange(self.last_gen_round+1, device=self.device) # [G]
+        flag_is_from_round = unique_gen_round_idxs.unsqueeze(1) == self.gen_round.unsqueeze(0) # [G, N]
 
-        return {
-            "total" : counts_per_round,
-            "accepts" : accepts_per_round,
-            "rejects" : rejects_per_round
-        }
+        len_batch_shape = len(self.batch_shape)
+        TAR_mask = self.accepted.unsqueeze(-2).repeat(*([1]*len_batch_shape), TAR, 1) # [*self.batch_shape, 3, N]
+        TAR_mask[..., 0, :] = True # [*self.batch_shape, AR, N]
+        TAR_mask[..., 2, :] = ~TAR_mask[..., 1, :] # [*self.batch_shape, AR, N]
+
+        TBG_mask = (self.default_flag == 1).unsqueeze(-2).repeat(*([1]*len_batch_shape), TBG, 1) # [*self.batch_shape, 2, N]
+        TBG_mask[..., 0, :] = True
+        TBG_mask[..., 2, :] = ~TBG_mask[..., 1, :] # [*self.batch_shape, BG, N]
+
+        TAR_TBG_G_mask = (
+            flag_is_from_round &   # [G, N]
+            TAR_mask.view(*self.batch_shape, TAR,  1, 1, N) &
+            TBG_mask.view(*self.batch_shape,    1, TBG, 1, N)
+        ) # [*self.batch_shape, TAR, TBG, G, N]
+
+        assert TAR_TBG_G_mask.shape == (self.batch_shape + torch.Size([TAR, TBG, G, N]))
 
 
+        counts_per_round = TAR_TBG_G_mask.sum(dim=-1) # [*self.batch_shape, TAR, TBG, G]
+
+        return counts_per_round
+
+    def counts_per_round_as_dict(self) -> Dict[str, torch.Tensor]:
+        """
+        Count how many total, accepted and rejected observations per round
+        there are.
+
+        Returns:
+           torch.Tensor:
+                Shape: [*self.batch_shape, TAR, BG, G],
+                TAR is total, Accepts, Rejects
+                TBG is total, bads, goods,
+                G is generation
+        """
+        counts_per_round = self.counts_per_round()
+
+        TAR_meaning = ["total", "accepts", "rejects"]
+        TBG_meaning = ["", "bad_", "good_"]
+
+        counts_per_round_dict = {}
+
+        for i_tar, tar_m in enumerate(TAR_meaning):
+            for i_tbg, tbg_m in enumerate(TBG_meaning):
+                counts_per_round_dict[tbg_m + tar_m] = counts_per_round[..., i_tar, i_tbg, :]
+
+        return counts_per_round_dict
 
 
 if __name__ == "__main__":
