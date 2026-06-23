@@ -126,7 +126,7 @@ display(Markdown(report_str))
 
 bayes_errors = extract_bayes_errors(all_sim_objs, grid_biases, grid_corrs)
 
-bayes_err_base = bayes_errors[0,0].item()
+bayes_err_base = bayes_errors[0,0,0].item()
 bayes_err_str = f"{bayes_err_base*100:.2f}"
 ```
 
@@ -167,12 +167,49 @@ $$
 
 It is clear that @fig-pairwise-base-dgp also suggests that the classification
 problem shoud also be well solved by a logistic regression considering only two
-of the components of $X$.
+of the components of $X$. This figure also shows a bit the importance of $X_h$ 
+for the classification problem in relationship to the correlation to $X_{m}$.
+See that the classification boundary in the graphs containing $X_h$ has a positive
+slope w. r. t. $X_{m,1}$ and $X_{m, 2}$. This means that a higher (positive)
+correlation of the hidden factor to the model variables increases the separation
+power when observing $X_h$. A negative correlation should approximately have the
+opposite effect.
 
 ```{python}
 #| label: fig-pairwise-base-dgp
 #| fig-cap: "Pairwise covariates component representation of $Y, X$"
 plot_pairwise_dgp_with_perf_bayes_boundaries(dgp_base, **dgp_info_for_boundaries)
+```
+
+This consideration leads to the next plot in @fig-bayes-err-vs-correlation. There
+the Bayes-error of the perfect bayes classifier is compared to the error rate of
+a bayes classifier that only sees $X_m$. The negative correlation between the
+Bayes-error and the correlation is evident. Also the difference between the
+bayes error and the error rate of a bayes classifier ignoring $X_h$ shows how
+much information gets lost through the missing variable bias. So using a case
+with low information loss due to not seeing $X_h$ can help to isolate better
+the effect of MNAR-ness in the Reject Inference problem.
+
+```{python}
+#| label: fig-bayes-err-vs-correlation
+#| fig-cap: "Bayes error in dependence of correlation to hidden factor"
+from matplotlib import pyplot as plt
+
+corrs = grid_corrs.values()
+bayes_errs = bayes_errors[0, :, 0].numpy()
+
+plt.scatter(corrs, bayes_errs, label="Perfect Bayes")
+plt.axhline(
+    y=bayes_errors[0, 0, 1],
+    label="Bayes Classifier ignoring $X_m$",
+    ls = "--",
+    c="k"
+)
+plt.xlabel("Correlation to hidden factor")
+plt.ylabel("Error Rate")
+
+plt.legend()
+plt.show()
 ```
 
 ## Decision and scoring functions

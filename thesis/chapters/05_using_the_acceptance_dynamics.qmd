@@ -103,8 +103,9 @@ Lets see
 ```{python}
 #| label: fig-expectation-vs-observed-performance
 #| fig-cap: "Performance on the expectation samples and realized samples"
+use_bayes_with_missing: bool = True
 plot_lines_and_mains(
-    generate_line_collections_for_exp_real_plot(base_sim_objs),
+    generate_line_collections_for_exp_real_plot(base_sim_objs, use_bayes_with_missing=use_bayes_with_missing),
     sample_sizes=base_sim_objs["sample_sizes"],
     add_fig_legend=True,
     add_legend=False
@@ -114,7 +115,7 @@ plot_lines_and_mains(
 ```{python}
 #| label: fig-difference-between-exp-and-obseved-performance
 #| fig-cap: "Absolute difference between the performance on the expectation samples and realized samples $(W_{MA}=5)$"
-exp_to_real_diffs_base = generate_lines_for_diffs(base_sim_objs, make_abs=True, W=5)
+exp_to_real_diffs_base = generate_lines_for_diffs(base_sim_objs, make_abs=True, W=5, use_bayes_with_missing=use_bayes_with_missing)
 
 plot_lines_and_mains(
     gen_lines_from_diff_dict(exp_to_real_diffs_base),
@@ -129,7 +130,7 @@ plot_lines_and_mains(
 ```{python}
 #| label: fig-areas-diff-logit-in-grid
 #| fig-cap: "Absolute difference between the performance on the expectation samples and realized samples $(W_{MA}=5)$"
-wrapper_plot_grid_of_diffs_between_logit_and_acc(all_sim_objs, grid_biases, grid_corrs)
+wrapper_plot_grid_of_diffs_between_logit_and_acc(all_sim_objs, grid_biases, grid_corrs, use_bayes_with_missing=use_bayes_with_missing)
 ```
 
 NEED TO FIND A WAY TO MAKE THIS SMALLER

@@ -643,7 +643,8 @@ def construct_all_diffs_tensor(
     expectation_types: list,
     metric_categories: list,
     diff_types: list,
-    classifiers: list
+    classifiers: list,
+    use_bayes_with_missing: bool
 ) -> Tuple[torch.Tensor, int, int, int, int, int]:
     """
     Construct the all_diffs tensor by iterating over parameter combinations.
@@ -665,7 +666,7 @@ def construct_all_diffs_tensor(
     for b_s in biases.keys():
         for c_s in corrs.keys():
             sim_objs = all_sim_objs[b_s][c_s]
-            exp_to_real_diffs = generate_lines_for_diffs(sim_objs, make_abs=True, W=5)
+            exp_to_real_diffs = generate_lines_for_diffs(sim_objs, make_abs=True, W=5, use_bayes_with_missing=use_bayes_with_missing)
             
             for e in expectation_types:
                 for m in metric_categories:
@@ -1045,7 +1046,7 @@ def plot_heatmap_grid_multiD(
 
     plt.show()
 
-def wrapper_plot_grid_of_diffs_between_logit_and_acc(all_sim_objs, grid_biases, grid_corrs):
+def wrapper_plot_grid_of_diffs_between_logit_and_acc(all_sim_objs, grid_biases, grid_corrs, use_bayes_with_missing: bool):
     diff_types = ["diffs", "ma_diffs"]
     # Construct all_diffs tensor
     ## [B, Co, E, M, Cl, D, N], [N]
@@ -1056,7 +1057,8 @@ def wrapper_plot_grid_of_diffs_between_logit_and_acc(all_sim_objs, grid_biases, 
         expectation_types=EXPECTATION_TYPES,
         metric_categories=METRIC_CATEGORIES,
         diff_types=diff_types,
-        classifiers=["logit", "bayes"]
+        classifiers=["logit", "bayes"],
+        use_bayes_with_missing=use_bayes_with_missing
     )
 
     # Get areas
