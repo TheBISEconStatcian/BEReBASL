@@ -263,11 +263,11 @@ class CreditDataGenerator:
             bad_mixture : GaussianMixture,
             good_mixture : GaussianMixture,
             feats_noise_var : float,
-            p_bad_given_no_shock : float,
+            prob_bad_given_no_shock : float,
             prob_idiosyncratic_shock: float = 0.0,
             prob_bad_given_shock: float = 0.5,
             seed : Optional[int] = None,
-            deterministic_weight_sampling: bool = False
+            determinstic_mixture_weights: bool = False
     ):
         if not isinstance(bad_mixture, GaussianMixture) or not isinstance(good_mixture, GaussianMixture):
             raise ValueError("Mixtures need to be GaussianMixture classes")
@@ -288,7 +288,7 @@ class CreditDataGenerator:
         self.bad_mixture = bad_mixture
         self.good_mixture = good_mixture
         self.feats_noise_std = sqrt(float(feats_noise_var))
-        self.prob_bad_given_no_shock = float(p_bad_given_no_shock)
+        self.prob_bad_given_no_shock = float(prob_bad_given_no_shock)
         self.prob_idiosyncratic_shock = float(prob_idiosyncratic_shock)
         self.prob_bad_given_shock = float(prob_bad_given_shock)
 
@@ -301,7 +301,7 @@ class CreditDataGenerator:
             self.bad_mixture.manual_seed(seed)
 
         self.good_mixture.rng = self.bad_mixture.rng
-        self.determinstic_mixture_weights = bool(deterministic_weight_sampling)
+        self.determinstic_mixture_weights = bool(determinstic_mixture_weights)
     
     @property
     def shock_multinom_probs(self) -> torch.Tensor:
@@ -990,8 +990,8 @@ class CreditDataGenerator:
             good_mixture = mixture_good,
             seed = seed_credit_data_gen,
             feats_noise_var=feats_noise_var,
-            p_bad_given_no_shock=bad_ratio,
-            deterministic_weight_sampling=deterministic_weights_for_mixture_sampling
+            prob_bad_given_no_shock=bad_ratio,
+            determinstic_mixture_weights=deterministic_weights_for_mixture_sampling
         )
     
     def dgp_tex_report(self) -> str:
@@ -1082,6 +1082,80 @@ class CreditDataGenerator:
             elev=elev,
             azim=azim
         )
+
+    @classmethod
+    def concatenate(cls, dgps: Iterable["CreditDataGenerator"]) -> "CreditDataGenerator":
+        first_dgp = next(dgps.__iter__())
+        good_should_be_mixture = first_dgp.good_mixture.is_mixture
+        good_K = first_dgp.good_mixture.K
+        bad_should_be_mixture = first_dgp.bad_mixture.is_mixture
+        bad_K = first_dgp.bad_mixture.K
+
+        dtype=first_dgp.dtype
+        device=first_dgp.device
+
+        variables_to_be_equal = [
+            "feats_noise_std",
+            "prob_bad_given_no_shock",
+            "prob_idiosyncratic_shock",
+            "prob_bad_given_shock",
+            "F"
+        ]
+        variables_recommended_equal = ["determinstic_mixture_weights"]
+        vals_vars_to_check = {vn : getattr(first_dgp, vn) for vn in variables_to_be_equal + variables_recommended_equal}
+
+
+        mixture_elements = ("mean", "cov_chol", "weights")
+
+        mixture_kwargs: Dict[str, Dict[str, List[torch.Tensor]]] = {
+            bg : {k : [] for k in mixture_elements} for bg in ("bad", "good")
+        }
+
+        for dgp in dgps:
+            if not isinstance(dgp, cls):
+                raise TypeError("Some dgp in dgps was not of type " + str(cls))
+            if (
+                dgp.good_mixture.is_mixture != good_should_be_mixture or 
+                dgp.good_mixture.K != good_K or
+                dgp.bad_mixture.is_mixture != bad_should_be_mixture or
+                dgp.bad_mixture.K != bad_K or
+                any([getattr(dgp, vn) != vals_vars_to_check[vn] for vn in variables_to_be_equal])
+            ):
+                raise AssertionError("Inconsistent dgps")
+            if any([getattr(dgp, vn) != vals_vars_to_check[vn] for vn in variables_recommended_equal]):
+                warn(f"Some of the variables recommended to be equal {variables_recommended_equal} "
+                    "does not equal to the first dgp, the value of the first dgp will be preferred")
+
+            for bg in ("bad", "good"):
+                mixture: GaussianMixture = getattr(dgp, bg + "_mixture")
+                mus, covs_chol_decomp, weights = mixture._normalized_params()
+                mixture_kwargs[bg]["mean"].append(mus)
+                mixture_kwargs[bg]["cov_chol"].append(covs_chol_decomp)
+                if mixture.is_mixture:
+                    mixture_kwargs[bg]["weights"].append(weights)
+
+        kwargs_joint_credit_data_generator = {
+            "bad_mixture" : None,
+            "good_mixture" : None,
+            "feats_noise_var" : 0
+        } | {k : v for k, v in vals_vars_to_check.items() if k not in ("feats_noise_std",  "F")}
+
+        for bg in ("bad", "good"):
+            current_mixture_params = {k : torch.cat(v, dim=0) if len(v) > 0 else None for k, v in mixture_kwargs[bg].items()}
+            if current_mixture_params["weights"] is None:
+                current_mixture_params["cov_chol"].squeeze_(1)
+                current_mixture_params["mean"].squeeze_(1)
+            cov_chol_decomp = current_mixture_params.pop("cov_chol")
+            kwargs_joint_credit_data_generator[bg + "_mixture"] = GaussianMixture(
+                **current_mixture_params,
+                cov=torch.eye(vals_vars_to_check["F"], dtype=dtype, device=device).expand_as(cov_chol_decomp)
+            )
+            kwargs_joint_credit_data_generator[bg + "_mixture"].cov_chol_decomp = cov_chol_decomp
+
+        joint_dgp = CreditDataGenerator(**kwargs_joint_credit_data_generator)
+        joint_dgp.feats_noise_std = vals_vars_to_check["feats_noise_std"]
+
+        return joint_dgp
     
 def _mask2d_to_int_idxs(mask : torch.Tensor, correction_last_idx : Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
     mask_int = mask.to(torch.int32)
