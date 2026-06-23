@@ -2720,9 +2720,70 @@ class CreditData:
                 
         return (from_round_idx <= self.gen_round) & (self.gen_round <= up_to_round_idx)
 
+    def select_given_mask(self, mask_valid, what_to_select: List[Literal["gen_round", "default_flag", "features", "accepted", "mask_valid"]]) -> Dict[str, torch.Tensor]:
+        try:
+            mask_valid = mask_valid.expand_as(self.accepted)
+        except RuntimeError as e:
+            raise RuntimeError(
+                "mask_valid does not have a compatible shape to self.accepted: " + str(e)
+            )
+        
+        cumsum_mask_valid = mask_valid.cumsum(dim=-1)
+        N_orig = mask_valid.size(-1)
+        N_max = cumsum_mask_valid[..., -1].max()
+
+        out_base_shape = self.batch_shape + (N_max + 1, )
+        scatter_indices = torch.nn.functional.pad(
+            cumsum_mask_valid * mask_valid, pad=(1,0), mode='constant', value=0
+        )
+
+        selected: Dict[str, torch.Tensor] = {}
+
+        for t in what_to_select:
+            pad = (1, 0)
+            scatter_dim = -1
+            scatter_idx = scatter_indices
+            nan_val = -1 if t== "gen_round" else False if t in ["accepted", "mask_valid"] else float('nan')
+
+            buffer_shape = out_base_shape
+
+            ten_to_select = mask_valid if t=="mask_valid" else getattr(self, t)
+
+            if t == "features":
+                pad = (0,0) + pad
+                scatter_dim = scatter_dim - 1
+                F = self.features_count
+                scatter_idx = scatter_idx.unsqueeze(-1).expand(*self.batch_shape, N_orig+1, F)
+                buffer_shape += (F,)
+
+            padded_ten = torch.nn.functional.pad(
+                ten_to_select,
+                pad,
+                mode='constant',
+                value = nan_val
+            )
+            if t=="gen_round":
+                padded_ten = padded_ten.expand(*self.batch_shape, N_orig+1)
+
+            selected[t] = padded_ten.new_full(buffer_shape, fill_value=nan_val)
+            
+            selected[t].scatter_(
+                scatter_dim,
+                scatter_idx,
+                padded_ten
+            )
+            if t == "features":
+                selected[t] = selected[t][..., 1:, :]
+            else:
+                selected[t] = selected[t][..., 1:]
+            del scatter_dim
+
+        return selected
+
     def rejects(
         self, 
-        include_gen_round: bool = False, 
+        include_gen_round: bool = False,
+        include_mask_valid: bool = False,
         from_round_idx: Optional[int] = None, 
         up_to_round_idx : Optional[int] = None
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
@@ -2740,19 +2801,29 @@ class CreditData:
                 Defaults to ``False``.
 
         Returns:
-            Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-                - If ``include_gen_round=False``: ``features_rejects``  
-                - If ``include_gen_round=True``: ``(features_rejects, gen_round_rejects)``
+            (feats, Optional[mask_valid], Optional[gen_idx])
         """
-        mask_rej_to_get = self.round_selection_mask(from_round_idx, up_to_round_idx) & ~self.accepted
+        round_selection_mask = self.round_selection_mask(from_round_idx, up_to_round_idx)
+        mask_rej_to_get = round_selection_mask & (~self.accepted)
+
+        selection = {"features" : None, "mask_valid" : None, "gen_idx" : None}
+
+        what_to_select = ["features"]
+
+        if include_mask_valid:
+            what_to_select.append("mask_valid")
 
         if include_gen_round:
-            return self.features[mask_rej_to_get], self.gen_round[mask_rej_to_get]
-        return self.features[mask_rej_to_get]
+            what_to_select.append("gen_round")
+
+        selection = self.select_given_mask(mask_rej_to_get, what_to_select)
+        
+        return selection["features"], selection.get("mask_valid", None), selection.get("gen_round", None)
 
     def accepts(
         self, 
         include_gen_round: bool = False, 
+        include_mask_valid: bool = False,
         from_round_idx: Optional[int] = None, 
         up_to_round_idx : Optional[int] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -2771,19 +2842,18 @@ class CreditData:
             Tuple[torch.Tensor, ...]:
                 - If ``include_gen_round=False``: ``(features_accepts, default_flag_accepts)``
                 - If ``include_gen_round=True``: ``(features_accepts, default_flag_accepts, gen_round_accepts)``
-        """
-        if up_to_round_idx is None:
-            up_to_round_idx = self.last_gen_round
-        
+        """        
         mask_acc_to_get = self.round_selection_mask(from_round_idx, up_to_round_idx) & self.accepted
 
+        what_to_select = ["features", "default_flag"]
+        if include_mask_valid:
+            what_to_select.append("mask_valid")
         if include_gen_round:
-            return (
-                self.features[mask_acc_to_get],
-                self.default_flag[mask_acc_to_get],
-                self.gen_round[mask_acc_to_get],
-            )
-        return self.features[mask_acc_to_get], self.default_flag[mask_acc_to_get]
+            what_to_select.append("gen_round")
+
+        selection = self.select_given_mask(mask_acc_to_get, what_to_select)
+
+        return selection["features"], selection["default_flag"], selection.get("mask_valid", None), selection.get("gen_round", None)
 
     def unbiased_obs(
         self, 
@@ -2809,11 +2879,13 @@ class CreditData:
                 - If ``include_gen_round=True``: ``(features, default_flag, gen_round)``
         """
         gen_round_mask = self.round_selection_mask(from_round_idx, up_to_round_idx)
-        return_tuple = self.features[gen_round_mask], self.default_flag[gen_round_mask]
+
+        return_tuple = self.features[..., gen_round_mask, :], self.default_flag[..., gen_round_mask]
         if include_gen_round:
-            return_tuple += (self.gen_round[gen_round_mask],)
+            return_tuple += (self.gen_round[..., gen_round_mask].expand_as(return_tuple[-1]),)
         if include_accepted_status:
-            return_tuple += (self.accepted[gen_round_mask],)
+            return_tuple += (self.accepted[..., gen_round_mask],)
+
         return return_tuple
 
     def to_sample_dataset(
