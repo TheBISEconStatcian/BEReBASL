@@ -52,7 +52,7 @@ from warnings import warn
 
 import torch
 
-from typing import Any, Dict, List, Optional, Union, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Union, Tuple
 
 from berebasl.simulation.acceptance_loop import (
     build_parser_for_loop,
@@ -127,12 +127,16 @@ def build_parser_for_cv_loop():
     argparser.add_argument(
         "--hidden-corr",
         type=float,
-        default=0.0,
+        nargs="+",
+        default=[0.0],
         help=(
-            "Pearson correlation enforced between the hidden variable and every "
-            "visible variable in the DGP covariance matrix.  Must be in (-1, 1)."
+            "Pearson correlation(s) enforced between the hidden variable and each "
+            "visible variable in the DGP covariance matrix. Must be in (-0.775, 0.775) "
+            "as otherwise the VCOV would not be positive definite (given the corrs). "
+            "Pass one value to broadcast, or multiple values for per-feature control."
         ),
     )
+
     return argparser
 
 
@@ -248,6 +252,34 @@ def mnar_default_dgp(
     )
 
     return dgp
+
+def joint_mnar_default_dgp(
+    seed_credit_data_gen: int,
+    var_to_hide: int,
+    hidden_corrs: Iterable[float],
+    deterministic_weights_for_mixture_sampling: bool = True,
+    device: torch.device = None,
+    dtype: torch.dtype = None
+) -> CreditDataGenerator:
+    """
+    Thin wrapper around :func:`mnar_default_dgp` to concatenate all of
+    the dgps with the hidden correlation values
+
+    Parameters
+    ----------
+    seed_credit_data_gen : int
+    var_to_hide : int
+        Feature index to hide (already reduced mod F before this call).
+    hidden_corrs : Iterable[float]
+        List of desired Pearson correlation between the hidden and every visible feature.
+        Pass ``0.0`` to leave the covariance unchanged.
+    deterministic_weights_for_mixture_sampling : bool
+    device, dtype : optional
+    """
+    return CreditDataGenerator.concatenate(
+        [mnar_default_dgp(seed_credit_data_gen, var_to_hide, hc, deterministic_weights_for_mixture_sampling, device, dtype)
+         for hc in hidden_corrs]
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -376,7 +408,7 @@ def cross_validate(
         k_folds=k_folds,
         stats_to_calc=stats_to_calc,
         dict_keys_prefix = dict_keys_prefix
-    )
+    ) # [CV, *others, k]
 
 
 def realistic_oracle_cv(
@@ -495,15 +527,17 @@ def _check_and_save_init_cv_loop(
     if not isinstance(bias_percentage, float) or not (0.0 <= bias_percentage <= 1.0):
         raise AssertionError("bias_percentage must be a float in [0, 1]")
     
+    F = data_generator.F
+    model_vars = [f for f in range(F) if f!=(var_to_hide%F)]
     hidden_corr_bad, hidden_corr_good = [
-        (
-        getattr(data_generator, gb + "_mixture")
-        .cov[var_to_hide, var_to_hide]
-        .to(torch.float64)
-        )
-        for gb in ["bad", "good"]
-    ]
-    if check_hidden_corr and not torch.isclose(hidden_corr_bad, hidden_corr_good):
+            (
+            getattr(data_generator, gb + "_mixture")
+            .cov[..., var_to_hide, model_vars]
+            .to(torch.float64)
+            )
+            for gb in ["bad", "good"]
+        ]
+    if check_hidden_corr and not (torch.allclose(hidden_corr_bad, hidden_corr_good) and torch.all(hidden_corr_bad[..., [0]] == hidden_corr_bad[..., 1:])):
         raise AssertionError(
             "The hidden correlation was not equal in good and bad mixture "
             "this likely means that the data_generator was not rightly created for sensitivity analysis"
@@ -528,7 +562,7 @@ def _check_and_save_init_cv_loop(
                     # MNAR metaparameters
                     "var_to_hide":        var_to_hide,
                     "bias_percentage":    bias_percentage,
-                    "hidden_corr":        hidden_corr_bad if check_hidden_corr else torch.stack([hidden_corr_bad, hidden_corr_good]),
+                    "hidden_corr":        hidden_corr_bad[..., 0] if check_hidden_corr else torch.stack([hidden_corr_bad, hidden_corr_good]),
                 },
             },
             f=init_p,
