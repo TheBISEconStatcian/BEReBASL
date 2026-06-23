@@ -2889,7 +2889,7 @@ class CreditData:
         return return_tuple
 
     def to_sample_dataset(
-        self: CreditData,
+        self,
         retrieve_only_accepted: bool = True,
         from_round_idx: Optional[int] = None,
         up_to_round_idx : Optional[int] = None
