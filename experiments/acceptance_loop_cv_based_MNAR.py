@@ -716,6 +716,7 @@ def acceptance_loop(
             stats[k].append(val)
 
         # ── 1. Collect data views ─────────────────────────────────────────
+        # NEED TO PUT HERE THE BIASED FEATS, BIASED... Maybe better pass the credit_data instance
         unb_feats, unb_lbls, acc_flag = credit_data.unbiased_obs(
             include_accepted_status=True
         )
@@ -927,34 +928,12 @@ def acceptance_loop(
             times_recorded_current = times_tensor.size(0)
             counts_per_round = credit_data.counts_per_round()
             cumsum_counts_per_round_total = counts_per_round["total"][-times_recorded_current:].cumsum(dim=0).to(times_tensor.dtype)
-            times_matrix_expl = torch.stack([
-                torch.ones_like(times_tensor),
-                cumsum_counts_per_round_total,
-                cumsum_counts_per_round_total.log()
-            ], dim=1)
-
-            #print(times_matrix_expl)
-
-            times_mat_inv = torch.linalg.inv(times_matrix_expl.mT.matmul(times_matrix_expl))
-
-            betas_lin = times_mat_inv.matmul(times_matrix_expl.mT.matmul(times_tensor))
-            betas_log = times_mat_inv.matmul(times_matrix_expl.mT.matmul(times_tensor.log()))
 
             avg_time = times_tensor.mean().item()
-            data_until_end = gen_rounds_left*sample_size + credit_data.count_all
-            future_times_expl = betas_lin.new_tensor([
-                1,
-                data_until_end, 
-                log(data_until_end)
-            ])
-            time_exp_lin = betas_lin.dot(future_times_expl).item()
-            time_exp_log = betas_log.dot(future_times_expl).exp().item()
-
+            
             print(
                 f"\tRoughly expected time left: "
-                f"{round(avg_time * gen_rounds_left / 60, 2)} min (AVG) or "
-                f"{round(time_exp_lin / 60, 2)} min (lin, betas = {[round(b.item(),2) for b in betas_lin]}) or "
-                f"{round(time_exp_log / 60, 2)} min (log, betas = {[round(b.item(),2) for b in betas_log]})"
+                f"{round(avg_time * gen_rounds_left / 60, 2)} min (AVG)"
             )
 
     print(
