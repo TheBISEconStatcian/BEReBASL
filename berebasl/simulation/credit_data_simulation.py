@@ -302,6 +302,10 @@ class CreditDataGenerator:
 
         self.good_mixture.rng = self.bad_mixture.rng
         self.determinstic_mixture_weights = bool(determinstic_mixture_weights)
+
+    @property
+    def feats_noise_var(self) -> float:
+        return self.feats_noise_std**2
     
     @property
     def shock_multinom_probs(self) -> torch.Tensor:
