@@ -815,9 +815,9 @@ def acceptance_loop(
         # Applicants whose hidden-variable value is below the bias_percentage
         # quantile are unconditionally accepted (the MNAR mechanism). Through <
         # comparision bias_percentage = 0 generates a mask with all elements False
-        X_hidden = feats_new[:, var_to_hide]                          # [..., S]
-        mnar_force_accept = X_hidden < X_hidden.quantile(bias_percentage/2)      # [..., S] bool
-        mnar_force_reject = X_hidden > X_hidden.quantile(1 - bias_percentage/2)  # [..., S] bool
+        X_hidden = feats_new[..., var_to_hide]                          # [..., S]
+        mnar_force_accept = X_hidden < X_hidden.quantile(bias_percentage/2, dim=-1, keepdim=True)      # [..., S] bool
+        mnar_force_reject = X_hidden > X_hidden.quantile(1 - bias_percentage/2, dim=-1, keepdim=True)  # [..., S] bool
 
         # ── 3.2. Save scores and accept decisions ───────────────────────────────
         scores: Dict[str, torch.Tensor] = {}
