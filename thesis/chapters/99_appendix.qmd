@@ -19,6 +19,175 @@ A close bookkeeping of the usage can be seen on [GitHub](https://github.com/TheB
 
 ## Mathematical derivations/proofs
 
+### Set of positive definite variance covariance matrices for the simulation
+
+As stated in @sec-app-population-simulation, the common covariance matrix $\Sigma$ has the general shape (for the 3 variables case)
+
+$$
+\Sigma =
+\begin{pmatrix}
+1 & \sigma_{m,1,2} & \sigma_{mh} \\
+\sigma_{m,1,2} & 1 & \sigma_{mh} \\
+\sigma_{mh} & \sigma_{mh} & 1
+\end{pmatrix}
+$$ {#eq-general-Sigma-3d}
+
+For notational simplicity let here $a \equiv \sigma_{m,1,2}$ and $b \equiv \sigma_{mh}$.^[
+    Note: from here one the derivation has been fully AI-generated with minor changes by me.
+    The facts were checked upon by me. See @chatgpt_positive_definite_covariance_2026 for
+    the reference to the chat.
+]
+The space of positive definite covariance matrices following @eq-general-Sigma-3d can be
+found using Sylvester's criterion^[
+    I.e. if all leading principal minors have a positive determinant, then the matrix is
+    positive definite
+] and is fully determined by the admissible tuples $(a, b) \in \mathbb{R}^2$.
+
+Using the simplified notation, the covariance matrix can be written as
+
+$$
+\Sigma =
+\begin{pmatrix}
+1 & a & b \\
+a & 1 & b \\
+b & b & 1
+\end{pmatrix}.
+$$ {#eq-sigma-ab}
+
+The first leading principal minor always has a positive determinant since $\det(1) = 1 > 0$.
+The second leading principal minor is
+
+$$
+\det
+\begin{pmatrix}
+1 & a \\
+a & 1
+\end{pmatrix}
+=
+1-a^2.
+$$ {#eq-second-principal-minor}
+
+Therefore, the second condition requires
+
+$$
+1-a^2 > 0,
+$$ {#eq-second-principal-minor-condition}
+
+which is equivalent to
+
+$$
+-1 < a < 1.
+$$ {#eq-a-range}
+
+Finally, the determinant of the full matrix in @eq-sigma-ab is
+
+$$
+\det(\Sigma)
+=
+\begin{vmatrix}
+1 & a & b \\
+a & 1 & b \\
+b & b & 1
+\end{vmatrix}.
+$$ {#eq-full-determinant-start}
+
+Subtracting the second row from the first row leaves the determinant unchanged and yields
+<!--
+Rule applied here: one can add any constant factor of a row to another
+without changing the determinant
+-->
+
+$$
+\det(\Sigma)
+=
+\begin{vmatrix}
+1-a & a-1 & 0 \\
+a & 1 & b \\
+b & b & 1
+\end{vmatrix}.
+$$ {#eq-full-determinant-row-operation}
+
+Factoring out $(1-a)$ from the first row gives
+<!--
+Rule applied here: mutiplying one row with a non zero scalar c of
+matrix A, leaves the determinant of the changed matrix
+to be c det(A)
+https://math.libretexts.org/Bookshelves/Linear_Algebra/A_First_Course_in_Linear_Algebra_(Kuttler)/03%3A_Determinants/3.02%3A_Properties_of_Determinants
+-->
+
+$$
+\det(\Sigma)
+=
+(1-a)
+\begin{vmatrix}
+1 & -1 & 0 \\
+a & 1 & b \\
+b & b & 1
+\end{vmatrix}.
+$$ {#eq-full-determinant-factorized}
+
+The cofactor expansion results in
+
+$$
+\det(\Sigma)
+=
+(1-a)
+\left[
+\begin{vmatrix}
+1 & b \\
+b & 1
+\end{vmatrix}
++
+\begin{vmatrix}
+a & b \\
+b & 1
+\end{vmatrix}
+\right].
+$$ {#eq-full-determinant-expansion}
+
+Evaluating the two $2 \times 2$ determinants yields
+
+$$
+\det(\Sigma)
+=
+(1-a)
+\left[
+(1-b^2) + (a-b^2)
+\right].
+$$ {#eq-full-determinant-evaluated}
+
+After simplification,
+
+$$
+\det(\Sigma)
+=
+(1-a)(1+a-2b^2).
+$$ {#eq-full-determinant}
+
+By @eq-a-range, the factor $(1-a)$ is strictly positive. Consequently, the third condition
+of Sylvester's criterion is
+
+$$
+1+a-2b^2 > 0.
+$$ {#eq-third-principal-minor-condition}
+
+Solving for $b$ gives
+
+$$
+b^2 < \frac{1+a}{2},
+$$ {#eq-b-condition-squared}
+
+Combining @eq-a-range and @eq-b-condition-squared, the set of positive definite covariance
+matrices of the form @eq-general-Sigma-3d is characterized by
+
+$$
+\left\{
+(a,b)\in\mathbb{R}^2 :
+-1<a<1,\;
+b^2<\frac{1+a}{2}
+\right\}.
+$$ {#eq-positive-definite-region}
+
 ### On the Bayes Classifier with idiosyncratic shocks
 
 #### Decision boundary {#sec-dec-boundary-perf-bayes-idyiosincratic-shocks}
