@@ -2784,6 +2784,7 @@ class CreditData:
         self, 
         include_gen_round: bool = False,
         include_mask_valid: bool = False,
+        include_lbls: bool = False,
         from_round_idx: Optional[int] = None, 
         up_to_round_idx : Optional[int] = None
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
@@ -2801,7 +2802,7 @@ class CreditData:
                 Defaults to ``False``.
 
         Returns:
-            (feats, Optional[mask_valid], Optional[gen_idx])
+            (feats, Optional[lbls], Optional[mask_valid], Optional[gen_idx])
         """
         round_selection_mask = self.round_selection_mask(from_round_idx, up_to_round_idx)
         mask_rej_to_get = round_selection_mask & (~self.accepted)
@@ -2809,6 +2810,9 @@ class CreditData:
         selection = {"features" : None, "mask_valid" : None, "gen_idx" : None}
 
         what_to_select = ["features"]
+
+        if include_lbls:
+            what_to_select.append("default_flag")
 
         if include_mask_valid:
             what_to_select.append("mask_valid")
@@ -2818,7 +2822,7 @@ class CreditData:
 
         selection = self.select_given_mask(mask_rej_to_get, what_to_select)
         
-        return selection["features"], selection.get("mask_valid", None), selection.get("gen_round", None)
+        return selection["features"], selection.get("default_flag", None), selection.get("mask_valid", None), selection.get("gen_round", None)
 
     def accepts(
         self, 
@@ -2839,6 +2843,7 @@ class CreditData:
                 Defaults to ``False``.
 
         Returns:
+            (feats_accepts, lbls_accepts, Optional[mask_valid_accepts], Optional[gen_round])
             Tuple[torch.Tensor, ...]:
                 - If ``include_gen_round=False``: ``(features_accepts, default_flag_accepts)``
                 - If ``include_gen_round=True``: ``(features_accepts, default_flag_accepts, gen_round_accepts)``
