@@ -56,7 +56,13 @@ def main():
     # ── Grid definition ───────────────────────────────────────────────────────
     # bias_percentage: quantile on the hidden variable that triggers forced
     #   acceptance.  0.0 means no MNAR distortion.
-    bias_percentages: list = [0.0, 0.05, 0.10, 0.20, 0.35]
+    bias_percentages: list = [
+        0.0,
+        0.05,
+        0.10,
+        0.20,
+        0.35
+    ]
 
     # hidden_corr: Pearson correlation between the hidden variable and every
     #   visible variable in the DGP covariance.  0.0 = fully independent.
@@ -64,11 +70,17 @@ def main():
     # ─────────────────────────────────────────────────────────────────────────
 
     # Create timestamped base directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_sim_dir = os.path.abspath(
-        os.path.join("berebasl", "data", "simulations", f"mnar_grid_{timestamp}")
-    )
-    os.makedirs(base_sim_dir, exist_ok=True)
+    create_dir = False
+    if create_dir:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_sim_dir = os.path.abspath(
+            os.path.join("berebasl", "data", "simulations", f"mnar_grid_{timestamp}")
+        )
+        os.makedirs(base_sim_dir, exist_ok=True)
+    else:
+        base_sim_dir = os.path.abspath(
+            os.path.join("berebasl", "data", "simulations", 'mnar_grid_20260625_100559')
+        )
 
     print(f"Running MNAR grid experiments in {base_sim_dir}")
     print(
@@ -107,7 +119,6 @@ def main():
                 f"hidden_corr={hidden_corrs}"
             )
         except Exception as e:
-            raise e
             print(
                 f"Error in experiment bias_percentage={bias_pct}, "
                 f"hidden_corr={hidden_corrs}: {e}"
