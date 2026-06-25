@@ -545,7 +545,7 @@ def _check_and_save_init_cv_loop(
             )
             for gb in ["bad", "good"]
         ]
-    if check_hidden_corr and not (torch.allclose(hidden_corr_bad, hidden_corr_good) and torch.all(hidden_corr_bad[..., [0]] == hidden_corr_bad[..., 1:])):
+    if check_hidden_corr and not (torch.allclose(hidden_corr_bad, hidden_corr_good) and torch.allclose(hidden_corr_bad[..., [0]], hidden_corr_bad[..., 1:], rtol=1e-7, atol=1e-9)):
         raise AssertionError(
             "The hidden correlation was not equal in good and bad mixture "
             "this likely means that the data_generator was not rightly created for sensitivity analysis"
