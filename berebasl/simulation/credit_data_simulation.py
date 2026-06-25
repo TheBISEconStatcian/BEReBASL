@@ -435,7 +435,7 @@ class CreditDataGenerator:
         # of simple indexing being more efficient than using a mask. Only of
         # one batch as each batch must have the same amount of n
         Y_prob = torch.bernoulli(
-                input=torch.full((n,), fill_value=self.prob_bad_given_no_shock, device=torch.device('cpu')),
+                input=torch.full((n,), fill_value=self.prob_bad_given_no_shock, device=self.device),
                 generator=self.rng
             ).to(torch.int32)
         n_bad = Y_prob.sum().item()
