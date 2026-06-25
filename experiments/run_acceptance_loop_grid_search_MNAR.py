@@ -60,7 +60,7 @@ def main():
 
     # hidden_corr: Pearson correlation between the hidden variable and every
     #   visible variable in the DGP covariance.  0.0 = fully independent.
-    hidden_corrs: list = [0.0, 0.2, 0.4, 0.6]
+    hidden_corrs: list = [-0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6]
     # ─────────────────────────────────────────────────────────────────────────
 
     # Create timestamped base directory
@@ -81,11 +81,10 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # ── Run grid ──────────────────────────────────────────────────────────────
-    for bias_pct, h_corr in product(bias_percentages, hidden_corrs):
+    for bias_pct in bias_percentages:
         # Build a human-readable subdirectory name
         bias_str = str(bias_pct).replace(".", "_")
-        corr_str = str(h_corr).replace(".", "_")
-        sub_dir_name = f"bias_{bias_str}_corr_{corr_str}"
+        sub_dir_name = f"bias_{bias_str}"
         sim_dir_path = os.path.join(base_sim_dir, sub_dir_name)
         os.makedirs(sim_dir_path, exist_ok=True)
 
@@ -93,11 +92,11 @@ def main():
         run_params = params.copy()
         run_params["sim_dir_path"]    = sim_dir_path
         run_params["bias_percentage"] = bias_pct
-        run_params["hidden_corr"]     = h_corr
+        run_params["hidden_corr"]     = hidden_corrs
 
         print(
             f"Starting experiment: bias_percentage={bias_pct}, "
-            f"hidden_corr={h_corr}, var_to_hide={run_params['var_to_hide']} "
+            f"hidden_corr={hidden_corrs}, var_to_hide={run_params['var_to_hide']} "
             f"→ {sim_dir_path}"
         )
 
@@ -105,12 +104,13 @@ def main():
             run_cv_simulation(run_params, device=device, dtype=torch.float64)
             print(
                 f"Completed experiment: bias_percentage={bias_pct}, "
-                f"hidden_corr={h_corr}"
+                f"hidden_corr={hidden_corrs}"
             )
         except Exception as e:
+            raise e
             print(
                 f"Error in experiment bias_percentage={bias_pct}, "
-                f"hidden_corr={h_corr}: {e}"
+                f"hidden_corr={hidden_corrs}: {e}"
             )
             continue
 

@@ -84,7 +84,7 @@ CV_COUNT: int = 10
 MIN_PER_FOLD: int = 128
 METRIC_CATEGORIES: List[str] = ["ks", "roc"]
 # METRIC_CATEGORIES has to be consistent with the _batched_evaluation method
-THRESHOLD_BASIS: List[str] = ["acc_based", "oracle"]
+THRESHOLD_BASIS: List[str] = ["oracle", "acc_based"] # acc based must be last
 EXPECTATION_TYPES: List[str] = ["acc_based", "oracle_naive", "oracle_comparable"]
 REAL_PERFORMANCE_TYPES: List[str] = ["biased_acc", "unbiased_acc", "unbiased_future"]
 
@@ -368,6 +368,7 @@ def _batch_eval_logit_perf(
 def cross_validate(
     feats: torch.Tensor,
     lbls: torch.Tensor,
+    mask_valid: torch.Tensor,
     k_folds: int,
     min_per_fold: int,
     cv_count: int,
@@ -388,6 +389,7 @@ def cross_validate(
     feats_cv, lbls_cv, mask_cv = k_fold_cv_normalized_split(
         _repeat_cv(feats, cv_count),
         _repeat_cv(lbls, cv_count),
+        _repeat_cv(mask_valid, cv_count),
         rng=rng,
         k=effective_k,
         nan_lbls=float("nan") if torch.is_floating_point(lbls) else -1,
@@ -395,15 +397,15 @@ def cross_validate(
 
     train_feats, train_lbls, train_mask = train_folds_from_cv_folds(
         feats_cv, lbls_cv, mask_cv, make_contiguous=True
-    )    
-
+    )
+    # each: [CV, ..., K]
     return _batch_eval_logit_perf(
-        train_feats,
-        train_lbls,
-        train_mask,
-        val_feats=feats_cv,
-        val_lbls=lbls_cv,
-        val_mask=mask_cv,
+        train_feats,        # [CV, ..., K, N * (K-1), F]
+        train_lbls,         # [CV, ..., K, N * (K-1)]
+        train_mask,         # [CV, ..., K, N * (K-1)]
+        val_feats=feats_cv, # [CV, ..., K, N, F]
+        val_lbls=lbls_cv,   # [CV, ..., K, N]
+        val_mask=mask_cv,   # [CV, ..., K, N]
         calc_thresholds=True,
         k_folds=k_folds,
         stats_to_calc=stats_to_calc,
@@ -412,9 +414,8 @@ def cross_validate(
 
 
 def realistic_oracle_cv(
-    unb_feats: torch.Tensor,
-    unb_lbls: torch.Tensor,
-    acc_flag: torch.Tensor,
+    credit_data: CreditData,
+    model_vars: List[int],
     k_folds: int,
     min_per_fold: int,
     cv_count: int,
@@ -429,26 +430,33 @@ def realistic_oracle_cv(
     This mirrors the selection structure of the accepts-based classifier while
     still having access to the full dataset during training.
     """
-    rej_flag = ~acc_flag
+    # [..., N_a, F], [..., N_a], [..., N_a]
+    feats_acc, lbls_acc, mask_valid_acc, _ = credit_data.accepts(include_mask_valid=True)
+    # [..., N_r, F], [..., N_r], [..., N_r]
+    feats_rej, lbls_rej, mask_valid_rej, _ = credit_data.rejects(include_mask_valid=True, include_lbls=True)
+
+    # feats.shape = [CV, ..., N_a/N_r, F]
+    feats_acc, lbls_acc, mask_valid_acc, feats_rej, lbls_rej, mask_valid_rej = [
+        _repeat_cv(t, cv_count) for t in
+        (feats_acc[..., model_vars], lbls_acc, mask_valid_acc,
+         feats_rej[..., model_vars], lbls_rej, mask_valid_rej)
+    ]
 
     # ── accepted split ────────────────────────────────────────────────────────
-    feats_acc = _repeat_cv(unb_feats[acc_flag], cv_count)
-    lbls_acc  = _repeat_cv(unb_lbls[acc_flag],  cv_count)
     N_acc     = lbls_acc.size(-1)
     effective_k = min(N_acc // min_per_fold, k_folds)
 
+    # [CV]
     feats_acc_cv, lbls_acc_cv, mask_acc_cv = k_fold_cv_normalized_split(
-        feats_acc, lbls_acc, rng=rng, k=effective_k
+        feats_acc, lbls_acc, mask_valid_acc, rng=rng, k=effective_k
     )
 
     # ── rejected split (same fold structure) ─────────────────────────────────
-    feats_rej = _repeat_cv(unb_feats[rej_flag], cv_count)
-    lbls_rej  = _repeat_cv(unb_lbls[rej_flag],  cv_count)
     feats_rej_cv, lbls_rej_cv, mask_rej_cv = k_fold_cv_normalized_split(
-        feats_rej, lbls_rej, rng=rng, k=effective_k
+        feats_rej, lbls_rej, mask_valid_rej, rng=rng, k=effective_k
     )
 
-    cat_dim = lbls_rej_cv.dim() - 1
+    cat_dim = lbls_rej_cv.dim() - 1 # from left to right feats, lbls and mask have the same
     train_feats, train_lbls, train_mask = [
         torch.cat([acc, rej], dim=cat_dim).contiguous()
         for acc, rej in zip(
@@ -663,7 +671,8 @@ def acceptance_loop(
     if stats is None:
         stats = defaultdict(list)
 
-    all_acc_vector_names = [th + '_' + m for m in METRIC_CATEGORIES for th in THRESHOLD_BASIS]
+    # Make sure it has the same order as the acceptance decision making is iterated through
+    all_acc_vector_names = [th + '_' + m for th in THRESHOLD_BASIS for m in METRIC_CATEGORIES]
 
     if alternative_accepted is None:
         was_called_from_resume = current_gen > 1
@@ -671,8 +680,8 @@ def acceptance_loop(
             raise AssertionError(
                 "The loop was resumed and the alternative accepts were not passed"
             )
-        credit_data_acc_name = all_acc_vector_names[0]
-        alternative_accepted = {an : credit_data.accepted.clone() for an in all_acc_vector_names[1:]}
+        credit_data_acc_name = all_acc_vector_names[-1]
+        alternative_accepted = {an : credit_data.accepted.clone() for an in all_acc_vector_names[:-1]}
     else:
         if not isinstance(alternative_accepted, dict):
             raise AssertionError("alternative_accepted should be a dictionary")
@@ -686,6 +695,8 @@ def acceptance_loop(
             )
         
         credit_data_acc_name = list(set_acc_vector_names-set_alternative_accepted_keys)[0]
+        if credit_data_acc_name != all_acc_vector_names[-1]:
+            raise AssertionError("credit data must contain the last acceptance option, otherwise the batched logic breaks")
         for acc_name, acc_vec in alternative_accepted.items():
             if acc_vec.shape != credit_data.accepted.shape:
                 raise AssertionError(
@@ -732,10 +743,11 @@ def acceptance_loop(
             all_cv_results = {}
             for m in METRIC_CATEGORIES:
                 if is_oracle_comparable:
+                    # Each tensor has the shape [CV, ..., K] (note: ... is [len(hidden_corr)] if isinstance(hidden_corr, Iterable) else [])
+                    orig_saved_acc_flag = credit_data.change_acceptance_flag(alternative_accepted["oracle_" + m])
                     cv_results = realistic_oracle_cv(
-                        unb_feats[..., model_vars],     # exclude hidden variable
-                        unb_lbls,
-                        acc_flag=alternative_accepted["oracle_" + m],
+                        credit_data,
+                        model_vars,
                         k_folds=K_FOLDS,
                         min_per_fold=MIN_PER_FOLD,
                         cv_count=CV_COUNT,
@@ -743,11 +755,20 @@ def acceptance_loop(
                         rng=data_generator.rng,
                         #dict_keys_prefix=m+'_'
                     )
+                    credit_data.change_acceptance_flag(orig_saved_acc_flag)
                 elif is_acc_based:
-                    acc_mask = acc_flag if credit_data_acc_name.endswith(m) else alternative_accepted["acc_based_" + m]
+                    is_acc_flags_saved_in_credit_data = credit_data_acc_name.endswith(m)
+                    if not is_acc_flags_saved_in_credit_data:
+                        orig_acc_flags_saved_in_data = credit_data.change_acceptance_flag(
+                            alternative_accepted["acc_based_" + m]
+                        )
+                    feats_acc, lbls_acc, mask_valid_acc, _ = credit_data.accepts(include_mask_valid=True)
+
+                    # each: [CV, ..., K]
                     cv_results = cross_validate(
-                        unb_feats[acc_mask][..., model_vars],  # exclude hidden variable
-                        unb_lbls[acc_mask],
+                        feats_acc[..., model_vars],  # exclude hidden variable
+                        lbls_acc,
+                        mask_valid_acc,
                         K_FOLDS,
                         MIN_PER_FOLD,
                         CV_COUNT,
@@ -755,10 +776,14 @@ def acceptance_loop(
                         rng=data_generator.rng,
                         #dict_keys_prefix=m+'_'
                     )
+                    if not is_acc_flags_saved_in_credit_data:
+                        credit_data.change_acceptance_flag(orig_acc_flags_saved_in_data)
                 else: #oracle_naive case
+                    unb_feats, unb_lbls = credit_data.unbiased_obs()
                     all_cv_results = cross_validate(
                         unb_feats[..., model_vars],     # exclude hidden variable
                         unb_lbls,
+                        torch.ones_like(unb_lbls, dtype=bool),
                         K_FOLDS,
                         MIN_PER_FOLD,
                         CV_COUNT,
@@ -784,46 +809,53 @@ def acceptance_loop(
 
         # ── 3. Accept decissions ────────────
         # ── 3.1. Generate new applicant batch ───────────────────────────────
-        feats_new, lbls_new, _ = data_generator.sample(sample_size)   # [S,F], [S]
+        feats_new, lbls_new, _ = data_generator.sample(sample_size)   # [..., S,F], [..., S]
 
         # ── 3.1b. MNAR forcing set ───────────────────────────────────────────
         # Applicants whose hidden-variable value is below the bias_percentage
         # quantile are unconditionally accepted (the MNAR mechanism). Through <
         # comparision bias_percentage = 0 generates a mask with all elements False
-        X_hidden = feats_new[:, var_to_hide]                          # [S]
-        mnar_force_accept = X_hidden < X_hidden.quantile(bias_percentage/2)  # [S] bool
-        mnar_force_reject = X_hidden > X_hidden.quantile(1 - bias_percentage/2)
+        X_hidden = feats_new[:, var_to_hide]                          # [..., S]
+        mnar_force_accept = X_hidden < X_hidden.quantile(bias_percentage/2)      # [..., S] bool
+        mnar_force_reject = X_hidden > X_hidden.quantile(1 - bias_percentage/2)  # [..., S] bool
 
         # ── 3.2. Save scores and accept decisions ───────────────────────────────
         scores: Dict[str, torch.Tensor] = {}
         accept_decisions: Dict[str, torch.Tensor] = {}
         for th in THRESHOLD_BASIS:
             clf = BatchedLogistic(
-                n_features=len(model_vars),   # F-1: hidden variable is excluded
-                batch_shape=torch.Size([]),
+                n_features=len(model_vars),      # F-1: hidden variable is excluded
+                batch_shape=lbls_new.shape[:-1],
                 device=data_generator.device,
                 dtype=data_generator.dtype,
             )
             if th=="oracle":
                 clf.fit(unb_feats[..., model_vars], unb_lbls)
-                current_scores = scores["oracle"] = clf.predict_proba(feats_new[..., model_vars])[..., 1]  # [S]
+                current_scores = scores["oracle"] = clf.predict_proba(feats_new[..., model_vars])[..., 1]  # [..., S]
                 perf_lbl = "unbiased_acc"
             for m in METRIC_CATEGORIES:
                 if th == "acc_based":
-                    past_acc_mask = acc_flag if credit_data_acc_name.endswith(m) else alternative_accepted[th + "_" + m]
-                    clf.fit(unb_feats[past_acc_mask][..., model_vars], unb_lbls[past_acc_mask])
-                    current_scores = scores[th + '_' + m] = clf.predict_proba(feats_new[..., model_vars])[..., 1]  # [S]
+                    is_acc_flags_saved_in_credit_data = credit_data_acc_name.endswith(m)
+                    if not is_acc_flags_saved_in_credit_data:
+                        orig_acc_flags_saved_in_data = credit_data.change_acceptance_flag(
+                            alternative_accepted["acc_based_" + m]
+                        )
+                    feats_acc, lbls_acc, mask_valid_acc, _ = credit_data.accepts(include_mask_valid=True)
+                    clf.fit(feats_acc[..., model_vars], lbls_acc, mask_valid_obs=mask_valid_acc)
+                    current_scores = scores[th + '_' + m] = clf.predict_proba(feats_new[..., model_vars])[..., 1]  # [..., S]
                     perf_lbl = "biased_acc"
+                    
+                    if not is_acc_flags_saved_in_credit_data:
+                        credit_data.change_acceptance_flag(orig_acc_flags_saved_in_data)
 
                 th_cat = th + '_' + m
-                cv_thresholds: torch.Tensor = stats[th_cat + "_thresholds"][-1] # [CV, k_folds]
-                cv_thr_means = cv_thresholds.nanmean(dim=-1, keepdim=True) # [CV, 1]
+                cv_thresholds: torch.Tensor = stats[th_cat + "_thresholds"][-1] # [CV, ..., k_folds]
+                cv_thr_means = cv_thresholds.nanmean(dim=-1, keepdim=True) # [CV, ..., 1]
                 # Mean over CV trials → [1, 1]  (pooled / most-stable)
-                pooled_thr = cv_thr_means.nanmean(dim=0, keepdim=True) # [1, 1]
+                pooled_thr = cv_thr_means.nanmean(dim=0, keepdim=True) # [1, ..., 1]
                 # Stack: rows 0…CV_COUNT-1 are per-trial, row CV_COUNT is pooled
-                thresholds = torch.cat([cv_thr_means, pooled_thr], dim=0)  # [M:= CV+1, 1]
-
-                current_accepts = current_scores.unsqueeze(0) < thresholds # [M, S]
+                thresholds = torch.cat([cv_thr_means, pooled_thr], dim=0)  # [M:= CV+1, ..., 1]
+                current_accepts = current_scores.unsqueeze(0) < thresholds # [M, ..., S]
 
                 # MNAR distortion: force-accept applicants with low hidden-variable
                 # values across all threshold variants simultaneously.
@@ -834,12 +866,13 @@ def acceptance_loop(
                 accept_decisions[perf_lbl + '_' + m] = current_accepts
                 if credit_data_acc_name == th_cat:
                     credit_data.add_gen(
-                        feats_new, lbls_new, accepted_new=current_accepts[-1] # [S]
+                        feats_new, lbls_new, accepted_new=current_accepts[-1] # [..., S]
                     )
                 else:
                     alternative_accepted[th_cat] = torch.cat(
-                        [alternative_accepted[th_cat], current_accepts[-1]],
-                        dim=0
+                        [alternative_accepted[th_cat],
+                         current_accepts[-1]], #[..., S]
+                        dim=-1
                     )
 
 
@@ -847,7 +880,7 @@ def acceptance_loop(
         # Expand labels for all (cv_count+1) threshold variants:
         #   rows 0…CV_COUNT-1 : per-cv-trial threshold mean
         #   row  CV_COUNT     : pooled mean (most stable estimate)
-        exp_lbls = lbls_new.unsqueeze(0).expand(CV_COUNT + 1, -1)  # [M, S]
+        exp_lbls = lbls_new.unsqueeze(0).expand(CV_COUNT + 1, *lbls_new.shape)  # [M, ..., S]
 
         # ── 4. Realised performance per (decision_type x method) ──────────
         # We track the variable that will be used for the actual acceptance
@@ -857,12 +890,16 @@ def acceptance_loop(
             th_is_oracle = th == "oracle"
             if th_is_oracle:
                 current_scores = scores["oracle"]
-                exp_scores = current_scores.unsqueeze(0).expand(CV_COUNT + 1, -1)  # [M, S]
             for perf in REAL_PERFORMANCE_TYPES:
                 for m in METRIC_CATEGORIES:
                     if th == "acc_based":
                         current_scores = scores[th + '_' + m]
-                        exp_scores = current_scores.unsqueeze(0).expand(CV_COUNT + 1, -1)  # [M, S]
+                    elif not th_is_oracle:
+                        raise NotImplementedError(
+                            "THRESHOLD_BASIS changed and the current threshold has "
+                            "no defined score basis"
+                        )
+                    exp_scores = current_scores.expand_as(exp_lbls)  # [M, ..., S]
 
                     if perf == "unbiased_future":
                         real_perf = _batched_evaluation(
@@ -879,6 +916,7 @@ def acceptance_loop(
                         if th_is_oracle: # As this case is independent from the metric.
                             break
                     else:
+                        #print(perf + '_' + m, exp_scores.shape, exp_lbls.shape, accept_decisions[perf + '_' + m].shape)
                         real_perf = _batched_evaluation(
                             exp_scores, exp_lbls, mask_cv=accept_decisions[perf + '_' + m],
                             #stats_to_calc=[m],
@@ -911,7 +949,7 @@ def acceptance_loop(
         times_needed.append(time.time() - begin_round)
         if gen_round_nr % report_every == 0:
             total_count = credit_data.count_all
-            defaults_count = credit_data.default_flag.sum().item()
+            defaults_count = credit_data.default_flag.sum(dim=-1)
             non_def_count = total_count-defaults_count
             print(
                 _timestamp(),
@@ -924,11 +962,8 @@ def acceptance_loop(
                 "Goods:", non_def_count
             )
             gen_rounds_left = num_gens - gen_round_nr
-            times_tensor = torch.tensor(times_needed, device=credit_data.device, dtype=torch.float32)
-            times_recorded_current = times_tensor.size(0)
-            counts_per_round = credit_data.counts_per_round()
-            cumsum_counts_per_round_total = counts_per_round["total"][-times_recorded_current:].cumsum(dim=0).to(times_tensor.dtype)
-
+            
+            times_tensor = credit_data.features.new_tensor(times_needed)
             avg_time = times_tensor.mean().item()
             
             print(
@@ -1098,17 +1133,29 @@ def run_cv_simulation(params: dict, device: torch.device, dtype: torch.dtype) ->
     # any data is generated.  (The full mod-F resolution happens inside
     # acceptance_loop, but we need a preliminary value here.)
     initial_seed = params["initial_seed"]
-    hidden_corr  = float(params.get("hidden_corr", 0.0))
+    hidden_corr  = params.get("hidden_corr", 0.0)
     var_to_hide  = int(params.get("var_to_hide", -1))
 
-    data_generator: CreditDataGenerator = mnar_default_dgp(
-        seed_credit_data_gen=initial_seed,
-        var_to_hide=var_to_hide,   # preliminary — mod-F applied inside acceptance_loop
-        hidden_corr=hidden_corr,
-        deterministic_weights_for_mixture_sampling=params.get("deterministic_weights", True),
-        device=device,
-        dtype=dtype,
-    )
+    if isinstance(hidden_corr, float):
+        data_generator: CreditDataGenerator = mnar_default_dgp(
+            seed_credit_data_gen=initial_seed,
+            var_to_hide=var_to_hide,   # preliminary — mod-F applied inside acceptance_loop
+            hidden_corr=hidden_corr,
+            deterministic_weights_for_mixture_sampling=params.get("deterministic_weights", True),
+            device=device,
+            dtype=dtype,
+        )
+    elif isinstance(hidden_corr, Iterable):
+        data_generator: CreditDataGenerator = joint_mnar_default_dgp(
+            seed_credit_data_gen=initial_seed,
+            var_to_hide=var_to_hide,   # preliminary — mod-F applied inside acceptance_loop
+            hidden_corrs=hidden_corr,
+            deterministic_weights_for_mixture_sampling=params.get("deterministic_weights", True),
+            device=device,
+            dtype=dtype
+        )
+    else:
+        raise TypeError("hidden_corr must be an iterable of floats or a float")
 
     print("Generating initial and holdout population")
     # Use top_percent=0.2 for the initial population rule (first-generation
