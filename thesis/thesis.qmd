@@ -33,7 +33,7 @@ import torch
 
 from berebasl.simulation.credit_data_simulation import CreditDataGenerator
 from helper_scripts.general import extract_all_sim_objs, extract_biases_and_corrs_from_dirnames
-from helper_scripts.sensitivity_analysis import extract_bayes_errors
+from helper_scripts.sensitivity_analysis import extract_bayes_errors, wrapper_bayes_errors_plot
 from helper_scripts.hypothesis_visualization import (
   plot_lines_and_mains,
   generate_line_collections_for_exp_real_plot,
