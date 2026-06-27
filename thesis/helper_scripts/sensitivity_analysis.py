@@ -1,16 +1,15 @@
-from typing import Dict, Iterable, Optional
+from math import sqrt
+
+from typing import Dict
+
+from matplotlib.gridspec import GridSpec
+import matplotlib as mpl
+from matplotlib import pyplot as plt
+from matplotlib.patches import Patch
 
 import torch
 
 from berebasl.simulation.credit_data_simulation import CreditDataGenerator, GaussianMixture
-
-from matplotlib import pyplot as plt
-from matplotlib.gridspec import GridSpec
-from matplotlib.patches import Patch
-
-import matplotlib as mpl
-from math import sqrt
-
 from experiments.acceptance_loop_cv_based_MNAR import joint_mnar_default_dgp, mnar_default_dgp
 
 def extract_bayes_errors(
@@ -44,7 +43,7 @@ def _dummy_default_dgp(dtype=torch.float32) -> CreditDataGenerator:
             hidden_corr=0,
             deterministic_weights_for_mixture_sampling=False,
             device='cpu',
-            dtype=torch.float32
+            dtype=dtype
         )
 
 def corr_space_grid_unconstrained(corr_space: torch.Tensor):
@@ -139,7 +138,8 @@ def calc_all_permissible_bayes_err(max_corrs: int, encoding_no_hidden_was_zero: 
     normalized_relative_errors[mask_valid_AB] = relative_bayes_error
 
     idxs_first_appearence_unique_corr_mh = torch.nn.functional.pad(mask_valid_AB.sum(dim=-1).cumsum(dim=-1)[:-1], pad=(1,0), value=0)
-    bayes_err_no_hidden_valids_per_corr = bayes_error_no_hidden_valids[idxs_first_appearence_unique_corr_mh]
+    # Need to flip to get it into the right order - corr_space was flipped as well on the coordinates of sigma_{m, 12}
+    bayes_err_no_hidden_valids_per_corr = bayes_error_no_hidden_valids[idxs_first_appearence_unique_corr_mh].flip(0)
 
     return normalized_relative_errors, corr_space, bayes_err_no_hidden_valids_per_corr
 
@@ -185,11 +185,14 @@ def heatmap_plot_relative_errors(cax: plt.Axes, ax: plt.Axes, ax_legend_extra_co
     # --- Colorbar axis (leftmost) ---
     cmap = build_cmap_for_normalized_relative_errors(normalized_relative_errors)
 
+    assert not torch.any(normalized_relative_errors > 1)
+
     im = ax.imshow(
         normalized_relative_errors.numpy(),
         cmap,
         norm=mpl.colors.Normalize(vmin=0, vmax=1, clip=False),
-        extent=[corr_space[0], corr_space[-1]]*2)
+        extent=[corr_space[0], corr_space[-1]]*2
+    )
 
     shift = 0.02
     corrs_lims_map = [-1 - shift, 1 + shift]
@@ -236,26 +239,64 @@ def heatmap_plot_relative_errors(cax: plt.Axes, ax: plt.Axes, ax_legend_extra_co
 
     cb.set_label("$P_e^*/P_e^m$")
 
-def plot_bayes_error_constrained_model(ax: plt.Axes, corr_space: torch.Tensor, bayes_err_no_hidden_valids_per_corr: torch.Tensor):
-    ax.plot(corr_space, bayes_err_no_hidden_valids_per_corr, c=mpl.colormaps["tab10"](0))
+def plot_bayes_error_constrained_model(
+        ax: plt.Axes,
+        corr_space: torch.Tensor,
+        bayes_err_no_hidden_valids_per_corr: torch.Tensor,
+        sigma_m12: float
+    ):
+    ax.plot(
+        corr_space,
+        bayes_err_no_hidden_valids_per_corr,
+        color=mpl.colormaps["tab10"](0),
+        label="$P^m_e$",
+        zorder=10
+    )
+    idx_corr_sigma_m12 = torch.abs(corr_space - sigma_m12).argmin().view(1)
+    ax.scatter(
+        corr_space[idx_corr_sigma_m12],
+        bayes_err_no_hidden_valids_per_corr[idx_corr_sigma_m12],
+        s=5,
+        color=mpl.colormaps["tab10"](1),
+        label="$P^m_e$ of Base sim.",
+        zorder = 10
+    )
+
+    ax.legend()
+
     ax.set_xlabel(r"$\sigma_{m,12}$")
     ax.set_ylabel(r"Error rate")
     ax.set_title("Bayes Error while ignoring $X_m$")
 
-def plot_bayes_error_comp_of_selected(ax: plt.Axes, corrs: torch.Tensor, bayes_errs_full: torch.Tensor, bayes_err_ignoring_var: float, sigma_mh: float):
-    ax.plot(corrs, bayes_errs_full, c=mpl.colormaps["tab10"](1), label="$P_e^*$")
+def plot_bayes_error_comp_of_selected(
+        ax: plt.Axes,
+        corrs: torch.Tensor,
+        bayes_errs_full: torch.Tensor,
+        bayes_err_ignoring_var: float,
+        sigma_mh: float,
+        sigma_m12: float
+    ):
     ax.axhline(
         y=bayes_err_ignoring_var,
         label="$P_e^m$",
         ls = "--",
-        c="k"
+        color="k",
+        zorder=10
     )
-    ax.set_xlabel("Correlation to hidden factor")
+    ax.plot(corrs, bayes_errs_full, color=mpl.colormaps["tab10"](2), label="$P_e^*$", zorder=20)
+    idx_corr_sigma_mh = torch.abs(corrs - sigma_mh).argmin().view(1)
+    ax.scatter(
+        corrs[idx_corr_sigma_mh], bayes_errs_full[idx_corr_sigma_mh], color=mpl.colormaps["tab10"](3), s=5,
+        label="$P_e^*$ of Base sim.",
+        zorder=30
+    )
+
+    ax.set_xlabel("$\\sigma_{mh}$")
     ax.set_ylabel("Error Rate")
-    ax.set_title(f"$P^m_e$ vs. $P_e^*$ with $\\sigma_{{m, 12}} = {sigma_mh}$")
+    ax.set_title(f"$P^m_e$ vs. $P_e^*$ with $\\sigma_{{m, 12}} = {sigma_m12}$")
     ax.legend()
 
-def wrapper_bayes_errors_plot(max_corrs: int, var_to_hide: int, sigma_mh: float):
+def wrapper_bayes_errors_plot(max_corrs: int, var_to_hide: int, vcov: torch.Tensor):
     normalized_relative_errors, corr_space, bayes_err_no_hidden_valids_per_corr = calc_all_permissible_bayes_err(
         max_corrs=max_corrs,
         encoding_no_hidden_was_zero=-1,
@@ -275,7 +316,20 @@ def wrapper_bayes_errors_plot(max_corrs: int, var_to_hide: int, sigma_mh: float)
         corr_space=corr_space
     )
 
-    plot_bayes_error_constrained_model(fig.add_subplot(gs[:, 2]), corr_space, bayes_err_no_hidden_valids_per_corr)
+    
+    F = vcov.size(-1)
+    non_to_hide = [f for f in range(1, F) if f!= (var_to_hide%F)][0]
+    sigma_mh = vcov[0, var_to_hide].item()
+    sigma_m12=vcov[0,non_to_hide].item()
 
-    plot_bayes_error_comp_of_selected(fig.add_subplot(gs[:, 3]), corrs, bayes_errs_full, bayes_err_ignoring_var, sigma_mh)
+    plot_bayes_error_constrained_model(fig.add_subplot(gs[:, 2]), corr_space, bayes_err_no_hidden_valids_per_corr, sigma_m12)
+
+    plot_bayes_error_comp_of_selected(
+        fig.add_subplot(gs[:, 3]),
+        corrs,
+        bayes_errs_full,
+        bayes_err_ignoring_var,
+        sigma_mh,
+        sigma_m12
+    )
     plt.show()
