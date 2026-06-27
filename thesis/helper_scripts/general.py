@@ -4,7 +4,28 @@ from typing import Any, Dict, Tuple
 
 import torch
 
-from berebasl.simulation.credit_data_simulation import CreditDataGenerator
+from berebasl.simulation.credit_data_simulation import CreditDataGenerator, GaussianMixture
+
+def slice_dgp_across_first_dim(dgp: CreditDataGenerator, i: int) -> CreditDataGenerator:
+    kwargs_for_new = {
+        vn : getattr(dgp, vn) for vn in [
+                "prob_bad_given_no_shock",
+                "prob_idiosyncratic_shock",
+                "prob_bad_given_shock",
+                "feats_noise_var"
+            ]
+    }
+    mixture = dgp.good_mixture
+    for mix_name in ("bad_mixture", "good_mixture"):
+        mixture: GaussianMixture = getattr(dgp, mix_name)
+        mu, cov_chol, weights = [t[i] if t is not None else t for t in mixture._normalized_params()]
+        if weights is None:
+            mu.squeeze_(0)
+            cov_chol.squeeze_(0)
+
+        kwargs_for_new[mix_name] = GaussianMixture(mean=mu, cov=cov_chol @ cov_chol.mT, weights=weights)
+
+    return CreditDataGenerator(**kwargs_for_new)
 
 def extract_objs_from_sim_dir(grid_path: str, sim_dir: str, device: torch.device = torch.device('cpu')):
     sim_results_path = os.path.join(grid_path, sim_dir, 'simulation_results_cv_mnar.pt')
