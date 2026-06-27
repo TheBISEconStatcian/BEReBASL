@@ -32,35 +32,30 @@ from IPython.display import display, Markdown
 import torch
 
 from berebasl.simulation.credit_data_simulation import CreditDataGenerator
-from thesis.helper_scripts.general import extract_all_sim_objs, extract_biases_and_corrs_from_dirnames
-from thesis.helper_scripts.sensitivity_analysis import extract_bayes_errors, wrapper_bayes_errors_plot
-from thesis.helper_scripts.hypothesis_visualization import (
-  plot_lines_and_mains,
-  generate_line_collections_for_exp_real_plot,
-  generate_lines_for_diffs,
-  gen_lines_from_diff_dict,
-  construct_all_diffs_tensor,
-  get_areas,
-  normalize_areas,
-  plot_heatmap_grid,
-  wrapper_plot_grid_of_diffs_between_logit_and_acc,
-  plot_acc_rates_per_round
-)
-from thesis.helper_scripts.dgp_plotting import (
-  extract_dgp_info_for_boundaries,
-  plot3d_with_perf_bayes_boundary,
-  plot_pairwise_dgp_with_perf_bayes_boundaries
+from thesis.helper_scripts.general import (
+  extract_biases_from_dirnames,
+  extract_all_sim_objs_vec,
+  slice_dgp_across_first_dim
 )
 
-grid_path = '../berebasl/data/simulations/mnar_grid_hyp_testing'
+grid_path = '../berebasl/data/simulations/mnar_grid_hyp_vec'
+grid_biases = extract_biases_from_dirnames(grid_path)
 
-grid_biases, grid_corrs = extract_biases_and_corrs_from_dirnames(grid_path)
-grid_biases = dict(sorted(grid_biases.items(), key=lambda x: x[1]))
-grid_corrs = dict(sorted(grid_corrs.items(), key=lambda x: x[1]))
-all_sim_objs = extract_all_sim_objs(grid_path, grid_biases, grid_corrs)
+all_sim_objs = extract_all_sim_objs_vec(grid_path, grid_biases)
+all_corrs = torch.stack(
+  [sim_objs['corr_to_hidden'] for sim_objs in all_sim_objs.values()],
+  dim=0
+)
+assert torch.all(all_corrs[[0]] == all_corrs)
 
-base_sim_objs = all_sim_objs['0_0']['0_0'] # 0 bias, 0 correlation
-dgp_base: CreditDataGenerator = base_sim_objs["data_generator"]
+base_sim = all_sim_objs['0_0']
+wished_corr = -0.4
+idx_wished_cor = torch.where(all_corrs[0] == wished_corr)[0].item()
+
+base_dgp_unsliced = base_sim["data_generator"]
+dgp_base = slice_dgp_across_first_dim(
+  base_sim["data_generator"], idx_wished_cor
+)
 ```
 
 ```{python}
