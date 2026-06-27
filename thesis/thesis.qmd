@@ -32,9 +32,9 @@ from IPython.display import display, Markdown
 import torch
 
 from berebasl.simulation.credit_data_simulation import CreditDataGenerator
-from helper_scripts.general import extract_all_sim_objs, extract_biases_and_corrs_from_dirnames
-from helper_scripts.sensitivity_analysis import extract_bayes_errors, wrapper_bayes_errors_plot
-from helper_scripts.hypothesis_visualization import (
+from thesis.helper_scripts.general import extract_all_sim_objs, extract_biases_and_corrs_from_dirnames
+from thesis.helper_scripts.sensitivity_analysis import extract_bayes_errors, wrapper_bayes_errors_plot
+from thesis.helper_scripts.hypothesis_visualization import (
   plot_lines_and_mains,
   generate_line_collections_for_exp_real_plot,
   generate_lines_for_diffs,
@@ -46,7 +46,7 @@ from helper_scripts.hypothesis_visualization import (
   wrapper_plot_grid_of_diffs_between_logit_and_acc,
   plot_acc_rates_per_round
 )
-from helper_scripts.dgp_plotting import (
+from thesis.helper_scripts.dgp_plotting import (
   extract_dgp_info_for_boundaries,
   plot3d_with_perf_bayes_boundary,
   plot_pairwise_dgp_with_perf_bayes_boundaries
