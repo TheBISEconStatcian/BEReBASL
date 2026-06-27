@@ -72,6 +72,67 @@ def extract_objs_from_sim_dir(grid_path: str, sim_dir: str, device: torch.device
             "var_to_hide" : init_objs["configs"]["var_to_hide"]
         }
 
+def extract_objs_from_sim_dir_vec(
+        grid_path: str,
+        sim_dir: str,
+        bias_prop: float,
+        device: torch.device = torch.device('cpu')
+    ):
+    sim_results_path = os.path.join(grid_path, sim_dir, 'simulation_results_cv_mnar.pt')
+    init_objs_path = os.path.join(grid_path, sim_dir, 'initial_simulation_objects_cv_mnar.pt')
+    perf_bayes_stats_path = os.path.join(grid_path, sim_dir, "stats_perf_bayes.pt")
+    perf_bayes_missing_stats_path = os.path.join(grid_path, sim_dir, "stats_perf_bayes_missing.pt")
+
+    assert all([os.path.exists(p) for p in (sim_results_path, init_objs_path, perf_bayes_stats_path)])
+
+    sim_results, init_objs, perf_bayes_stats, perf_bayes_missing_stats = [
+        torch.load(p, map_location='cpu', weights_only=False)
+        for p in (sim_results_path, init_objs_path, perf_bayes_stats_path, perf_bayes_missing_stats_path)
+    ]
+
+    data_generator: CreditDataGenerator = init_objs['data_generator'].to(device)
+    stats = sim_results['stats']
+    ## Extract the sample sizes as a tensor
+    sample_sizes = torch.tensor(stats['sample_size'], device=device)
+    ## stack the present lists of tensors
+    stats = {
+        k : (torch.stack(v) if isinstance(v[0], torch.Tensor) else torch.tensor(v)).to(device) 
+        for k, v in stats.items()
+    }
+    perf_bayes_stats, perf_bayes_missing_stats = [{k: v.clone() for k, v in pbs.items()} for pbs in (perf_bayes_stats, perf_bayes_missing_stats)]
+
+
+    return {
+            "Description" : f"$\\mathbb{{P}}(bias) = {bias_prop}$",
+            "corr_to_hidden" : data_generator.bad_mixture.cov[:, 0, init_objs["configs"]["var_to_hide"]],
+            "bias_prop" : bias_prop,
+            "stats" : stats,
+            "perf_bayes_stats" : perf_bayes_stats,
+            "perf_bayes_missing_stats" : perf_bayes_missing_stats,
+            "alternative_accepted" : sim_results["alternative_accepted"],
+            "sample_sizes" : sample_sizes,
+            "credit_data" : sim_results["credit_data"].to(device),
+            "data_generator" : data_generator,
+            "k_folds" : init_objs["configs"]["k_folds"],
+            "cv_count" : init_objs["configs"]["cv_count"],
+            "var_to_hide" : init_objs["configs"]["var_to_hide"]
+        }
+
+def extract_all_sim_objs_vec(
+        grid_path,
+        biases: Dict[str, float],
+        device: torch.device = torch.device('cpu')
+        ) -> Dict[str, Dict[str, Any]]:
+    all_sim_objs = {}
+    for b_s, b_f in biases.items():
+        all_sim_objs[b_s] = extract_objs_from_sim_dir_vec(
+            grid_path,
+            sim_dir='bias_' + b_s,
+            bias_prop=b_f,
+            device=device
+        )
+    return all_sim_objs
+
 def extract_all_sim_objs(
         grid_path,
         biases: Dict[str, float],
@@ -117,3 +178,17 @@ def extract_biases_and_corrs_from_dirnames(dir_path: str) -> Tuple[Dict[str, flo
             corrs[c] = float(c.replace('_', '.'))
     
     return biases, corrs
+
+def extract_biases_from_dirnames(dir_path: str) -> Dict[str, float]:
+    biases = {}
+    
+    bias_ider = "bias_"
+    len_bias = len(bias_ider)
+    
+    for sim_name in os.listdir(dir_path):            
+        b = sim_name[len_bias:]
+        biases[b] = float(b.replace('_', '.'))
+
+    biases = dict(sorted(biases.items(), key=lambda x: x[1]))
+    
+    return biases
