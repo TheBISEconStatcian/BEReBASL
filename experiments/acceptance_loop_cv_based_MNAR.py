@@ -195,7 +195,8 @@ def mnar_default_dgp(
     hidden_corr: float,
     deterministic_weights_for_mixture_sampling: bool = True,
     device: torch.device = None,
-    dtype: torch.dtype = None
+    dtype: torch.dtype = None,
+    sigma_m12 : float = 0.2
 ) -> CreditDataGenerator:
     """
     Thin wrapper around :func:`default_dgp` that additionally adjusts the DGP
@@ -215,9 +216,9 @@ def mnar_default_dgp(
     """
     cov_bad = torch.tensor(
                 [
-                    [1.0,   0.2, hidden_corr], 
-                    [0.2,   1.0, hidden_corr], 
-                    [hidden_corr, hidden_corr,  1.0]
+                    [1.0,           sigma_m12, hidden_corr], 
+                    [sigma_m12,           1.0, hidden_corr], 
+                    [hidden_corr, hidden_corr,         1.0]
                 ], 
                 dtype=dtype, device=device
             )
