@@ -19,7 +19,7 @@ A close bookkeeping of the usage can be seen on [GitHub](https://github.com/TheB
 
 ## Mathematical derivations/proofs
 
-### Set of positive definite variance covariance matrices for the simulation
+### Set of positive definite variance covariance matrices for the simulation {#sec-set-pos-definite-vcovs}
 
 As stated in @sec-app-population-simulation, the common covariance matrix $\Sigma$ has the general shape (for the 3 variables case)
 
@@ -240,7 +240,7 @@ $$
 (\mu_b - \mu_g)^\top \Sigma^{-1} (x - \bar{\mu})  = \log c
 $${#eq-decision-boundary-equal-covs}
 
-#### Bayes error rate
+#### Bayes error rate {#sec-derivation-bayes-rate}
 
 A perfect Bayes classifier considering the idiosyncratic shock as defined in 
 @eq-pd-with-shock-perf-bayes has an analytical solution for the Bayes error.
@@ -288,7 +288,7 @@ E_B &=
     \pi_b \Phi\left(-\frac{1}{2}\delta + \frac{1}{\delta} \log c\right) +
     (1-\pi_b) \Phi\left(-\frac{1}{2}\delta - \frac{1}{\delta} \log c\right)
 \end{aligned}
-$$
+$${#eq-bayes-error-rate-formula}
 
 ### A possible route towards a formal justification of surprise as a valid signal
 
