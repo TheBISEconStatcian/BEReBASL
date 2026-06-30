@@ -121,17 +121,19 @@ def gather_all_acc_flags(sim_objs) -> Dict[str, torch.Tensor]:
 
     return acc_flags
 
-def get_acc_defaults_counts_per_round(sim_objs) -> Dict[str, torch.Tensor]:
+def get_acc_defaults_per_round(sim_objs) -> Dict[str, torch.Tensor]:
     acc_flags = gather_all_acc_flags(sim_objs)
     credit_data: CreditData = sim_objs["credit_data"]
 
-    rounds = credit_data.gen_round
+    rounds = credit_data.gen_round.expand_as(credit_data.accepted)
     G = credit_data.last_gen_round + 1 # Count rounds
+
+    new_zeros_shape = credit_data.accepted.shape[:-1] + (G,)
 
     boolean_def_flag = credit_data.default_flag.to(bool)
 
     return {
-        k : v.new_zeros((G,), dtype=torch.int32).scatter_add_(
+        k : v.new_zeros(new_zeros_shape, dtype=torch.int32).scatter_add_(
             dim=-1,
             index=rounds,
             src=(v & boolean_def_flag).to(torch.int32)
@@ -204,7 +206,7 @@ def generate_line_collections_for_exp_real_plot(
     alpha_dict_real = {3: 0.1, 2: 0.6, 1 : 0.8}
 
     mask_no_bads_among_acc = {
-        k : v == 0 for k, v in get_acc_defaults_counts_per_round(sim_objs).items()
+        k : v == 0 for k, v in get_acc_defaults_per_round(sim_objs).items()
     }
 
     stats = sim_objs["stats"]
@@ -467,9 +469,138 @@ def moving_average_with_nans(x: torch.Tensor, W: int, dim: int = -1, with_tails:
     return ma.movedim(-1, dim)
 
 def calc_diffs(exp: torch.Tensor, real: torch.Tensor) -> torch.Tensor:
-
     diff_real = real - exp.mean(dim=(-1, -2))
     return diff_real
+
+def get_acc_defaults_per_round_vec(sim_objs) -> Dict[str, torch.Tensor]:
+    acc_flags = gather_all_acc_flags(sim_objs)
+    credit_data: CreditData = sim_objs["credit_data"]
+
+    rounds = credit_data.gen_round.expand_as(credit_data.accepted)
+    G = credit_data.last_gen_round + 1 # Count rounds
+
+    new_zeros_shape = credit_data.accepted.shape[:-1] + (G,)
+    
+
+    boolean_def_flag = credit_data.default_flag.to(bool)
+
+    return {
+        k : v.new_zeros(new_zeros_shape, dtype=torch.int32).scatter_add_(
+            dim=-1,
+            index=rounds,
+            src=(v & boolean_def_flag).to(torch.int32)
+        )
+        for k, v in acc_flags.items()
+    }
+
+def generate_lines_for_diffs_vec(
+        sim_objs: Dict[str, torch.Tensor],
+        make_abs: bool = False,
+        W: Optional[int] = None
+):
+    add_ma = W is not None
+    if add_ma:
+        W = int(W)
+
+    Co = sim_objs['corr_to_hidden'].size(0)
+
+    stats = sim_objs["stats"]
+
+    bayes_stats = {
+        "perf_bayes" : sim_objs["perf_bayes_stats"],
+        "restricted_bayes" : sim_objs["perf_bayes_missing_stats"]
+    }
+    bayes_stats_names = list(bayes_stats.keys())
+
+    exp_to_real_diffs_complete = {
+        "sample_sizes" : sim_objs["sample_sizes"],
+        "diff_data" : {}
+    }
+
+    mask_no_bads_among_acc = {
+        k : v == 0 for k, v in get_acc_defaults_per_round_vec(sim_objs).items()
+    }
+    
+    exp_to_real_diffs = exp_to_real_diffs_complete["diff_data"]
+
+    for exp in EXPECTATION_TYPES:
+        for m in METRIC_CATEGORIES:
+            current_lbl = exp + '_' + m
+            exp_to_real_diffs[current_lbl] = {
+                c : {
+                    "diffs" : None,
+                    "ma_diffs" : None
+                }
+                for c in [bayes_stats_names[0], "logit", bayes_stats_names[1]]
+            }
+
+            # 1. CV x K lines - plot all cv lines of the expectation
+            exp_lbl = exp+'_'+m+'_stats'
+
+            th_is_oracle = exp.startswith("oracle")
+            th = "oracle" if th_is_oracle else exp
+            assert th in THRESHOLD_BASIS, "Threshold logic changed"
+
+            for perf in REAL_PERFORMANCE_TYPES:
+                perf_is_unb_future = perf=="unbiased_future"
+                should_add = False
+                if exp == 'acc_based':
+                    should_add = perf == "biased_acc"
+                elif exp == 'oracle_naive':
+                    should_add = perf == "unbiased_future"
+                elif exp=='oracle_comparable':
+                    should_add = perf == 'unbiased_acc'
+                
+                if perf_is_unb_future:
+                    real_lbl_stats = perf+ '_' + th
+                    if not th_is_oracle:
+                        # If not oracle, the available history also depend on the basis
+                        # of the threshold metric and can/should generate different
+                        # scores which of course **do** affect the realized performance
+                        real_lbl_stats += "_" + m # Make sure based on same metric for acc-based
+                    real_lbl_stats += '_real_' + m
+                    realized_logit = stats[real_lbl_stats].T # [Co, gen]
+                    realized_bayes = {
+                        bn : (
+                            b_s[real_lbl_stats][:, 1:]
+                            if b_s[real_lbl_stats].size(0) == Co else
+                            b_s[real_lbl_stats][::2, 1:]
+                        ) # [Co, gen]
+                        for bn, b_s in bayes_stats.items()
+                    }
+                else:
+                    # This branch is evaluation on accepts, either biased or unbiased
+                    # therefore they are also dependent on the metric used as basis
+                    # for the decision and it must be considered in the thresholding
+                    # calculation - which was done -. `th + "_" + m` makes sure we
+                    # get the realized performance on the right accepts
+                    real_lbl_stats = perf+ '_' + th + "_" + m + '_real_' + m
+                    mask_make_nan = mask_no_bads_among_acc[th+'_'+m][..., 1:] # [Co, Gen]
+                    realized_logit = stats[real_lbl_stats][:, -1].T.masked_fill(mask_make_nan, float('nan'))  # [Co, Gen]
+                    realized_bayes = {
+                        bn : (
+                            b_s[real_lbl_stats][:, 1:]
+                            if b_s[real_lbl_stats].size(0) == Co else
+                            b_s[real_lbl_stats][::2, 1:]
+                        ).masked_fill(mask_make_nan, float('nan'))
+                        for bn, b_s in bayes_stats.items()
+                    }
+
+                if should_add:
+                    for expectation, realization, c in (
+                        [(stats[exp_lbl].movedim(-2, 0), realized_logit, "logit")] +
+                        [(bayes_stats[bn][exp_lbl][:, 1:], realized_bayes[bn], bn) for bn in bayes_stats.keys()]
+                    ):
+                        exp_to_real_diffs[current_lbl][c]["diffs"] = calc_diffs(expectation, realization)
+                        if make_abs:
+                            exp_to_real_diffs[current_lbl][c]["diffs"].abs_()
+
+                        if add_ma:
+                            exp_to_real_diffs[current_lbl][c]["ma_diffs"] = moving_average_with_nans(
+                                exp_to_real_diffs[current_lbl][c]["diffs"], W, dim=-1, with_tails=True
+                            )
+
+    return exp_to_real_diffs_complete
 
 
 def generate_lines_for_diffs(
@@ -483,8 +614,6 @@ def generate_lines_for_diffs(
     if add_ma:
         W = int(W)
 
-    
-    only_related_exp: bool = True
     stats = sim_objs["stats"]
     
     bayes_stats_lbl = "perf_bayes_"
@@ -499,7 +628,7 @@ def generate_lines_for_diffs(
     }
 
     mask_no_bads_among_acc = {
-        k : v == 0 for k, v in get_acc_defaults_counts_per_round(sim_objs).items()
+        k : v == 0 for k, v in get_acc_defaults_per_round(sim_objs).items()
     }
     exp_to_real_diffs = exp_to_real_diffs_complete["diff_data"]
 
@@ -535,7 +664,6 @@ def generate_lines_for_diffs(
                     should_add = perf == "unbiased_future"
                 elif exp=='oracle_comparable':
                     should_add = perf == 'unbiased_acc'
-
                 
                 if perf_is_unb_future:
                     real_lbl_stats = perf+ '_' + th
@@ -584,8 +712,18 @@ def gen_lines_from_diff_dict(exp_to_real_diffs):
     _, _, colors = linetypes_labels_and_colors_for_exp_real_plot(
         only_related_exp=True
     )
-    labels_linetypes = {"logit" : "Logit", "bayes" : "Perfect Bayes"}
-    colors_for_diffs = {"logit" : colors["exp"], "bayes" : colors["exp_bayes"]}
+    labels_linetypes = {
+        "logit" : "Logit",
+        "bayes" : "Perfect Bayes",
+        'perf_bayes' : "Unrestricted Bayes",
+        'restricted_bayes' : "Restricted Bayes"
+    }
+    colors_for_diffs = {
+        "logit" : colors["exp"],
+        "bayes" : colors["exp_bayes"],
+        "perf_bayes" : colors["exp_bayes"],
+        "restricted_bayes" : colors["real_bayes"]
+    }
 
     alpha_dict_real = {3: 0.1, 2: 0.3, 1 : 0.8}
 
@@ -600,7 +738,7 @@ def gen_lines_from_diff_dict(exp_to_real_diffs):
                 "mains" : []
         }
 
-        for model in ["logit", "bayes"]:
+        for model in diff_data.keys():
             if diff_data[model]["ma_diffs"] is None:
                 _, _, main_real = gen_lines_colors_and_main(
                     stat=diff_data[model]["diffs"],
@@ -862,6 +1000,7 @@ def plot_heatmap_grid(
 
 def plot_heatmap_grid_multiD(
     data: torch.Tensor,
+    mask_set_point: torch.Tensor,
     metric_categories: list,
     expectation_types: list,
     biases: Dict[str, float],
@@ -906,6 +1045,7 @@ def plot_heatmap_grid_multiD(
 
     fig = plt.figure(figsize=(5 * E_len, 4 * M_len + 0.5))
     D = data.shape[-1]
+    print(D)
 
     d_lbls_is_not_none = d_lbls is not None
     if d_lbls_is_not_none:
@@ -966,7 +1106,7 @@ def plot_heatmap_grid_multiD(
 
                         ax.add_patch(rect)
 
-                        if value < 0:
+                        if mask_set_point[i, j, e_idx, m_idx, d]:
                             ax.plot(
                                 j - 0.5 + (d + 0.5) * width,
                                 i,
@@ -1046,6 +1186,139 @@ def plot_heatmap_grid_multiD(
 
     plt.show()
 
+
+def construct_all_diffs_tensor_vec(
+    all_diffs,
+    biases: Dict[str, float],
+    expectation_types: list,
+    metric_categories: list,
+    diff_types: list,
+    debug: bool = False,
+) -> Tuple[torch.Tensor, int, int, int, int, int]:
+
+    all_diffs_list = []
+    for b_s in biases.keys():
+        diff_data_b = all_diffs[b_s]["diff_data"]
+        for e in expectation_types:
+            for m in metric_categories:
+                case_lbl = e + '_' + m
+                diff_data_current = diff_data_b[case_lbl]
+                classifs = list(diff_data_current.keys())
+                for cl in classifs:
+                    for dt in diff_types:
+                        all_diffs_list.append(diff_data_current[cl][dt])
+
+    B = len(biases)
+    E = len(expectation_types)
+    M = len(metric_categories)
+    Cl = len(classifs)
+    D = len(diff_types)
+
+    sample_sizes = next(all_diffs.values().__iter__())["sample_sizes"]
+    N = sample_sizes.size(0)
+
+    # Stack
+    all_diffs_ten = torch.stack(all_diffs_list, dim=0)
+    Co = all_diffs_ten.size(1)
+
+    # Reshape + move Co axis
+    all_diffs_ten = all_diffs_ten.reshape(B, E, M, Cl, D, Co, N)
+    all_diffs_ten = all_diffs_ten.movedim(-2, 1)  # [B, Co, E, M, Cl, D, N]
+
+    # ---------------------------------------------------------
+    # DEBUG MODE
+    # ---------------------------------------------------------
+    if debug:
+        print("DEBUG MODE ENABLED — verifying ordering and equality")
+
+        # Check every index
+        flat_idx = 0
+        for b in range(B):
+            for e in range(E):
+                for m in range(M):
+                    for cl in range(Cl):
+                        for dt in range(D):
+
+                            # Check equality
+                            ok = torch.allclose(all_diffs_list[flat_idx], all_diffs_ten[b, :, e, m, cl, dt], rtol=0, atol=0, equal_nan=True)
+                            
+
+                            print(
+                                f"[b={b}, e={e}, m={m}, cl={cl}, dt={dt}] "
+                                f"flat_idx={flat_idx} → equal={ok}"
+                            )
+
+                            if not ok:
+                                raise ValueError(
+                                    f"Mismatch at index "
+                                    f"(b={b}, e={e}, m={m}, cl={cl}, dt={dt})"
+                                )
+
+                            flat_idx += 1
+
+        print("All debug checks passed — ordering and data integrity verified.")
+
+    return all_diffs_ten, sample_sizes, B, Co, E, M, Cl, D
+
+def wrapper_plot_grid_of_diffs_between_logit_and_acc_vec(all_diffs, grid_biases, grid_corrs):
+    vals_classifs = list(
+        all_diffs.values().__iter__().__next__()["diff_data"].values().__iter__().__next__().keys()
+    )
+    classif_meaning = {
+        "logit" : "Logit",
+        "bayes" : "Perfect Bayes",
+        'perf_bayes' : "Unrestricted Bayes",
+        'restricted_bayes' : "Restricted Bayes"
+    }
+    diff_types = ["diffs"]
+    # Construct all_diffs tensor
+    ## [B, Co, E, M, Cl, D, N], [N]
+    all_diffs_new, sample_sizes, B, Co, E, M, Cl, D = construct_all_diffs_tensor_vec(
+        all_diffs,
+        biases=grid_biases,
+        expectation_types=EXPECTATION_TYPES,
+        metric_categories=METRIC_CATEGORIES,
+        diff_types=diff_types
+    )
+
+
+    # Get areas
+    idx_abs_diffs = 0
+    print(all_diffs_new.shape)
+    normed_areas = all_diffs_new[..., idx_abs_diffs, :].nanmean(dim=-1) # [B, Co, E, M, Cl]
+
+    idx_logit = 1
+    normed_areas_logit = normed_areas[..., idx_logit]
+    mask_is_smaller_than_logit = normed_areas_logit.unsqueeze(-1) < normed_areas
+
+
+    def custom_title_mapping(e_type: str, m_cat: str) -> str:
+        e_type_map = {
+            "acc_based" : "Accepts based",
+            "oracle_naive" : "Oracle naive",
+            "oracle_comparable" : "Oracle comparable"
+        }
+        m_cat_mapper = {
+            "roc" : "AUROC",
+            "ks" : "KS"
+        }
+        return f'{e_type_map[e_type]} ({m_cat_mapper[m_cat]})'
+
+    plot_heatmap_grid_multiD(
+        data=normed_areas,
+        mask_set_point=mask_is_smaller_than_logit,
+        metric_categories=METRIC_CATEGORIES,
+        expectation_types=EXPECTATION_TYPES,
+        biases=grid_biases,
+        corrs=grid_corrs,
+        cmap="RdBu_r",
+        suptitle="",
+        title_bold=True,
+        cbar_label="Logit - Bayes\n(Normalized Area)",
+        title_mapping=custom_title_mapping,
+        d_lbls=[classif_meaning[c] for c in vals_classifs]
+    )
+
 def wrapper_plot_grid_of_diffs_between_logit_and_acc(all_sim_objs, grid_biases, grid_corrs, use_bayes_with_missing: bool):
     diff_types = ["diffs", "ma_diffs"]
     # Construct all_diffs tensor
@@ -1085,6 +1358,7 @@ def wrapper_plot_grid_of_diffs_between_logit_and_acc(all_sim_objs, grid_biases, 
 
     plot_heatmap_grid_multiD(
         data=logit_area_minus_bayes_normed,
+        mask_set_point=logit_area_minus_bayes_normed <0,
         metric_categories=METRIC_CATEGORIES,
         expectation_types=EXPECTATION_TYPES,
         biases=grid_biases,

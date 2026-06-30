@@ -35,27 +35,23 @@ from berebasl.simulation.credit_data_simulation import CreditDataGenerator
 from thesis.helper_scripts.general import (
   extract_biases_from_dirnames,
   extract_all_sim_objs_vec,
-  slice_dgp_across_first_dim
+  slice_vec_sim
 )
 
 grid_path = '../berebasl/data/simulations/mnar_grid_hyp_vec'
 grid_biases = extract_biases_from_dirnames(grid_path)
 
 all_sim_objs = extract_all_sim_objs_vec(grid_path, grid_biases)
-all_corrs = torch.stack(
-  [sim_objs['corr_to_hidden'] for sim_objs in all_sim_objs.values()],
-  dim=0
-)
+all_corrs = torch.stack([sim_objs['corr_to_hidden'] for sim_objs in all_sim_objs.values()], dim=0)
 assert torch.all(all_corrs[[0]] == all_corrs)
 
-base_sim = all_sim_objs['0_0']
+base_sim_bias = '0_0'
+base_sim = all_sim_objs[base_sim_bias]
 wished_corr = -0.4
-idx_wished_cor = torch.where(all_corrs[0] == wished_corr)[0].item()
+base_sim_objs = slice_vec_sim(base_sim, wished_corr)
 
 base_dgp_unsliced = base_sim["data_generator"]
-dgp_base = slice_dgp_across_first_dim(
-  base_sim["data_generator"], idx_wished_cor
-)
+dgp_base = base_sim_objs["data_generator"]
 ```
 
 ```{python}

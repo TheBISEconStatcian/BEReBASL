@@ -243,6 +243,10 @@ and the unconditional probability of default ($\pi_b$).
 ```{python}
 #| label: fig-3d-base-dgp
 #| fig-cap: "Representation of joint distribution $(Y, X)$"
+from thesis.helper_scripts.dgp_plotting import (
+    extract_dgp_info_for_boundaries,
+    plot3d_with_perf_bayes_boundary
+)
 dgp_info_for_boundaries = extract_dgp_info_for_boundaries(dgp_base)
 plot3d_with_perf_bayes_boundary(dgp_base, dgp_info_for_boundaries["W"], dgp_info_for_boundaries["bias"])
 ```
@@ -274,6 +278,7 @@ opposite effect.
 ```{python}
 #| label: fig-pairwise-base-dgp
 #| fig-cap: "Pairwise covariates component representation of $Y, X$"
+from thesis.helper_scripts.dgp_plotting import plot_pairwise_dgp_with_perf_bayes_boundaries
 plot_pairwise_dgp_with_perf_bayes_boundaries(dgp_base, **dgp_info_for_boundaries)
 ```
 

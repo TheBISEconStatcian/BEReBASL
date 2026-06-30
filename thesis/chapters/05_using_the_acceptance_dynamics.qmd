@@ -103,6 +103,16 @@ Lets see
 ```{python}
 #| label: fig-expectation-vs-observed-performance
 #| fig-cap: "Performance on the expectation samples and realized samples"
+from thesis.helper_scripts.hypothesis_visualization import (
+    plot_lines_and_mains,
+    generate_line_collections_for_exp_real_plot,
+    generate_lines_for_diffs,
+    gen_lines_from_diff_dict,
+    wrapper_plot_grid_of_diffs_between_logit_and_acc,
+    plot_acc_rates_per_round,
+    generate_lines_for_diffs_vec,
+    wrapper_plot_grid_of_diffs_between_logit_and_acc_vec
+)
 use_bayes_with_missing: bool = True
 plot_lines_and_mains(
     generate_line_collections_for_exp_real_plot(base_sim_objs, use_bayes_with_missing=use_bayes_with_missing),
@@ -113,9 +123,22 @@ plot_lines_and_mains(
 ```
 
 ```{python}
-#| label: fig-difference-between-exp-and-obseved-performance
+#| label: fig-abs-difference-between-exp-and-obseved-performance
 #| fig-cap: "Absolute difference between the performance on the expectation samples and realized samples $(W_{MA}=5)$"
-exp_to_real_diffs_base = generate_lines_for_diffs(base_sim_objs, make_abs=True, W=5, use_bayes_with_missing=use_bayes_with_missing)
+
+all_diffs = {b : generate_lines_for_diffs_vec(sim, make_abs=True, W=5) for b, sim in all_sim_objs.items()}
+exp_to_real_diffs_base = all_diffs[base_sim_bias]
+idx_wished_cor = torch.where(base_sim['corr_to_hidden'] == wished_corr)[0].item()
+exp_to_real_diffs_base["diffs"] = {
+    lbl : {
+        c : {
+            d_type : diff if diff is None else diff[idx_wished_cor]
+            for d_type, diff in c_diffs.items()
+        }
+        for c, c_diffs in lbs_diff_data.items()
+    }
+    for lbl, lbs_diff_data in exp_to_real_diffs_base["diff_data"].items()
+}
 
 plot_lines_and_mains(
     gen_lines_from_diff_dict(exp_to_real_diffs_base),
@@ -130,8 +153,43 @@ plot_lines_and_mains(
 ```{python}
 #| label: fig-areas-diff-logit-in-grid
 #| fig-cap: "Absolute difference between the performance on the expectation samples and realized samples $(W_{MA}=5)$"
-wrapper_plot_grid_of_diffs_between_logit_and_acc(all_sim_objs, grid_biases, grid_corrs, use_bayes_with_missing=use_bayes_with_missing)
+wrapper_plot_grid_of_diffs_between_logit_and_acc_vec(
+    all_diffs,
+    grid_biases,
+    grid_corrs={str(v.item()).replace(".", "_") : v.item() for v in  base_sim["corr_to_hidden"].msort()}
+)
+#wrapper_plot_grid_of_diffs_between_logit_and_acc(all_sim_objs, grid_biases, grid_corrs, use_bayes_with_missing=use_bayes_with_missing)
 ```
+
+
+```{python}
+#| label: fig-difference-between-exp-and-obseved-performance
+#| fig-cap: "Difference between the performance on the expectation samples and realized samples $(W_{MA}=5)$"
+
+all_diffs = {b : generate_lines_for_diffs_vec(sim, make_abs=False, W=5) for b, sim in all_sim_objs.items()}
+exp_to_real_diffs_base = all_diffs[base_sim_bias]
+idx_wished_cor = torch.where(base_sim['corr_to_hidden'] == wished_corr)[0].item()
+exp_to_real_diffs_base["diffs"] = {
+    lbl : {
+        c : {
+            d_type : diff if diff is None else diff[idx_wished_cor]
+            for d_type, diff in c_diffs.items()
+        }
+        for c, c_diffs in lbs_diff_data.items()
+    }
+    for lbl, lbs_diff_data in exp_to_real_diffs_base["diff_data"].items()
+}
+
+plot_lines_and_mains(
+    gen_lines_from_diff_dict(exp_to_real_diffs_base),
+    sample_sizes=exp_to_real_diffs_base["sample_sizes"],
+    add_fig_legend=True,
+    add_legend=False,
+    only_related_exp=True,
+    diff_plot=True
+)
+```
+
 
 NEED TO FIND A WAY TO MAKE THIS SMALLER
 

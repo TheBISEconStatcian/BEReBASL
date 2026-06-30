@@ -1,3 +1,4 @@
+from copy import deepcopy
 import os
 
 from typing import Any, Dict, Tuple
@@ -192,3 +193,39 @@ def extract_biases_from_dirnames(dir_path: str) -> Dict[str, float]:
     biases = dict(sorted(biases.items(), key=lambda x: x[1]))
     
     return biases
+
+def slice_vec_sim(sim: dict, wished_corr: float) -> dict:
+    sim = {k : v.clone() if isinstance(v, torch.Tensor) else deepcopy(v) for k,v in sim.items()}
+    all_corrs: torch.Tensor = sim['corr_to_hidden']
+    assert wished_corr in all_corrs
+    idx_wished_cor = torch.where(all_corrs == wished_corr)[0].item()
+    sim["corr_to_hidden"] = wished_corr
+
+    ## Description changing
+    orig_descr: str = sim["Description"] # $...$
+    sim["Description"] = orig_descr[:-1] + rf", \sigma_{{mh}}={wished_corr:.2f}$"
+
+    sim["stats"] = {
+        k : (
+            v if v.dim() == 1 else
+            v[..., idx_wished_cor, :] if v.dim() == 4 else
+            v[..., idx_wished_cor]
+        )
+        for k, v in sim['stats'].items()
+    }
+
+    for perf_b_key in ('perf_bayes_missing_stats', 'perf_bayes_stats'):
+        sim[perf_b_key] = {
+            k : v[idx_wished_cor * (v.size(0)//all_corrs.size(0))]
+            for k, v in sim[perf_b_key].items()
+        }
+
+    credit_data = sim["credit_data"]
+    for attr in ["features", "default_flag", "accepted"]:
+        setattr(credit_data, attr, getattr(credit_data, attr)[idx_wished_cor])
+
+    sim['alternative_accepted'] = {k : v[idx_wished_cor] for k, v in sim['alternative_accepted'].items()}
+
+    sim["data_generator"] = slice_dgp_across_first_dim(sim["data_generator"], idx_wished_cor)
+
+    return sim
