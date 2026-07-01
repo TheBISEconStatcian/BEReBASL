@@ -1045,7 +1045,6 @@ def plot_heatmap_grid_multiD(
 
     fig = plt.figure(figsize=(5 * E_len, 4 * M_len + 0.5))
     D = data.shape[-1]
-    print(D)
 
     d_lbls_is_not_none = d_lbls is not None
     if d_lbls_is_not_none:
@@ -1284,7 +1283,6 @@ def wrapper_plot_grid_of_diffs_between_logit_and_acc_vec(all_diffs, grid_biases,
 
     # Get areas
     idx_abs_diffs = 0
-    print(all_diffs_new.shape)
     normed_areas = all_diffs_new[..., idx_abs_diffs, :].nanmean(dim=-1) # [B, Co, E, M, Cl]
 
     idx_logit = 1
