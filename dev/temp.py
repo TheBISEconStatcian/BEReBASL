@@ -116,7 +116,7 @@ for path, current_simulation_objects in all_sim_objs.items():
                 lbls = lbls_per_round[:, 0].clone()
                 mask_expectation = exp_mask[:, 0]
 
-                batched_lr = BatchedLogistic(n_features=F-1, batch_shape = lbls.shape[:-1])
+                batched_lr = BatchedLogistic(n_features=F-1, batch_shape = lbls.shape[:-1], dtype=feats.dtype, device=feats.device)
                 batched_lr.fit(
                     X=feats,
                     y=lbls,
