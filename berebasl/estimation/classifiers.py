@@ -1001,6 +1001,9 @@ class BatchedLogistic(nn.Module):
 
         X_aug = self._augment(X)                      # [*batch_shape, N, p_aug]
         return  X_aug @ self.beta                     # [*batch_shape, N, 1]
+    
+    def predict_prob_bad(self, X: torch.Tensor) -> torch.Tensor:
+        return torch.sigmoid(self.forward(X))   # [*batch_shape, N, 1]
 
     def predict_proba(self, X: torch.Tensor) -> torch.Tensor:
         r"""
@@ -1017,7 +1020,7 @@ class BatchedLogistic(nn.Module):
             Probabilities of shape ``[*batch_shape, N, 2]`` with columns
             ``[p(y=0), p(y=1)]``, consistent with :class:`TorchLogistic`.
         """
-        p1 = torch.sigmoid(self.forward(X))   # [*batch_shape, N, 1]
+        p1 = self.predict_prob_bad(X)   # [*batch_shape, N, 1]
         return torch.cat([1.0 - p1, p1], dim=-1)
 
     def predict(self, X: torch.Tensor) -> torch.Tensor:
