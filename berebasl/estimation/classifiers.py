@@ -11,6 +11,7 @@ import torch.optim as optim
 from typing import Callable, Dict, Optional, Tuple, Union
 
 from berebasl.utils.tensor_validation import assert_tensors
+from berebasl.utils import clone_if_view, tensors_share_some_memory
 from berebasl.simulation.credit_data_simulation import CreditDataGenerator
 from berebasl.simulation.gaussian_mixture import GaussianMixture
 
@@ -1177,6 +1178,8 @@ class BatchedLogistic(nn.Module):
                 # Zero invalid rows of X_aug — masked rows then contribute nothing
                 # to X^T r or X^T W X regardless of logit or residual values.
                 # Set corresponding y to a dummy; structurally zeroed by X_aug.
+                X_aug = X_aug.clone() if tensors_share_some_memory(X_aug, X) else X_aug
+                y = clone_if_view(y)
                 X_aug.masked_fill_(~mask_valid_obs.unsqueeze(-1), 0.0)
                 y.masked_fill_(~mask_valid_obs.unsqueeze(-1), -1.0)
 
