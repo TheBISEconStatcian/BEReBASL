@@ -186,6 +186,6 @@ hypothesis_visualization/index.html
 ## Presentation
 /thesis/presentation/presentation.html
 /thesis/presentation/presentation_files
-/thesis/presentation/_freeze
-/thesis/presentation/.quarto
+/thesis/presentation/_*/**
+/thesis/presentation/*.quarto*
 /thesis/presentation/.gitignore

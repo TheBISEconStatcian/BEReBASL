@@ -1,0 +1,24 @@
+/* Turn TOC into an ordered list */
+.reveal .slide-menu-toc ul {
+  list-style-type: decimal !important;   /* Arabic numbers */
+  margin-left: 1.2em;
+}
+
+/* Optional: ensure nested lists also use decimal */
+.reveal .slide-menu-toc ul ul {
+  list-style-type: decimal !important;
+}
+
+/* Make Mermaid diagrams fit inside Reveal slides */
+/* Force Mermaid diagrams in RevealJS to scale beautifully without text clipping */
+.reveal .mermaid {
+  font-size: 1.1rem !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  display: flex;
+  justify-content: center;
+}
+.reveal .mermaid svg {
+  max-width: 90% !important;
+  height: auto !important;
+}

@@ -274,7 +274,7 @@ according to the canonical definitions of @littleAndRubingAnalysisWithMissingDat
 in this section $t \in \mathbf{T} \setminus \{0\}$ be arbitrary but fixed,
 $$
 X_m^{:t} = \bigcup_{\tau = 0}^{t-1}
- \left\{X^{(t)}_{m,i}\right\}_{i=1}^{N_t}
+ \left\{X^{(\tau)}_{m,i}\right\}_{i=1}^{N_\tau}
 $$
 and $X_h^{:t}$, $X^{:t}$, $Y^{:t}$, $Y_m^{:t}$ be defined analogously
 represent the "flattened" past random variables in the processes.

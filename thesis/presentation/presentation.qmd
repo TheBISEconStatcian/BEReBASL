@@ -1,33 +1,466 @@
 ---
-title: "Title"
-author: "Mateo Ordóñez"
+title: Quantifying the Unknown
+subtitle: A surprised based reward signal for dynamic reject inference in credit scoring
 date: today
+date-format: "DD.MM.YYYY"
+author: "Mateo Ordóñez Serna (Student-ID: 616935)"
+bibliography: ../references.bib
+citation-style: apa.csl
+number-sections: false
+fontsize: 30px
 
 format:
   revealjs:
-    theme: serif
+    theme: simple
     slide-number: true
-    toc: false
+    toc: true
+    toc-depth: 1
+    toc-title: Outline
+    reference-section-title: References
+    css: styles.css
+    mermaid:
+      theme: default
+      themeVariables:
+        fontSize: 11px
+        fontFamily: "Arial"
+filters:
+  - cascade
 ---
 
-# Outline
+```{python}
+#| echo: false
+#| warning: false
+#| message: false
 
-This is the outline
+## Imports
+import os
+import sys
 
-# Example figure
+base_path = os.path.abspath("./../..")
+if base_path not in sys.path:
+    sys.path.append(base_path)
+
+from IPython.display import display, Markdown
+import torch
+
+from berebasl.simulation.credit_data_simulation import CreditDataGenerator
+from thesis.helper_scripts.general import (
+  extract_biases_from_dirnames,
+  extract_all_sim_objs_vec,
+  slice_vec_sim
+)
+
+grid_path = os.path.join(base_path, 'berebasl/data/simulations/mnar_grid_hyp_vec')
+grid_biases = extract_biases_from_dirnames(grid_path)
+
+all_sim_objs = extract_all_sim_objs_vec(grid_path, grid_biases)
+all_corrs = torch.stack([sim_objs['corr_to_hidden'] for sim_objs in all_sim_objs.values()], dim=0)
+assert torch.all(all_corrs[[0]] == all_corrs)
+
+base_sim_bias = '0_0'
+base_sim = all_sim_objs[base_sim_bias]
+wished_corr = -0.4
+base_sim_objs = slice_vec_sim(base_sim, wished_corr)
+
+base_dgp_unsliced = base_sim["data_generator"]
+dgp_base = base_sim_objs["data_generator"]
+```
+
+# Introducing the Reject Inference (RI) problem
+
+## The accept-decision induced data missingness
+
+::: {.r-stack}
+::: {.fragment .fade-out fragment-index=1}
+```{python}
+#| echo: false
+#| output: true
+import graphviz
+
+def get_base_graph():
+    dot = graphviz.Digraph(
+        graph_attr={
+            'rankdir': 'LR',
+            'splines': 'spline',
+            'nodesep': '0.2',
+            'ranksep': '0.4',
+            'pad': '0.05',
+            'margin': '0',
+            'fontname': 'Helvetica-Bold',
+            'fontsize': '14',
+            'compound': 'true',
+        },
+        node_attr={
+            'shape': 'box',
+            'style': 'filled,rounded',
+            'fillcolor': '#f8fafc',
+            'color': '#cbd5e1',
+            'fontname': 'Helvetica',
+            'fontsize': '12',
+            'height': '0.1',
+            'width': '0.1'
+        },
+        edge_attr={
+            'color': '#64748b',
+            'arrowsize': '0.6',
+            'fontsize': '10',
+            'fontname': 'Helvetica'
+        }
+    )
+
+    with dot.subgraph(name='cluster_HIST') as c:
+        c.attr(label='Hist. Data', bgcolor='#f1f5f9', color='#cbd5e1')
+        c.node('H_Rejects', 'Rejects')
+        c.node('H_Accepts', 'Accepts')
+        c.edge('H_Accepts', 'H_Rejects', style='invisible', arrowhead='none')
+
+    with dot.subgraph(name='cluster_INPUTS') as c:
+        c.attr(label='Decision Inputs', bgcolor='#f1f5f9', color='#cbd5e1')
+        c.node('Alg', 'Learning\nAlgorithm')
+        c.node('Feat_M', 'Model Features')
+        c.node('Feat_H', 'Hidden Features')
+
+    dot.node('Scorecard', 'Scorecard', shape='cds')
+
+    with dot.subgraph(name='cluster_EXECUTION') as c:
+        c.attr(label='Decision', bgcolor='#f1f5f9', color='#cbd5e1')
+        c.node('FI_Decision', 'FI Decision', shape='cds', fillcolor='#1e3a8a', fontcolor='#ffffff', color='#1d4ed8')
+        c.node('New_Accepts', 'New Accepts')
+        c.node('New_Rejects', 'New Rejects')
+
+    dot.node("Passer", "", style='invis')
+    dot.edge("Passer", "Alg", style='invis')
+    dot.node("Passer2", "", style='invis')
+    dot.edge("Passer2", "Alg", style='invis')
+
+    dot.edge('H_Accepts', 'Alg:w')
+    dot.edge('Alg', 'Scorecard', label='Trains')
+    dot.edge('Feat_M', 'Scorecard')
+    dot.edge('Scorecard', 'FI_Decision')
+    dot.edge('Feat_H', 'FI_Decision')
+    dot.edge('FI_Decision', 'New_Accepts')
+    dot.edge('FI_Decision', 'New_Rejects')
+
+    dot.edge('New_Accepts', 'H_Accepts', style='dashed', constraint='false')
+    dot.edge('New_Rejects:w', 'H_Rejects', style='dashed', constraint='false')
+    return dot
+
+# Render original graph
+get_base_graph()
+```
+
+:::
+
+::: {.fragment .fade-in fragment-index=1}
+```{python}
+#| echo: false
+#| output: true
+# Re-use the layout function to ensure exact coordinates match
+dot_updated = get_base_graph()
+
+# Add the interactive transition line
+dot_updated.edge('H_Rejects', 'Alg:w', color='#ef4444', label="RI")
+
+# Render updated graph
+dot_updated
+```
+
+:::
+
+:::
+
+## But, why take care about the rejects?
+
+* **Key observation:** Acceptance decision is **not** random
+  $\Rightarrow$ the rejects-distribution (ideally) unequals the accepts-distribution
+
+* Does it then make sense to just ignore them? Or is that leaving potential
+  on the table?
+
+* Possible arguments to be able to ignore the observation:
+
+  * **Ignorability:** Training a scorecard on accepts can be expected to be equal to training on accepts
+    and rejects
+  * It is not possible to gain any information of the probability of default from
+    using the rejects information, because
+      * There is no relevant information on rejects (**irrelevance**)
+      * No method works (**methodologically impossible**)
+
+* A general stochastic model is helpful to check these arguments.
+
+## Some formalization: a stochastic model
+
+
+### The building blocks of the acceptance loop
+
+At any certain point $t \in \mathbb{N}$ of the acceptance loop, let the following random variables on 
+$(\Omega, \mathcal{F}, \mathbb{P})$ generate the "building pieces" of the RI problem
+
+* $X_m^{(t)}$ the model features,
+* $X_h^{(t)}$ the hidden features,
+* $\varepsilon^{(t)}$ the noise,
+* $Y^{(t)}$ the outcomes and
+* $Z^{(t)}$ the acceptance decision.
+
+---
+
+### How do they relate to each other?
+
+Letting $\omega \in \Omega$:
+
+* Repayment outcome as the result of a measurable function $\iota_t$
+
+::: {style="text-align: center; margin: -1em 0;"}
+$$
+Y^{(t)}(\omega) = \iota_t \left(X_m^{(t)}(\omega), X_h^{(t)}(\omega), \varepsilon^{(t)}(\omega) \right) \in \{b, g\}
+$$
+
+:::
+
+* The acceptance decision:
+
+::: {style="text-align: center; margin: -1em 0;"}
+$$
+Z^{(t)}(\omega) = d_t\left(s_t\left(X_m^{(t)}(\omega) \right), X_h^{(t)}(\omega) \right) \in \{a, r\}
+$$
+$$
+\Rightarrow Y^{(t)} \perp\!\!\!\perp Z^{(t)} | X_m^{(t)}, X_h^{(t)}
+$$
+
+:::
+
+* And the *observable* repayment outcome
+
+::: {style="text-align: center; margin: -1em 0;"}
+$$
+Y_m^{(t)}(\omega) = \begin{cases}
+  Y^{(t)}(\omega) & Z^{(t)}(\omega) = a \\
+  \mathtt{na}  & Z^{(t)}(\omega) = r
+\end{cases}
+$$
+
+:::
+
+---
+
+### What about the dynamic view? Bridging the RVs to the data
+
+* The historic data can be seen as a realization of the family
+
+::: {style="text-align: center; margin-top: -1em; margin-bottom: 0.5em;"}
+$$
+\bigcup_{\tau = 0}^{t-1} \left\{\left(X_{m,i}^{(\tau)}, X_{h,i}^{(\tau)}, Y_{i}^{(\tau)}, Z^{(\tau)}_i \right)\right\}_{i=1}^{N_\tau}
+$$
+
+:::
+  
+:::{style="padding-left: 2rem;"}
+which will be denoted as $\left(X_m^{:t}, X_h^{:t}, Y^{:t}, Z^{:t} \right)$
+:::
+
+* Then the scorecard $s_t$ can be seen as the result of a (measurable) learning
+  procedure $a_t$ mapping from $\left(X_m^{:t}, X_h^{:t}, Y^{:t}, Z^{:t} \right)$
+  to the space of admissible scorecards
+
+## So can we ignore the missingness?
+
+### When do we have ignorability?
+
+There are three general cases of missingness mechanism [@littleAndRubingAnalysisWithMissingData]
+with different implications on ignorability
+
+::: {style="text-align: center;  margin-top: 1em; margin-bottom: 1.5em;"}
+
+| Type | Definition | Missingess ignorable? |
+| --- | --- | --- |
+| MCAR | $Z^{(t)} \perp\!\!\!\perp X_m^{:t}, X_h^{:t}, Y^{:t}$ | Yes |
+| MAR | $Z^{(t)} | X_m^{:t} \perp\!\!\!\perp X_h^{:t}, Y^{:t}$ | Yes for well-specified ML methods |
+| MNAR | $Z^{(t)} | X_m^{:t} \require{cancel} \cancel{\perp\!\!\!\perp} X_h^{:t}, Y^{:t}$ | No |
+
+:::
+
+**Recall:** Per definition of $Y^{(t)}$, $Z^{(t)}$ and $s_t$ it always holds (given all past $d_t$)
+$$
+Z^{(t)} | X_m^{:t}, X_h^{:t} \perp\!\!\!\perp Y^{:t}
+$$
+
+---
+
+### And what about irrelevance and methodological impossiblity?
+
+:::: {.columns}
+
+::: {.column width="47%"}
+
+**Irrelevance:** It would be given if for all $t$
+
+* Equality in distribution, i. e.
+  $``\mathbb{P}_{Y^{(t)} | X^{(t)}, Z^{(t)}=a} = \mathbb{P}_{Y^{(t)} | X^{(t)}, Z^{(t)}=r}"$
+
+* $\mathbb{P}_{Y^{(t)} | X^{(t)}, Z^{(t)}=r}$ too noisy
+
+:::
+
+::: {.column width="6%"}
+
+
+:::
+
+::: {.column width="47%"}
+
+**Methodological impossibility:**
+
+* Unclear whether/when RI works.
+
+* Many augmentation found to be inconsistent, equivalent to
+  ignoring  rejects or base on questionable assumptions [@ehrhardt2021rejectReview]
+
+* Existing Augmentation techniques base on an assumption close to
+  equality in distribution.
+
+* Other methods exist based on extra assumptions - still in research or abandoned.
+
+:::
+
+::::
+
+# Surprisingly, the bias might be (indirectly) observable
+
+## Motivation
+
+* @kozdoi_et_al_BE_BASL report promising results regarding in the
+  RI milleau for unbiased scorecard evaluation.
+
+    * They report scorecard evaluation on accepts overestimating the
+      performance w.r.t. a complete holdout population
+
+    * Augmenting the sample with rejects seems to deliver more realistic
+      results.
+
+* So we can ask:
+
+  * Can we see such incongruence in a world of "only accepts"?
+
+  * If so: can we use that as a proxy for the bias?
+
+## Formulating the hypothesis
+
+### Defining the surprise
+
+* Let the "expectation" be the (cross validated) performance
+  measured over historic data.
+
+* Let the "realization" be the performance measured over
+  new accepts.
+
+* The surprise is then the differnce between expectation and realization.
+
+### Hypothesis
+
+* Assuming that
+
+  * For an unbiased scorecard and threshold choosing method, the surprise
+    is usually almost zero.
+  * For the biased counterpart the absolute surprise is large
+
+* The minimization of the surprise can be used as a reward signal
+  to train an estimator for $\mathbb{P}_{Y^{(t)} | X^{(t)}, Z^{(t)}=r}$
+
+## A "theoretical" motivation for the hypothesis assumptions:
+
+### An unsurprising setting
+
+Assume a "stationary setting", i.e.
+
+* An applicants without distributional shifts: $\forall t \forall i : \left(X_{m,i}^{(\tau)}, X_{h,i}^{(\tau)}, Y_{i}^{(\tau)} \right) \sim \mathbb{P}_{X_m, X_h, Y}$
+
+* The missingness is MNAR.
+
+* The scorecard model estimators is parametric, ML based and well specified.
+
+* The scorecard learning procedure remains the same $\forall t: a_t = a$
+
+* The method for choosing the acceptance threshold remains the same.
+
+---
+
+### What should then happen?
+
+Then we can expect that
+  * The scorecard-model will be roughly constant
+  * The same region of the acceptance population gets selected
+  * And therefore the history and the new accepts come from the same region
+    of the acceptance population.
+  * Therefore expectation and realization should be close.
+
+# Designing a simulation framework to test the hypothesis
+
+## Applicant's population
+
+* The classical two class linear discriminant analysis with equal covariances problem was chosen for the simulation.
+  
+* Let $X = (X_m^\top, X_h^\top)^\top$, then
+
+$$
+\underbrace{X | Y = b}_{=: X_b}
+\sim \mathcal{N}\left(
+  \mu_b = \begin{bmatrix}
+    \mu_{b, m} \\
+    \mu_{b, h}
+  \end{bmatrix},
+  \Sigma
+\right) , \;
+\underbrace{X | Y = g}_{=: X_g}
+\sim \mathcal{N}\left(
+  \mu_g = \begin{bmatrix}
+    \mu_{g, m} \\
+    \mu_{g, h}
+  \end{bmatrix},
+  \Sigma
+\right)
+$$
+  
+:::{style="padding-left: 2rem;"}
+with  $\mu_{b, m} = (0,0)^\top, \mu_{b, h}=0$,  $\mu_{g, m} = (1,2)^\top, \mu_{g, h}=-1$ and
+
+$$
+\Sigma = \begin{pmatrix}
+1 & \sigma_{m, 12} & \sigma_{mh} \\
+\sigma_{m, 12} & 1 & \sigma_{mh} \\
+\sigma_{mh} & \sigma_{mh} & 1
+\end{pmatrix}
+$$
+
+positive definite
+:::
+
+## Choosing suitable covariances
+
+Two bayes-rule based models: restricted (only using $X_m$) and full with error rates
+$P^{*}_m$, $P^{*}_e$ respectively
 
 ```{python}
-import numpy as np
-import matplotlib.pyplot as plt
-
-x = np.linspace(-1,5,200)
-y = (x-2)**2 + 3
-
-plt.figure(figsize=(6,4))
-plt.plot(x,y)
-plt.grid(True)
-plt.xlabel("x")
-plt.ylabel("f(x)")
-plt.title(r"$f(x)=(x-2)^2+3$")
-plt.show()
+#| label: fig-all-bayes-errs
+#| fig-cap: "Distribution of (Bayes) error rates"
+from thesis.helper_scripts.sensitivity_analysis import wrapper_bayes_errors_plot
+wrapper_bayes_errors_plot(
+    max_corrs=500,
+    var_to_hide=base_sim["var_to_hide"],
+    vcov=dgp_base.bad_mixture.cov
+)
 ```
+
+# Checking the assumptions
+
+## The theoretical
+
+# Evidence for the hypothesis
+
+# How to do Reinforcement Learning for RI
+
+
+## References
+
+:::{#refs}
+
+:::
