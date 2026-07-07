@@ -1,0 +1,7 @@
+execute:
+  freeze: auto
+  echo: false
+  warning: false
+  python: ./../masters_venv/Scripts/python.exe
+  results: asis
+  notebook-links: false
