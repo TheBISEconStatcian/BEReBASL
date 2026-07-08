@@ -271,8 +271,8 @@ from typing import Optional, Tuple
 def compute_batched_cdfs_and_sorted(
     scores: torch.Tensor,
     targets: torch.Tensor,
-    mask_valid: Optional[torch.Tensor],
-    dim: int
+    mask_valid: Optional[torch.Tensor] = None,
+    dim: int = -1
 ) -> Tuple[
     torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
 ]:
