@@ -458,7 +458,7 @@ $P^{*}_m$, $P^{*}_e$ respectively
 #| fig-cap: "Distribution of (Bayes) error rates"
 from thesis.helper_scripts.sensitivity_analysis import wrapper_bayes_errors_plot
 wrapper_bayes_errors_plot(
-    max_corrs=500,
+    max_corrs=200,
     var_to_hide=base_sim["var_to_hide"],
     vcov=dgp_base.bad_mixture.cov,
     simulated_corrs=base_sim["corr_to_hidden"],
@@ -503,10 +503,267 @@ plot_pairwise_dgp_with_perf_bayes_boundaries(dgp_base, **dgp_info_for_boundaries
 
 :::
 
-## Checking out the distribution of the base simulation
+## The acceptance policy
+
+```{python}
+## Import what you need and do what you want
+from matplotlib import pyplot as plt
+from berebasl.simulation.credit_data_simulation import CreditData
+from berebasl.estimation.classifiers import BatchedLogistic
+
+at_gen = 33
+feats, lbls = base_sim_objs["credit_data"].unbiased_obs(up_to_round_idx=at_gen-1)
+lr = BatchedLogistic(
+  n_features=feats.size(-1),
+  batch_shape = torch.Size([]),
+  dtype=feats.dtype,
+  device=feats.device
+)
+N = feats.size(0)
+torch.manual_seed(1807)
+rand_perm_N = torch.randperm(N)
+count_train = round(N * 0.7)
+train_idxs = rand_perm_N[:count_train]
+vali_idxs = rand_perm_N[count_train:]
+
+lr.fit(feats[train_idxs], lbls[train_idxs])
+
+scores_vali = lr.predict_prob_bad(feats[vali_idxs]).squeeze(-1)
+lbls_vali = lbls[vali_idxs]
+
+figsize_th = (5, 4.5)
+
+```
+
+* Score-Model: Logistic regression estimated via Newton–Raphson.
+
+* Threshold selection: No cost-sensitive optimization, calculated as mean of 10 cross-validated estimates. Two methods were used:
 
 
+:::: {.columns}
 
+::: {.column width="50%"}
+
+::: {.fragment .fade-in fragment-index=1}
+```{python}
+#| label: roc-optimal-th
+#| fig-cap: "ROC-optimal threshold."
+from berebasl.evaluation.batched_metrics import (
+  batched_roc_points,
+  optimal_roc_thresholds_from_roc_points
+)
+
+fpr, tpr, sorted_scores, sorted_targets, sorted_mask_valid = batched_roc_points(scores_vali, lbls_vali, dim=-1)
+
+sq_eucl_to_opt = (
+  fpr.square() +
+  (tpr-1).square()
+)
+
+idx_min_dist = sq_eucl_to_opt.argmin().item()
+threshold = round(sorted_scores[idx_min_dist].item(), 2)
+
+
+plt.figure(figsize=figsize_th)
+
+plt.plot(fpr, tpr, label="ROC", color='C0')
+plt.scatter(
+  fpr[[idx_min_dist]],
+  tpr[[idx_min_dist]],
+  label=f"ROC-opt. pt. $\\tau = {threshold}$",
+  s=10,
+  color='C1',
+  zorder=30
+)
+plt.scatter(
+  [0],
+  [1],
+  label="Best ROC-pt.",
+  s=10,
+  color='C2',
+  zorder=30
+)
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+
+plt.legend()
+
+plt.show()
+```
+
+:::
+
+:::
+
+::: {.column width="50%"}
+
+::: {.fragment .fade-in fragment-index=2}
+```{python}
+#| label: ks-criterion-th
+#| fig-cap: "Kolmogorov-Smirnov-criterion threshold."
+from berebasl.evaluation.batched_metrics import compute_batched_cdfs_and_sorted
+
+sorted_scores, sorted_mask, cdf_pos, cdf_neg, sorted_targets = compute_batched_cdfs_and_sorted(
+  scores_vali,
+  lbls_vali
+)
+
+ks_values = torch.abs(cdf_pos - cdf_neg)
+idx_max_ks = ks_values.argmax().item()
+
+plt.figure(figsize=figsize_th)
+
+plt.plot(sorted_scores, cdf_pos, label="$CDF_b$", color='C0', lw=2)
+plt.plot(sorted_scores, cdf_neg, label="$CDF_g$", color='C1', lw=2)
+
+x_max_ks = sorted_scores[[idx_max_ks, idx_max_ks]].tolist()
+y_max_ks = [cdf_pos[idx_max_ks].item(), cdf_neg[idx_max_ks].item()]
+
+plt.plot(
+  x_max_ks,
+  y_max_ks,
+  color='C2',
+  ls="dashed",
+  lw=2,
+  label=f"$\\tau_{{KS}}={round(sorted_scores[idx_max_ks].item(), 2)}$"
+)
+plt.scatter(x_max_ks, y_max_ks, color='C2', s=20, zorder=30)
+
+plt.xlabel("Probability of Default")
+plt.ylabel("CDF")
+
+plt.legend(loc="upper left")
+plt.show()
+
+```
+
+:::
+
+:::
+
+:::
+
+## Biased vs. Unbiased Acceptance policies
+
+To check the hypothesis is sensible to define the biased and unbiased
+worlds, both use a classifier and threshold decision method as before.
+
+<style type="text/css">
+#T_07f9b table {
+  table-layout: fixed;
+  width: 100%;
+}
+#T_07f9b th.row_heading {
+  width: 35%;
+}
+#T_07f9b td.col0 {
+  width: 32.5%;
+}
+#T_07f9b  th.col_heading.col0 {
+  width: 32.5%;
+}
+#T_07f9b td.col1 {
+  width: 32.5%;
+}
+#T_07f9b  th.col_heading.col1 {
+  width: 32.5%;
+}
+</style>
+<table id="T_07f9b">
+  <thead>
+    <tr>
+      <th class="blank level0" >&nbsp;</th>
+      <th id="T_07f9b_level0_col0" class="col_heading level0 col0" >Unbiased</th>
+      <th id="T_07f9b_level0_col1" class="col_heading level0 col1" >Biased</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th id="T_07f9b_level0_row0" class="row_heading level0 row0" >Estimation of $s_t = 1 - p_t$ </th>
+      <td id="T_07f9b_row0_col0" class="data row0 col0" >Full history $\rightarrow p^*_t$ </td>
+      <td id="T_07f9b_row0_col1" class="data row0 col1" >All Accepts according to biased policy $\rightarrow \tilde{p}_t$ </td>
+    </tr>
+    <tr>
+      <th id="T_07f9b_level0_row1" class="row_heading level0 row1" >Threshold estimation </th>
+      <td id="T_07f9b_row1_col0" class="data row1 col0" >CV-based over Full history $\rightarrow \tau^*_t$ </td>
+      <td id="T_07f9b_row1_col1" class="data row1 col1" >CV based over Accepts according to biased policy $\rightarrow \tilde{\tau}_t$ </td>
+    </tr>
+    <tr>
+      <th id="T_07f9b_level0_row2" class="row_heading level0 row2" >Accept Decision $d'$ before MNAR-overwrites </th>
+      <td id="T_07f9b_row2_col0" class="data row2 col0" >Accept if $p^*_t < \tau^*_t$, $\rightarrow$ *unbiased accepts* at $t$ </td>
+      <td id="T_07f9b_row2_col1" class="data row2 col1" >Accept if $\tilde{p}_t < \tilde{\tau}_t$, $\rightarrow$ *biased accepts* at $t$ </td>
+    </tr>
+  </tbody>
+</table>
+
+
+```{python}
+#| results: asis
+#| eval: false
+from io import StringIO
+import pandas as pd
+from IPython.display import display, HTML
+
+markdown = r"""
+| | Unbiased | Biased |
+| --- | --- | --- |
+| Estimation of $s_t = 1 - p_t$ | Full history $\rightarrow p^*_t$ | All Accepts according to biased policy $\rightarrow \tilde{p}_t$ |
+| Threshold estimation | CV-based over Full history $\rightarrow \tau^*_t$ | CV based over Accepts according to biased policy $\rightarrow \tilde{\tau}_t$ |
+| Accept-Decision before MNAR-overwrites | Accept if $p^*_t < \tau^*_t$, $\rightarrow$ *unbiased accepts* at $t$ | Accept if $\tilde{p}_t < \tilde{\tau}_t$, $\rightarrow$ *biased accepts* at $t$ |
+"""
+
+df = pd.read_table(
+    StringIO(markdown),
+    sep="|",
+    engine="python",
+    skipinitialspace=True,
+)
+df = df.iloc[1:, 1:-1]
+df.columns = df.columns.str.strip()
+df.set_index(df.columns[0], drop=True, inplace=True)
+df.index.name = None
+
+width_index = 35
+width_others = (100-width_index)/2
+styled = (
+  df.style
+  .format(escape=None)
+  .set_table_styles([
+    {"selector" : "table", "props" : [("table-layout", "fixed"), ("width", "100%")]},
+    {"selector" : "th.row_heading", "props" : [("width", f"{width_index}%")]},
+    {"selector" : "td.col0, th.col_heading.col0", "props" : [(f"width", f"{width_others}%")]},
+    {"selector" : "td.col1, th.col_heading.col1", "props" : [("width", f"{width_others}%")]}
+  ])
+)
+print(styled.to_html(escape=None))
+```
+
+---
+
+### MNAR overrides
+
+With $(p_t, \tau_t) \in \{(p^*_t, \tau^*_t), (\tilde{p}_t, \tilde{\tau}_t)\}$, $\pi_b$, the decision with MNAR overrides:
+
+$$
+d\left(x_m, x_h^{(t)} \right) = \begin{cases}
+  r & x_h^{(t)} > \operatorname{percentile}_{1-\pi_b/2}(\mathbf{X}_m^{(t)}) \\
+  a & x_h^{(t)} < \operatorname{percentile}_{\pi_b/2}(\mathbf{X}_m^{(t)}) \\
+  d'(x_m) & \text{otherwise}
+\end{cases}
+$$
+
+whereby
+
+* $\mathbf{X}_m^{(t)}$ the realized hidden features at $t$
+* $\operatorname{percentile}_{1}(\mathbf{X}_m^{(t)}) \equiv \max \mathbf{X}_m^{(t)}$
+* $\operatorname{percentile}_{0}(\mathbf{X}_m^{(t)}) \equiv \min \mathbf{X}_m^{(t)}$
+
+::: {style="text-align: left; margin-top: -0.8em; margin-bottom: 0em;"}
+
+**Note:** since $-1 = \mu_{h, g} < \mu_{h, b} = 0$ the overrides tend to reject
+bads and accept goods. 
+
+:::
 
 # Checking the assumptions
 
