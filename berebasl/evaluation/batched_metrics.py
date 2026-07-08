@@ -265,6 +265,157 @@ def batched_auroc(
         fpr, tpr, sorted_scores, sorted_mask_valid, dim, keepdim
     )
 
+import torch
+from typing import Optional, Tuple
+
+def compute_batched_cdfs_and_sorted(
+    scores: torch.Tensor,
+    targets: torch.Tensor,
+    mask_valid: Optional[torch.Tensor],
+    dim: int
+) -> Tuple[
+    torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
+]:
+    r"""
+    Compute sorted scores, sorted mask, and the empirical CDFs for the positive
+    and negative classes along dimension ``dim``.
+
+    This function performs:
+    - Input validation and shape/device assertions
+    - Mask handling
+    - Sorting along ``dim``
+    - Cumulative counts
+    - CDF computation
+
+    Args:
+        scores (Tensor):
+            Tensor of shape ``(*batch_dims, N)`` containing predicted scores.
+        targets (Tensor):
+            Binary tensor of same shape as ``scores``.
+        mask_valid (Tensor, optional):
+            Boolean tensor indicating valid entries. If ``None``, non-NaN scores
+            are considered valid.
+        dim (int):
+            Dimension along which to compute CDFs.
+
+    Returns:
+        Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+            ``(sorted_scores, sorted_mask, cdf_pos, cdf_neg, sorted_targets)``
+    """
+
+    if scores.dtype == torch.bool or torch.is_complex(scores):
+        raise ValueError("scores must be a floating point or integer type")
+
+    scores_ndim = scores.dim()
+    if dim not in range(-scores_ndim, scores_ndim):
+        raise IndexError("dim must be a valid dimension index")
+
+    # Normalize dim
+    dim %= scores_ndim
+
+    # Basic shape/device checks
+    assert scores.shape == targets.shape, "scores and targets must have same shape"
+    assert scores.device == targets.device, "scores and targets must be on same device"
+
+    # Mask handling
+    if mask_valid is None:
+        mask_valid = ~scores.isnan()
+    else:
+        if mask_valid.dtype != torch.bool:
+            raise ValueError("mask_valid must be boolean")
+        assert mask_valid.shape == scores.shape, "mask_valid must match scores shape"
+        assert mask_valid.device == scores.device, "mask_valid must match scores device"
+
+    # Convert boolean targets
+    if targets.dtype == torch.bool:
+        targets = targets.to(scores.dtype)
+
+    # Sorting
+    order = scores.argsort(dim=dim, descending=False)
+    sorted_scores = scores.gather(dim=dim, index=order)
+    sorted_targets = targets.gather(dim=dim, index=order)
+    sorted_mask = mask_valid.gather(dim=dim, index=order)
+
+    # Mask targets (remove NaNs)
+    sorted_targets = sorted_targets.nan_to_num(nan=-1, posinf=-1, neginf=-1)
+    sorted_targets = sorted_targets * sorted_mask
+
+    assert not (sorted_targets == -1).any(), \
+        "Masking left invalid values in targets, breaking KS statistic"
+
+    # Positive and negative counts
+    P = (sorted_targets * sorted_mask).sum(dim=dim, keepdim=True)
+    N_total = (1 - sorted_targets) * sorted_mask
+    Q = N_total.sum(dim=dim, keepdim=True)
+
+    # Cumulative counts
+    cum_pos = torch.cumsum(sorted_targets * sorted_mask, dim=dim)
+    cum_neg = torch.cumsum(N_total, dim=dim)
+
+    # CDFs
+    eps = 1e-10
+    cdf_pos = cum_pos / (P + eps)
+    cdf_neg = cum_neg / (Q + eps)
+
+    return sorted_scores, sorted_mask, cdf_pos, cdf_neg, sorted_targets
+
+
+
+def compute_ks_from_cdfs(
+    sorted_scores: torch.Tensor,
+    sorted_mask: torch.Tensor,
+    cdf_pos: torch.Tensor,
+    cdf_neg: torch.Tensor,
+    dim: int,
+    return_thresholds: bool,
+    keepdim: bool
+) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    r"""
+    Compute the Kolmogorov–Smirnov statistic from precomputed CDFs and sorted data.
+
+    Args:
+        sorted_scores (Tensor):
+            Scores sorted along ``dim``.
+        sorted_mask (Tensor):
+            Boolean mask of valid entries (sorted).
+        cdf_pos (Tensor):
+            Empirical CDF of positive class.
+        cdf_neg (Tensor):
+            Empirical CDF of negative class.
+        dim (int):
+            Dimension along which KS is computed.
+        return_thresholds (bool):
+            Whether to return score thresholds.
+        keepdim (bool):
+            Whether to keep dimension ``dim`` in the output.
+
+    Returns:
+        Tuple[Tensor, Optional[Tensor]]:
+            ``(ks_values, ks_thresholds)``
+    """
+
+    # KS values
+    ks_values = torch.abs(cdf_pos - cdf_neg)
+    ks_values = ks_values.nan_to_num(nan=-1, posinf=-1) * sorted_mask
+
+    # Max KS
+    max_ks, max_indices = ks_values.max(dim=dim, keepdim=keepdim)
+
+    if not return_thresholds:
+        return max_ks, None
+
+    # Threshold extraction
+    if keepdim:
+        ks_thresholds = sorted_scores.gather(dim=dim, index=max_indices)
+    else:
+        max_indices_expanded = max_indices.unsqueeze(dim)
+        ks_thresholds = sorted_scores.gather(dim=dim, index=max_indices_expanded)
+        ks_thresholds = ks_thresholds.squeeze(dim)
+
+    return max_ks, ks_thresholds
+
+
+
 def batched_ks_statistic(
     scores: torch.Tensor,
     targets: torch.Tensor,
@@ -274,163 +425,47 @@ def batched_ks_statistic(
     keepdim: bool = False
 ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
     r"""
-    Compute the Kolmogorov-Smirnov statistic for binary classification along
-    dimension ``dim``.
+    Wrapper computing the Kolmogorov–Smirnov statistic for binary classification
+    along dimension ``dim``. This function delegates:
 
-    The KS statistic measures the maximum separation between the cumulative
-    distribution functions of the positive and negative classes. It is defined as:
-
-    .. math::
-        \text{KS} = \max_t |F_{\text{pos}}(t) - F_{\text{neg}}(t)|
-
-    where :math:`F_{\text{pos}}(t)` and :math:`F_{\text{neg}}(t)` are the
-    empirical CDFs of scores for positive and negative samples, respectively.
-
-    The computation is performed independently along dimension ``dim``, treating
-    all other dimensions as batch dimensions.
+    - CDF computation to :func:`compute_batched_cdfs_and_sorted`
+    - KS computation to :func:`compute_ks_from_cdfs`
 
     Args:
         scores (Tensor):
-            Tensor of shape ``(*batch_dims, N)`` -asuming ``dim=-1``-
-            containing predicted scores or probabilities along 
-            dimension ``dim``. ``N`` denotes the dimension ``dim`` and the
-            tensor can have any permutation of the shape above.
+            Tensor of shape ``(*batch_dims, N)`` containing predicted scores.
         targets (Tensor):
-            Binary tensor of same shape as ``scores`` containing ground truth
-            labels (0 or 1, or False/True) along dimension ``dim``.
+            Binary tensor of same shape as ``scores``.
         mask_valid (Tensor, optional):
-            Boolean tensor of same shape as ``scores`` indicating which
-            entries are valid. If ``None``, all non-NaN entries in ``scores``
-            are considered valid. Default: ``None``.
+            Boolean tensor indicating valid entries.
         dim (int, optional):
-            Dimension along which to compute the KS statistic. Must satisfy
-            ``-scores.ndim <= dim < scores.ndim``. Default: ``-1``.
+            Dimension along which to compute KS. Default: ``-1``.
         return_thresholds (bool, optional):
-            If ``True``, also return the score thresholds at which the maximum
-            KS statistic occurs. Default: ``False``.
+            Whether to return score thresholds. Default: ``False``.
         keepdim (bool, optional):
-            Whether to retain dimension ``dim`` with size 1 in the output.
-            Default: ``False``.
+            Whether to keep dimension ``dim``. Default: ``False``.
 
     Returns:
         Tuple[Tensor, Optional[Tensor]]:
-            Tuple of ``(ks_values, ks_thresholds)``
-
-            If ``return_thresholds=False``: Tensor of shape ``(*batch_dims,)``
-            (or ``(*batch_dims, 1)`` if ``keepdim=True``) containing the KS
-            statistic for each batch element.
-            
-            If ``return_thresholds=True``: Tuple of two tensors:
-            
-            - **ks_values** (*Tensor*): KS statistics, a tensor of shape
-              ``(*batch_dims,)`` if ``keepdim=False`` or ``(*batch_dims, 1)``
-              (in case ``dim=-1``).
-            - **ks_thresholds** (*Tensor* or ``None``): Score values at which
-              the maximum separation occurs if ``return_thresholds=True``, has
-              the same shape as ``ks_values``. If ``return_thresholds=False``
-              it returns ``None``
-
-    Raises:
-        ValueError:
-            If ``scores`` is boolean or complex, or if ``mask_valid`` is not boolean.
-        IndexError:
-            If ``dim`` is not a valid dimension index.
-        AssertionError:
-            If tensors do not have matching shapes or devices.
-
-    Example:
-        .. code-block:: python
-
-            scores = torch.tensor([[0.1, 0.4, 0.35, 0.8],
-                                   [0.2, 0.3, 0.6, 0.7]])
-            targets = torch.tensor([[0, 0, 1, 1],
-                                    [0, 1, 0, 1]])
-            
-            # Compute KS statistic along last dimension
-            ks_stats, _ = batched_ks_statistic(scores, targets, dim=-1)
-            
-            # Also get thresholds
-            ks_stats, ks_thresh = batched_ks_statistic(
-                scores, targets, dim=-1, return_thresholds=True
-            )
+            ``(ks_values, ks_thresholds)``
     """
-    
-    if scores.dtype == torch.bool or torch.is_complex(scores):
-        raise ValueError("scores must be a floating point or integer type")
-    
-    scores_ndim = scores.dim()
-    if dim not in range(-scores_ndim, scores_ndim):
-        raise IndexError("dim has to be valid w. r. t. the amount of dims of scores")
-    
-    assert_tensors(scores, targets, tensor_names="scores, targets", 
-                   checks=["same_shape", "same_device"], throw_error=True)
-    
-    if mask_valid is None:
-        mask_valid = ~scores.isnan()
-    else:
-        if mask_valid.dtype != torch.bool:
-            raise ValueError("mask_valid has to be bool")
-        
-        assert_tensors(mask_valid, scores, tensor_names="mask_valid, scores",
-                       checks=["same_shape", "same_device"], throw_error=True)
-    
-    if targets.dtype == torch.bool:
-        targets = targets.to(scores.dtype)
-    
-    # Normalize dim
-    dim %= scores_ndim
-    
-    # Sort by ascending score along dim (convention: threshold t means "classify as positive if score >= t")
-    order = scores.argsort(dim=dim, descending=False)
-    sorted_scores = scores.gather(dim=dim, index=order)
-    sorted_targets = targets.gather(dim=dim, index=order)
-    sorted_mask = mask_valid.gather(dim=dim, index=order)
-    
-    # Apply mask: only consider valid entries
-    ## avoid too any problems with  the sorted targets because of nan
-    sorted_targets = sorted_targets.nan_to_num(nan=-1, posinf=-1, neginf=-1)
-    sorted_targets = sorted_targets * sorted_mask
-    assert ~(sorted_targets == -1).any(), "Masking still left nans or infs in targets - this breaks the ks-statistic"
-    
-    # Count positives and negatives (only valid entries)
-    P = (sorted_targets * sorted_mask).sum(dim=dim, keepdim=True)  # Total positives
-    N_total = (1 - sorted_targets) * sorted_mask
-    Q = N_total.sum(dim=dim, keepdim=True)  # Total negatives
-    
-    # Cumulative counts along dim
-    cum_pos = torch.cumsum(sorted_targets * sorted_mask, dim=dim)  # TP at each threshold
-    cum_neg = torch.cumsum(N_total, dim=dim)  # FP at each threshold
-    
-    # CDFs: proportion of positives/negatives with score <= threshold
-    # Add small epsilon to avoid division by zero
-    eps = 1e-10
-    cdf_pos = cum_pos / (P + eps)
-    cdf_neg = cum_neg / (Q + eps)
-    
-    # KS statistic: maximum absolute difference between CDFs
-    ks_values = torch.abs(cdf_pos - cdf_neg)
-    
-    # Apply mask to KS values (invalid positions should not be considered)
-    ## Nan to num NOT necessary here, as any source for that was eliminated
-    ## through the eps and the nan_to_num over sorted_targets
-    ks_values = ks_values.nan_to_num(nan=-1, posinf=-1) * sorted_mask
-    
-    # Find maximum KS value along dim
-    max_ks, max_indices = ks_values.max(dim=dim, keepdim=keepdim)
 
-    if not return_thresholds:
-        return max_ks, None
-    
-    # Get the score threshold at which max KS occurs
-    if keepdim:
-        ks_thresholds = sorted_scores.gather(dim=dim, index=max_indices)
-    else:
-        # Need to temporarily add dim back to gather, then squeeze
-        max_indices_expanded = max_indices.unsqueeze(dim)
-        ks_thresholds = sorted_scores.gather(dim=dim, index=max_indices_expanded)
-        ks_thresholds = ks_thresholds.squeeze(dim)
-    
-    return max_ks, ks_thresholds
+    sorted_scores, sorted_mask, cdf_pos, cdf_neg, _ = compute_batched_cdfs_and_sorted(
+        scores=scores,
+        targets=targets,
+        mask_valid=mask_valid,
+        dim=dim
+    )
+
+    return compute_ks_from_cdfs(
+        sorted_scores=sorted_scores,
+        sorted_mask=sorted_mask,
+        cdf_pos=cdf_pos,
+        cdf_neg=cdf_neg,
+        dim=dim,
+        return_thresholds=return_thresholds,
+        keepdim=keepdim
+    )
 
 def optimal_roc_thresholds_from_roc_points(
         fpr: torch.Tensor, 
