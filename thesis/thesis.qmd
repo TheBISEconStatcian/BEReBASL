@@ -48,7 +48,7 @@ assert torch.all(all_corrs[[0]] == all_corrs)
 base_sim_bias = '0_0'
 base_sim = all_sim_objs[base_sim_bias]
 wished_corr = -0.4
-base_sim_objs = slice_vec_sim(base_sim, wished_corr)
+base_sim_objs, idx_wished_corr = slice_vec_sim(base_sim, wished_corr)
 
 base_dgp_unsliced = base_sim["data_generator"]
 dgp_base = base_sim_objs["data_generator"]

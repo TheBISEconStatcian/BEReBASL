@@ -12,12 +12,15 @@ fontsize: 30px
 format:
   revealjs:
     theme: simple
+    html-math-method: katex
+    self-contained-math: true
     slide-number: true
     toc: true
     toc-depth: 1
     toc-title: Outline
     reference-section-title: References
     css: styles.css
+    fig-cap-location: bottom
     mermaid:
       theme: default
       themeVariables:
@@ -60,10 +63,10 @@ assert torch.all(all_corrs[[0]] == all_corrs)
 base_sim_bias = '0_0'
 base_sim = all_sim_objs[base_sim_bias]
 wished_corr = -0.4
-base_sim_objs = slice_vec_sim(base_sim, wished_corr)
+base_sim_objs, idx_wished_corr = slice_vec_sim(base_sim, wished_corr)
 
-base_dgp_unsliced = base_sim["data_generator"]
-dgp_base = base_sim_objs["data_generator"]
+base_dgp_unsliced: CreditDataGenerator = base_sim["data_generator"]
+dgp_base: CreditDataGenerator = base_sim_objs["data_generator"]
 ```
 
 # Introducing the Reject Inference (RI) problem
@@ -275,7 +278,7 @@ with different implications on ignorability
 | --- | --- | --- |
 | MCAR | $Z^{(t)} \perp\!\!\!\perp X_m^{:t}, X_h^{:t}, Y^{:t}$ | Yes |
 | MAR | $Z^{(t)} | X_m^{:t} \perp\!\!\!\perp X_h^{:t}, Y^{:t}$ | Yes for well-specified ML methods |
-| MNAR | $Z^{(t)} | X_m^{:t} \require{cancel} \cancel{\perp\!\!\!\perp} X_h^{:t}, Y^{:t}$ | No |
+| MNAR | $Z^{(t)} | X_m^{:t} \cancel{\perp\!\!\!\perp} X_h^{:t}, Y^{:t}$ | No |
 
 :::
 
@@ -372,7 +375,14 @@ $$
 
 Assume a "stationary setting", i.e.
 
-* An applicants without distributional shifts: $\forall t \forall i : \left(X_{m,i}^{(\tau)}, X_{h,i}^{(\tau)}, Y_{i}^{(\tau)} \right) \sim \mathbb{P}_{X_m, X_h, Y}$
+* An applicants without distributional shifts:
+
+::: {style="text-align: center; margin: -1em 0;"}
+$$
+\forall t \forall i : \left(X_{m,i}^{(\tau)}, X_{h,i}^{(\tau)}, Y_{i}^{(\tau)} \right) \sim \mathbb{P}_{X_m, X_h, Y}
+$$
+
+:::
 
 * The missingness is MNAR.
 
@@ -387,6 +397,7 @@ Assume a "stationary setting", i.e.
 ### What should then happen?
 
 Then we can expect that
+
   * The scorecard-model will be roughly constant
   * The same region of the acceptance population gets selected
   * And therefore the history and the new accepts come from the same region
@@ -397,6 +408,8 @@ Then we can expect that
 
 ## Applicant's population
 
+### General DGP
+
 * The classical two class linear discriminant analysis with equal covariances problem was chosen for the simulation.
   
 * Let $X = (X_m^\top, X_h^\top)^\top$, then
@@ -404,7 +417,7 @@ Then we can expect that
 $$
 \underbrace{X | Y = b}_{=: X_b}
 \sim \mathcal{N}\left(
-  \mu_b = \begin{bmatrix}
+  \mu_b  \! = \! \begin{bmatrix}
     \mu_{b, m} \\
     \mu_{b, h}
   \end{bmatrix},
@@ -412,7 +425,7 @@ $$
 \right) , \;
 \underbrace{X | Y = g}_{=: X_g}
 \sim \mathcal{N}\left(
-  \mu_g = \begin{bmatrix}
+  \mu_g \! = \! \begin{bmatrix}
     \mu_{g, m} \\
     \mu_{g, h}
   \end{bmatrix},
@@ -428,13 +441,14 @@ $$
 1 & \sigma_{m, 12} & \sigma_{mh} \\
 \sigma_{m, 12} & 1 & \sigma_{mh} \\
 \sigma_{mh} & \sigma_{mh} & 1
-\end{pmatrix}
+\end{pmatrix} \text{, positive definite}
 $$
 
-positive definite
 :::
 
-## Choosing suitable covariances
+---
+
+### Choosing suitable covariances
 
 Two bayes-rule based models: restricted (only using $X_m$) and full with error rates
 $P^{*}_m$, $P^{*}_e$ respectively
@@ -446,9 +460,53 @@ from thesis.helper_scripts.sensitivity_analysis import wrapper_bayes_errors_plot
 wrapper_bayes_errors_plot(
     max_corrs=500,
     var_to_hide=base_sim["var_to_hide"],
-    vcov=dgp_base.bad_mixture.cov
+    vcov=dgp_base.bad_mixture.cov,
+    simulated_corrs=base_sim["corr_to_hidden"],
+    idx_wished_corr=idx_wished_corr,
+    figsize=(13,3.8)
 )
 ```
+
+::: {style="text-align: left; margin: -1em 0;"}
+$\Rightarrow$ we can control the strength effect of the missing variable bias!
+:::
+
+---
+
+### Checking out the distribution of the base simulation
+
+::: {.r-stack}
+
+::: {.fragment .fade-out fragment-index=1}
+```{python}
+#| label: fig-3d-base-dgp
+#| fig-cap: "Representation of joint distribution $(Y, X)$"
+from thesis.helper_scripts.dgp_plotting import (
+    extract_dgp_info_for_boundaries,
+    plot3d_with_perf_bayes_boundary
+)
+dgp_info_for_boundaries = extract_dgp_info_for_boundaries(dgp_base)
+plot3d_with_perf_bayes_boundary(dgp_base, dgp_info_for_boundaries["W"], dgp_info_for_boundaries["bias"])
+```
+
+:::
+
+::: {.fragment .fade-in fragment-index=1}
+```{python}
+#| label: fig-pairwise-base-dgp
+#| fig-cap: "Pairwise covariates component representation of $(Y, X)$"
+from thesis.helper_scripts.dgp_plotting import plot_pairwise_dgp_with_perf_bayes_boundaries
+plot_pairwise_dgp_with_perf_bayes_boundaries(dgp_base, **dgp_info_for_boundaries)
+```
+
+:::
+
+:::
+
+## Checking out the distribution of the base simulation
+
+
+
 
 # Checking the assumptions
 

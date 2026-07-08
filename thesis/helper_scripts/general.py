@@ -228,4 +228,4 @@ def slice_vec_sim(sim: dict, wished_corr: float) -> dict:
 
     sim["data_generator"] = slice_dgp_across_first_dim(sim["data_generator"], idx_wished_cor)
 
-    return sim
+    return sim, idx_wished_cor

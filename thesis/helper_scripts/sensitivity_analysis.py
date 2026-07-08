@@ -1,6 +1,6 @@
 from math import sqrt
 
-from typing import Dict
+from typing import Dict, Tuple
 
 from matplotlib.gridspec import GridSpec
 import matplotlib as mpl
@@ -256,9 +256,9 @@ def plot_bayes_error_constrained_model(
     ax.scatter(
         corr_space[idx_corr_sigma_m12],
         bayes_err_no_hidden_valids_per_corr[idx_corr_sigma_m12],
-        s=5,
+        s=10,
         color=mpl.colormaps["tab10"](1),
-        label="$P^m_e$ of Base sim.",
+        label=r"$P^m_e$ of chosen $\sigma_{m, 12}$",
         zorder = 10
     )
 
@@ -273,7 +273,8 @@ def plot_bayes_error_comp_of_selected(
         corrs: torch.Tensor,
         bayes_errs_full: torch.Tensor,
         bayes_err_ignoring_var: float,
-        sigma_mh: float,
+        simulated_corrs: torch.Tensor,
+        idx_wished_corr: int,
         sigma_m12: float
     ):
     ax.axhline(
@@ -284,10 +285,29 @@ def plot_bayes_error_comp_of_selected(
         zorder=10
     )
     ax.plot(corrs, bayes_errs_full, color=mpl.colormaps["tab10"](2), label="$P_e^*$", zorder=20)
-    idx_corr_sigma_mh = torch.abs(corrs - sigma_mh).argmin().view(1)
+    idxs_simulated_corrs = torch.abs(
+        corrs - simulated_corrs.unsqueeze(-1)
+    ).argmin(dim=-1)
+    assert idxs_simulated_corrs.shape == simulated_corrs.shape
+
     ax.scatter(
-        corrs[idx_corr_sigma_mh], bayes_errs_full[idx_corr_sigma_mh], color=mpl.colormaps["tab10"](3), s=5,
-        label="$P_e^*$ of Base sim.",
+        corrs[idxs_simulated_corrs[[idx_wished_corr]]],
+        bayes_errs_full[idxs_simulated_corrs[[idx_wished_corr]]],
+        color=mpl.colormaps["tab10"](3),
+        s=10,
+        label="$P_e^*$ Base sim.",
+        zorder=30
+    )
+
+    idxs_other_sim_corrs = idxs_simulated_corrs[
+        torch.arange(idxs_simulated_corrs.size(0)) != idx_wished_corr
+    ]
+    ax.scatter(
+        corrs[idxs_other_sim_corrs],
+        bayes_errs_full[idxs_other_sim_corrs],
+        color=mpl.colormaps["tab10"](4),
+        s=10,
+        label="$P_e^*$ other sim.",
         zorder=30
     )
 
@@ -296,7 +316,14 @@ def plot_bayes_error_comp_of_selected(
     ax.set_title(f"$P^m_e$ vs. $P_e^*$ with $\\sigma_{{m, 12}} = {sigma_m12}$")
     ax.legend()
 
-def wrapper_bayes_errors_plot(max_corrs: int, var_to_hide: int, vcov: torch.Tensor):
+def wrapper_bayes_errors_plot(
+        max_corrs: int,
+        var_to_hide: int,
+        vcov: torch.Tensor,
+        simulated_corrs: torch.Tensor,
+        idx_wished_corr: int,
+        figsize: Tuple[int, int] = (15,4)
+    ):
     normalized_relative_errors, corr_space, bayes_err_no_hidden_valids_per_corr = calc_all_permissible_bayes_err(
         max_corrs=max_corrs,
         encoding_no_hidden_was_zero=-1,
@@ -305,7 +332,7 @@ def wrapper_bayes_errors_plot(max_corrs: int, var_to_hide: int, vcov: torch.Tens
 
     corrs, bayes_errs_full, bayes_err_ignoring_var = get_bayes_err_comp_under_default_corr_mh(max_corrs, var_to_hide)
 
-    fig = plt.figure(figsize=(15, 4))
+    fig = plt.figure(figsize=figsize)
     gs = GridSpec(nrows=2, ncols=4, height_ratios=[0.9,0.1], width_ratios=[0.1, 1, 1, 1], wspace=0.35, left=0.1)
 
     heatmap_plot_relative_errors(
@@ -319,7 +346,6 @@ def wrapper_bayes_errors_plot(max_corrs: int, var_to_hide: int, vcov: torch.Tens
     
     F = vcov.size(-1)
     non_to_hide = [f for f in range(1, F) if f!= (var_to_hide%F)][0]
-    sigma_mh = vcov[0, var_to_hide].item()
     sigma_m12=vcov[0,non_to_hide].item()
 
     plot_bayes_error_constrained_model(fig.add_subplot(gs[:, 2]), corr_space, bayes_err_no_hidden_valids_per_corr, sigma_m12)
@@ -329,7 +355,8 @@ def wrapper_bayes_errors_plot(max_corrs: int, var_to_hide: int, vcov: torch.Tens
         corrs,
         bayes_errs_full,
         bayes_err_ignoring_var,
-        sigma_mh,
+        simulated_corrs,
+        idx_wished_corr,
         sigma_m12
     )
     plt.show()
