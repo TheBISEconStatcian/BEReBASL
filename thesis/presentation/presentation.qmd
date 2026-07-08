@@ -778,7 +778,8 @@ from experiments.acceptance_loop_cv_based_MNAR import THRESHOLD_BASIS, METRIC_CA
 
 T = len(THRESHOLD_BASIS)
 M = len(METRIC_CATEGORIES)
-IMG_DIR = "_cached_imgs/acc-rates"
+CACHED_IMG_DIR = "_cached_imgs"
+IMG_DIR = CACHED_IMG_DIR + "/acc-rates"
 USE_CACHED_IMAGES = True
 os.makedirs(IMG_DIR, exist_ok=True)
 
@@ -858,62 +859,299 @@ def plot_acceptance_summary(base_sim, idx_wished_corr, img_dir=IMG_DIR):
     plt.close(fig)
     return fpath, corr_val, bias_val
 
+def render_selector_html(manifest, container_id, corr_label=r"\sigma_{mh}", bias_label=r"\pi_b"):
+    corr_values = sorted(manifest.keys(), key=float)
+    bias_values = sorted({b for d in manifest.values() for b in d}, key=float)
+    default_corr, default_bias = corr_values[0], bias_values[0]
+    default_img = manifest[default_corr][default_bias]
+
+    manifest_json = json.dumps(manifest)
+    corr_options = "\n".join(f'<option value="{c}">{c}</option>' for c in corr_values)
+    bias_options = "\n".join(f'<option value="{b}">{b}</option>' for b in bias_values)
+
+    html = f"""<figure class="acc-selector" id="{container_id}" data-manifest='{manifest_json}'>
+<div class="acc-selector-controls">
+<label>${corr_label}$:
+<select class="acc-corr-select">{corr_options}</select>
+</label>
+<label>${bias_label}$:
+<select class="acc-bias-select">{bias_options}</select>
+</label>
+</div>
+<img class="acc-selector-img" src="{default_img}" />
+</figure>
+<script>
+(function() {{
+var root = document.getElementById('{container_id}');
+var manifest = JSON.parse(root.getAttribute('data-manifest'));
+function update() {{
+var img = document.getElementsByClassName('acc-selector-img r-stretch')[0];
+var corrSel = root.querySelector('.acc-corr-select');
+var biasSel = root.querySelector('.acc-bias-select');
+if (!img || !corrSel || !biasSel) return;
+var entry = manifest[corrSel.value];
+if (entry && entry[biasSel.value]) {{ img.src = entry[biasSel.value]; }}
+}}
+root.addEventListener('change', function(e) {{
+if (e.target.classList.contains('acc-corr-select') || e.target.classList.contains('acc-bias-select')) {{
+update();
+}}
+}});
+}})();
+</script>"""
+    return "\n".join(line for line in html.splitlines() if line.strip() != "")
+
 manifest = {}
 for sim in all_sim_objs.values():
     for idx_corr in range(sim["corr_to_hidden"].size(0)):
         fpath, corr_val, bias_val = plot_acceptance_summary(sim, idx_corr)
         manifest.setdefault(f"{corr_val:.2f}", {})[f"{bias_val:.2f}"] = fpath
 
-corr_values = sorted(manifest.keys(), key=float)
-bias_values = sorted({b for d in manifest.values() for b in d}, key=float)
+#corr_values = sorted(manifest.keys(), key=float)
+#bias_values = sorted({b for d in manifest.values() for b in d}, key=float)
 ```
 
 ```{python}
 #| label: acc-rates-selector
 #| output: asis
-
-manifest_json = json.dumps(manifest)
-corr_options = "\n".join(f'<option value="{c}">{c}</option>' for c in corr_values)
-bias_options = "\n".join(f'<option value="{b}">{b}</option>' for b in bias_values)
-default_corr, default_bias = corr_values[0], bias_values[0]
-default_img = manifest[default_corr][default_bias]
-
-html = f"""<div class="acc-selector">
-<div class="acc-selector-controls">
-<label>$\\sigma_{{mh}}$:
-<select id="acc-corr-select">{corr_options}</select>
-</label>
-<label>$\\pi_b$:
-<select id="acc-bias-select">{bias_options}</select>
-</label>
-</div>
-<img id="acc-selector-img" src="{default_img}" />
-</div>
-<script>
-(function() {{
-var manifest = {manifest_json};
-var corrSel = document.getElementById('acc-corr-select');
-var biasSel = document.getElementById('acc-bias-select');
-var img = document.getElementById('acc-selector-img');
-function update() {{
-var entry = manifest[corrSel.value];
-if (entry && entry[biasSel.value]) img.src = entry[biasSel.value];
-}}
-corrSel.addEventListener('change', update);
-biasSel.addEventListener('change', update);
-}})();
-</script>"""
-
-# belt-and-braces: strip any accidental blank lines
-html = "\n".join(line for line in html.splitlines() if line.strip() != "")
-print(html)
+container_id = f"acc-selector-{base_sim_bias}".replace("_", "-")
+print(render_selector_html(manifest, container_id))
 ```
 
----
+## How does the surprise look like?
+
+```{python}
+#| label: surprise-setup
+#| output: false
+IMG_DIR_SURPRISE = CACHED_IMG_DIR + "/surprise"
+os.makedirs(IMG_DIR_SURPRISE, exist_ok=True)
+def plot_surprise(
+        sim_objs,
+        bias_str,
+        w,
+        corr_idx,
+        grid_path,
+        exp_type,
+        min_bads_for_valid=4,
+        img_dir=IMG_DIR_SURPRISE
+):
+    corr = sim_objs["corr_to_hidden"][corr_idx].item()
+    bias = sim_objs["bias_prop"]
+
+    fname = f"surprise_corr_{corr:.2f}_bias_{bias:.2f}_w{w}_{exp_type}.png".replace("-", "m")
+    fpath = os.path.join(img_dir, fname).replace("\\", "/")
+
+    if os.path.exists(fpath) and USE_CACHED_IMAGES:
+        return fpath, corr, bias
+
+    future_stats = torch.load(
+        os.path.join(grid_path, 'bias_' + bias_str, 'future_expectations_with_window.pt'),
+        map_location='cpu',
+        weights_only=False
+    )
+
+    fig, axes = plt.subplots(nrows = 2, ncols=3, figsize=(14, 8.5))
+    gen_round = sim_objs["credit_data"].gen_round
+    corr = sim_objs["corr_to_hidden"][corr_idx].item()
+    metric_to_name = {"roc" : "AUROC", "ks" : "KS-Statistic"}
+
+    sample_sizes = sim_objs["sample_sizes"]
+
+    for i_m, m in enumerate(METRIC_CATEGORIES):
+        acc_flag = sim_objs["alternative_accepted"].get(
+          ('acc_based' if exp_type == 'Biased' else 'oracle') + '_' + m,
+          sim_objs["credit_data"].accepted
+        )[corr_idx, :]
+        bad_flag = sim_objs["credit_data"].default_flag[corr_idx, :].to(bool)
+        
+        G = gen_round[-1].item() + 1
+
+        count_accepts = gen_round.new_zeros((G,)).scatter_add_(
+            dim=0,
+            index=gen_round,
+            src=acc_flag.to(gen_round.dtype)
+        )
+        cum_sum_acc = count_accepts.cumsum(dim=-1)[:-1]
+
+        count_accepted_bads = gen_round.new_zeros((G,)).scatter_add_(
+            dim=0,
+            index=gen_round,
+            src=(bad_flag & acc_flag).to(gen_round.dtype)
+        )
+        count_acc_bads_per_window = torch.nn.functional.pad(
+            count_accepted_bads, pad=(0,w-1), value=0
+        )[torch.arange(G).unsqueeze(-1) + torch.arange(w)].sum(dim=-1)
+        invalid_realized_metrics = count_acc_bads_per_window[1:] < min_bads_for_valid
+
+        expectation = sim_objs["stats"][
+          ('acc_based' if exp_type == 'Biased' else 'oracle_comparable') + f'_{m}_stats'
+        ].mean(dim=(1, 3))[:, corr_idx]
+        biased_real_lbl = (
+          'biased_acc_' +
+          ('acc_based' if exp_type == 'Biased' else 'oracle') +
+          f'_{m}_real_{m}'
+        )
+        real_biased_acc = future_stats[w]['logit'][biased_real_lbl][corr_idx, 1:].masked_fill(
+            invalid_realized_metrics, float('nan')
+        )
+        real_unb_acc = future_stats[w]['logit']['un' + biased_real_lbl][corr_idx, 1:].masked_fill(
+            invalid_realized_metrics, float('nan')
+        )
+
+        tab10_cmap = plt.get_cmap("tab10")
+        colors_for_lines = {
+            "expectation" : tab10_cmap(0),
+            "real_biased" : tab10_cmap(1),
+            "real_unbiased" : tab10_cmap(2),
+        }
+
+        N = sample_sizes.size(0)
+        idx_for_ticks = [0] + list(range(12, N, 25)) + [N-1]
+
+        ax_abs, ax_diffs, ax_abs_diffs = axes[i_m]
+
+        ax_abs.set_title("Expected vs Realized performance")
+        ax_diffs.set_title("Surprise")
+        ax_abs_diffs.set_title("Absolute surprise")
+
+        ax_abs.plot(sample_sizes, expectation, label=r"$\mathbb{E}($bias$)$", color=colors_for_lines["expectation"])
+        ax_abs.plot(sample_sizes, real_unb_acc, label="$m($unb$)$", color=colors_for_lines["real_unbiased"])
+        ax_abs.plot(sample_sizes, real_biased_acc, label="$m($bias$)$", color=colors_for_lines["real_biased"])
+
+        diff_to_unb = expectation - real_unb_acc
+        diff_to_biased = expectation - real_biased_acc
 
 
+        ax_diffs.plot(
+            sample_sizes,
+            diff_to_unb,
+            label=r"$\mathbb{E}($bias$)$ - $m($unb$)$",
+            color=colors_for_lines["real_unbiased"]
+            #s=2
+        )
+        ax_diffs.plot(
+            sample_sizes,
+            diff_to_biased,
+            label=r"$\mathbb{E}($bias$)$ - $m($bias$)$",
+            color=colors_for_lines["real_biased"]
+            #s=2
+        )
+        ax_diffs.axhline(y=0, lw=1, ls="dashed", c='gray')
 
+        abs_diff_to_unb = diff_to_unb.abs()
+        abs_diff_to_biased = diff_to_biased.abs()
 
+        ax_abs_diffs.plot(sample_sizes, abs_diff_to_unb, label=r"$|\mathbb{E}($bias$)$ - $m($unb$)|$", color=colors_for_lines["real_unbiased"])
+        ax_abs_diffs.plot(sample_sizes, abs_diff_to_biased.abs(), label=r"$|\mathbb{E}($bias$)$ - $m($bias$)|$", color=colors_for_lines["real_biased"])
+
+        for ax in axes[i_m]:
+            ax.set_ylabel(metric_to_name[m])
+
+    for ax in axes.flatten():
+        ax.set_xlabel("Count gen. observations (thousands)")
+        ax.set_xticks(sample_sizes[idx_for_ticks])
+        ax.set_xticklabels([f"{value/1000:.1f}" for value in sample_sizes[idx_for_ticks].tolist()], rotation=45)
+        ax.tick_params(axis="x", labelsize=8)
+        ax.legend(ncols=len(ax.get_legend_handles_labels()[0]))
+
+        top_ax = ax.twiny()
+        top_ax.set_xlim(ax.get_xlim())
+        top_ax.set_xticks(sample_sizes[idx_for_ticks])
+        top_ax.set_xticklabels([f"{value/1000:.1f}" for value in cum_sum_acc[idx_for_ticks].tolist()], rotation=45)
+        top_ax.set_xlabel("Biased Accepts count (thousands)")
+        top_ax.tick_params(axis="x", labelsize=8)
+
+    fig.suptitle(f"$\\pi_b = {sim_objs['bias_prop']}$, $\\sigma_{{mh}}={corr:.2f}$, $W_f$={w}, {exp_type} Accept Policy")
+
+    fig.tight_layout()
+
+    fig.savefig(fpath, dpi=110, bbox_inches="tight")
+    plt.close(fig)
+    return fpath, corr, bias
+
+def render_surprise_selector_html(manifest, container_id,
+                                   corr_label=r"\sigma_{mh}", bias_label=r"\pi_b",
+                                   w_label=r"W_f", exp_label="Exp. Type"):
+    corr_values = sorted(manifest.keys(), key=float)
+    bias_values = sorted({b for c in manifest.values() for b in c}, key=float)
+    w_values = sorted({w for c in manifest.values() for b in c.values() for w in b}, key=int)
+    exp_values = sorted({e for c in manifest.values() for b in c.values() for w in b.values() for e in w})
+
+    default_corr, default_bias, default_w = corr_values[0], bias_values[0], w_values[0]
+    default_exp = exp_values[0] if exp_values[0] in manifest[default_corr][default_bias][default_w] else next(iter(manifest[default_corr][default_bias][default_w]))
+    default_img = manifest[default_corr][default_bias][default_w][default_exp]
+
+    manifest_json = json.dumps(manifest)
+    corr_options = "\n".join(f'<option value="{c}">{c}</option>' for c in corr_values)
+    bias_options = "\n".join(f'<option value="{b}">{b}</option>' for b in bias_values)
+    w_options = "\n".join(f'<option value="{w}">{w}</option>' for w in w_values)
+    exp_options = "\n".join(f'<option value="{e}">{e}</option>' for e in exp_values)
+
+    html = f"""<figure class="surprise-selector" id="{container_id}" data-manifest='{manifest_json}'>
+<div class="surprise-selector-controls">
+<label>${corr_label}$:
+<select class="surprise-corr-select">{corr_options}</select>
+</label>
+<label>${bias_label}$:
+<select class="surprise-bias-select">{bias_options}</select>
+</label>
+<label>${w_label}$:
+<select class="surprise-w-select">{w_options}</select>
+</label>
+<label>{exp_label}:
+<select class="surprise-exp-select">{exp_options}</select>
+</label>
+</div>
+<img class="surprise-selector-img" src="{default_img}" />
+</figure>
+<script>
+(function() {{
+var root = document.getElementById('{container_id}');
+var manifest = JSON.parse(root.getAttribute('data-manifest'));
+function update() {{
+var img = root.querySelector('img[class*="surprise-selector-img"]');
+var corrSel = root.querySelector('.surprise-corr-select');
+var biasSel = root.querySelector('.surprise-bias-select');
+var wSel = root.querySelector('.surprise-w-select');
+var expSel = root.querySelector('.surprise-exp-select');
+if (!img || !corrSel || !biasSel || !wSel || !expSel) return;
+var c = manifest[corrSel.value];
+var b = c && c[biasSel.value];
+var w = b && b[wSel.value];
+var path = w && w[expSel.value];
+if (path) {{ img.src = path; }}
+}}
+root.addEventListener('change', function(e) {{
+var cls = e.target.classList;
+if (cls.contains('surprise-corr-select') || cls.contains('surprise-bias-select') ||
+    cls.contains('surprise-w-select') || cls.contains('surprise-exp-select')) {{
+update();
+}}
+}});
+}})();
+</script>"""
+    return "\n".join(line for line in html.splitlines() if line.strip() != "")
+
+windows = [3, 5, 7, 10]
+
+manifest_surprises = {}
+for bias_str, sim in all_sim_objs.items():
+    for idx_corr in range(sim["corr_to_hidden"].size(0)):
+        for w in windows:
+            for exp_type in ["Biased", "Unbiased"]:
+                fpath, corr_val, bias_val = plot_surprise(sim, bias_str, w, idx_corr, grid_path, exp_type)
+                (manifest_surprises
+                    .setdefault(f"{corr_val:.2f}", {})
+                    .setdefault(f"{bias_val:.2f}", {})
+                    .setdefault(str(w), {}))[exp_type] = fpath
+
+```
+
+```{python}
+#| label: surprise-selector
+#| output: asis
+print(render_surprise_selector_html(manifest_surprises, container_id="surprise-selector-widget"))
+```
 
 
 # How to do Reinforcement Learning for RI
