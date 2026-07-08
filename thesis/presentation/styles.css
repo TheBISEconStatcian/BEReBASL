@@ -22,3 +22,24 @@
   max-width: 90% !important;
   height: auto !important;
 }
+
+.acc-selector-controls {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  margin-bottom: 0.8rem;
+  font-size: 0.65em;
+}
+.acc-selector-controls select {
+  margin-left: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid #bbb;
+  background: #fff;
+}
+#acc-selector-img {
+  display: block;
+  margin: 0 auto;
+  max-height: 62vh;
+  max-width: 100%;
+}
