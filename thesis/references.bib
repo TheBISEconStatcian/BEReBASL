@@ -207,3 +207,45 @@ collection={Cambridge Series in Statistical and Probabilistic Mathematics}
   howpublished = {\url{https://deepai.org}},
   note         = {Creative AI platform}
 }
+
+@article{Li_et_al_2017_semisupervised_svm,
+title = {Reject inference in credit scoring using Semi-supervised Support Vector Machines},
+journal = {Expert Systems with Applications},
+volume = {74},
+pages = {105-114},
+year = {2017},
+issn = {0957-4174},
+doi = {https://doi.org/10.1016/j.eswa.2017.01.011},
+url = {https://www.sciencedirect.com/science/article/pii/S095741741730012X},
+author = {Zhiyong Li and Ye Tian and Ke Li and Fanyin Zhou and Wei Yang},
+keywords = {Reject inference, Credit scoring, Semi-supervised Support Vector Machines, Online lending, Predictive accuracy},
+abstract = {Credit scoring models are commonly built on a sample of accepted applicants whose repayment and behaviour information is observable once the loan has been issued. However in practice these models are regularly applied to new applicants, which may cause sample bias. This bias is even more pronounced in online lending, where over 90% of total loan requests are rejected. Reject inference is a technique to infer the outcomes for rejected applicants and incorporate them in the scoring system, with the expectation that predictive accuracy is improved. This paper extends previous studies in two main ways: firstly, we propose a new method involving machine learning to solve the reject inference problem; secondly, the Semi-supervised Support Vector Machines model is found to improve the performance of scoring models compared to the industrial benchmark of logistic regression, based on 56,626 accepted and 563,215 rejected online consumer loans.}
+}
+
+@article{Mancisdor_et_al_2020_DeepGenM_for_RI,
+title = {Deep generative models for reject inference in credit scoring},
+journal = {Knowledge-Based Systems},
+volume = {196},
+pages = {105758},
+year = {2020},
+issn = {0950-7051},
+doi = {https://doi.org/10.1016/j.knosys.2020.105758},
+url = {https://www.sciencedirect.com/science/article/pii/S0950705120301660},
+author = {Rogelio A. Mancisidor and Michael Kampffmeyer and Kjersti Aas and Robert Jenssen},
+keywords = {Reject inference, Deep generative models, Credit scoring, Semi-supervised learning},
+abstract = {Credit scoring models based on accepted applications may be biased and their consequences can have a statistical and economic impact. Reject inference is the process of attempting to infer the creditworthiness status of the rejected applications. Inspired by the promising results of semi-supervised deep generative models, this research develops two novel Bayesian models for reject inference in credit scoring combining Gaussian mixtures and auxiliary variables in a semi-supervised framework with generative models. To the best of our knowledge this is the first study coupling these concepts together. The goal is to improve the classification accuracy in credit scoring models by adding reject applications. Further, our proposed models infer the unknown creditworthiness of the rejected applications by exact enumeration of the two possible outcomes of the loan (default or non-default). The efficient stochastic gradient optimization technique used in deep generative models makes our models suitable for large data sets. Finally, the experiments in this research show that our proposed models perform better than classical and alternative machine learning models for reject inference in credit scoring, and that model performance increases with the amount of data used for model training.}
+}
+
+@article{Anderson2019_BayesianNetForRI,
+title = {Using Bayesian networks to perform reject inference},
+journal = {Expert Systems with Applications},
+volume = {137},
+pages = {349-356},
+year = {2019},
+issn = {0957-4174},
+doi = {https://doi.org/10.1016/j.eswa.2019.07.011},
+url = {https://www.sciencedirect.com/science/article/pii/S0957417419304907},
+author = {Billie Anderson},
+keywords = {Credit scoring, Reject inference, Bayesian networks, Predictive accuracy},
+abstract = {Credit scoring is an automatic credit assessment tool that has been used by different types of financial institutions for years. When a financial institution wants to create a credit scoring model for all applicants, the institution only has the known good/bad loan outcome for the accepted applicants; this causes an inherent bias in the model. Reject inference is the process of inferring a good/bad loan outcome to the applicants that were rejected for a loan so that the updated credit scoring model will be representative of all loan applicants, accepted and rejected. This paper presents an empirical reject inference technique using a Bayesian network. The proposed method has an advantage over traditional reject inference methods since there is no functional form that will be estimated with the accepted applicants' data and extrapolated to the rejected applicants to infer their good/bad loan outcome status.}
+}

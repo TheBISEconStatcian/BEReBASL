@@ -47,9 +47,11 @@
 #surprise-selector-img {
   display: block;
   margin: 0 auto;
-  max-height: 70vh;
-  max-width: 100%;
+  width: 100%;
+  height: auto;
+  object-fit: fill;
 }
+
 .surprise-selector-controls {
   display: flex;
   gap: 1.5rem;
@@ -59,6 +61,28 @@
   font-size: 0.6em;
 }
 .surprise-selector-controls select {
+  margin-left: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid #bbb;
+  background: #fff;
+}
+
+#betas-selector-img {
+  display: block;
+  margin: 0 auto;
+  max-height: 65vh;
+  max-width: 100%;
+}
+.betas-selector-controls {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 0.8rem;
+  font-size: 0.6em;
+}
+.betas-selector-controls select {
   margin-left: 0.5rem;
   padding: 0.25rem 0.6rem;
   border-radius: 6px;

@@ -73,6 +73,8 @@ dgp_base: CreditDataGenerator = base_sim_objs["data_generator"]
 
 ## The accept-decision induced data missingness
 
+### The acceptance loop
+
 ::: {.r-stack}
 ::: {.fragment .fade-out fragment-index=1}
 ```{python}
@@ -149,7 +151,12 @@ def get_base_graph():
     return dot
 
 # Render original graph
-get_base_graph()
+dot_invisible = get_base_graph()
+dot_visible = get_base_graph()
+# Add the interactive transition line
+dot_invisible.edge('H_Rejects', 'Alg:w', color='white', fontcolor="white", label="RI")
+dot_visible.edge('H_Rejects', 'Alg:w', color='#ef4444', fontcolor="black", label="RI")
+dot_invisible
 ```
 
 :::
@@ -158,14 +165,7 @@ get_base_graph()
 ```{python}
 #| echo: false
 #| output: true
-# Re-use the layout function to ensure exact coordinates match
-dot_updated = get_base_graph()
-
-# Add the interactive transition line
-dot_updated.edge('H_Rejects', 'Alg:w', color='#ef4444', label="RI")
-
-# Render updated graph
-dot_updated
+dot_visible
 ```
 
 :::
@@ -293,7 +293,7 @@ $$
 
 :::: {.columns}
 
-::: {.column width="47%"}
+::: {.column width="37%"}
 
 **Irrelevance:** It would be given if for all $t$
 
@@ -304,24 +304,27 @@ $$
 
 :::
 
-::: {.column width="6%"}
+::: {.column width="4%"}
 
 
 :::
 
-::: {.column width="47%"}
+::: {.column width="59%"}
 
 **Methodological impossibility:**
 
 * Unclear whether/when RI works.
 
-* Many augmentation found to be inconsistent, equivalent to
-  ignoring  rejects or base on questionable assumptions [@ehrhardt2021rejectReview]
+* @ehrhardt2021rejectReview: Most augmentation inconsistent,
+  equivalent to ignoring rejects or base on questionable assumptions:
 
-* Existing Augmentation techniques base on an assumption close to
-  equality in distribution.
+    * tend to base solely on $\mathbb{P}_{Y^{(t)} | X^{(t)}, Z^{(t)}=a}$
+    * $\Rightarrow$ implicitly assume equality in distribution.
 
-* Other methods exist based on extra assumptions - still in research or abandoned.
+* Other methods exist based on extra assumptions - still in research or abandoned.^[
+  E.g. @Li_et_al_2017_semisupervised_svm, @Mancisdor_et_al_2020_DeepGenM_for_RI,
+  @Anderson2019_BayesianNetForRI or @bansikCrook2007
+]   
 
 :::
 
@@ -384,7 +387,7 @@ $$
 
 :::
 
-* The missingness is MNAR.
+* The missingness is MAR.
 
 * The scorecard model estimators is parametric, ML based and well specified.
 
@@ -458,7 +461,7 @@ $P^{*}_m$, $P^{*}_e$ respectively
 #| fig-cap: "Distribution of (Bayes) error rates"
 from thesis.helper_scripts.sensitivity_analysis import wrapper_bayes_errors_plot
 wrapper_bayes_errors_plot(
-    max_corrs=200,
+    max_corrs=500,
     var_to_hide=base_sim["var_to_hide"],
     vcov=dgp_base.bad_mixture.cov,
     simulated_corrs=base_sim["corr_to_hidden"],
@@ -537,7 +540,8 @@ figsize_th = (5, 4.5)
 
 * Score-Model: Logistic regression estimated via Newton–Raphson.
 
-* Threshold selection: No cost-sensitive optimization, calculated as mean of 10 cross-validated estimates. Two methods were used:
+* Threshold selection: No cost-sensitive optimization, calculated as mean of 10
+  5-fold-cross-validated estimates. Two methods were used:
 
 
 :::: {.columns}
@@ -679,7 +683,7 @@ worlds, both use a classifier and threshold decision method as before.
   </thead>
   <tbody>
     <tr>
-      <th id="T_07f9b_level0_row0" class="row_heading level0 row0" >Estimation of $s_t = 1 - p_t$ </th>
+      <th id="T_07f9b_level0_row0" class="row_heading level0 row0" >Estimation of<br>$s_t = 1 - p_t$ </th>
       <td id="T_07f9b_row0_col0" class="data row0 col0" >Full history $\rightarrow p^*_t$ </td>
       <td id="T_07f9b_row0_col1" class="data row0 col1" >All Accepts according to biased policy $\rightarrow \tilde{p}_t$ </td>
     </tr>
@@ -918,6 +922,163 @@ container_id = f"acc-selector-{base_sim_bias}".replace("_", "-")
 print(render_selector_html(manifest, container_id))
 ```
 
+## Checking out the convergence of the betas
+
+### Differences of logits trained on accepts to trained on full history
+
+```{python}
+from matplotlib import pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.collections import LineCollection
+
+IMG_DIR_BETAS = CACHED_IMG_DIR + "/betas-per-gen"
+os.makedirs(IMG_DIR_BETAS, exist_ok=True)
+
+def plot_betas(
+  sim_objs,
+  bias_str,
+  metric,
+  img_dir = IMG_DIR_BETAS
+):
+  bias_val = sim_objs["bias_prop"]
+  fname = f"betas_bias_{bias_val:.2f}_metric_{metric}.png".replace("-", "m")
+  fpath = os.path.join(img_dir, fname).replace("\\", "/")
+
+  if os.path.exists(fpath) and USE_CACHED_IMAGES:
+    return fpath, bias_val, metric
+
+  saved_betas = torch.load(
+        os.path.join(grid_path, 'bias_' + bias_str, 'betas_per_acc_and_gen.pt'),
+        map_location='cpu',
+        weights_only=False
+    )
+  betas_all = saved_betas["through_the_door"]
+  betas_acc = torch.stack([
+          saved_betas[acc_k + '_' + metric]
+          for acc_k in ("acc_based", "oracle")
+      ],
+    dim=0
+  )
+
+  beta_diffs = betas_all.unsqueeze(0) - betas_acc
+
+  alpha = 0.6
+  y_offset_mul = 0.05
+  linewidth = 2
+
+  A, Co, G, K = betas_acc.shape
+
+  fig, axes = plt.subplots(1, K, figsize=(4*K, 4.5 + 0.3))
+  #fig.subplots_adjust(bottom=0.2)
+  cmap = plt.get_cmap("tab10")
+  colors = [cmap(i)[:3] + (alpha,) for i in range(Co) for _ in range(A)]
+  line_styles_ao = {0 : "solid", 1 : "dashed", 2 : "dotted"} # [accept_based, oracle]
+  line_styles = [line_styles_ao[ao] for i in range(Co) for ao in range(A)]
+
+  for k in range(K):
+      ax = axes[k]
+      betas_k = beta_diffs[..., k]          # [AO, Co, G]
+      gen_round = torch.arange(G)
+
+      # Build segments for LineCollection
+      segments = [torch.stack([gen_round, betas_k[ao, co]], dim=-1) for co in range(Co) for ao in range(A)]
+      lc = LineCollection(segments, colors=colors, linewidths=linewidth, linestyles=line_styles)
+
+      ax.add_collection(lc)
+      ax.set_xlim(0, G-1)
+      min_beta, max_beta = betas_k.min().item(), betas_k.max().item()
+      add_rest_beta = y_offset_mul * (max_beta - min_beta)
+      ax.set_ylim(min_beta - add_rest_beta, max_beta + add_rest_beta)
+
+      #ax.set_title(f"K = {k}")
+      ax.set_ylabel(f"$\\beta_{{{k}}}$")
+      ax.set_xlabel("Generation round")
+      #ax.grid(True)
+
+
+  handles_corrs = (
+    [Line2D([0], [0], linewidth=linewidth, color='k', ls=line_styles_ao[ao]) for ao in range(A)] +
+    [Line2D([0], [0], linewidth=linewidth, color=c) for c in colors[::A]]
+  )
+  labels_corrs = ["Biased Acc.", "Unb. Acc."] + [f"{corr.item():.2f}" for corr in sim_objs["corr_to_hidden"]]
+
+
+
+  fig.suptitle(f"$\\pi_b = {sim_objs['bias_prop']}$, Threshold Basis: {metric}", fontsize=14)
+  fig.tight_layout()
+
+  fig.subplots_adjust(bottom=0.25)
+  fig.legend(
+      handles_corrs,
+      labels_corrs,
+      ncol=len(handles_corrs),
+      loc="lower center"
+  )
+
+  fig.savefig(fpath, dpi=110, bbox_inches="tight")
+  plt.close(fig)
+  return fpath, bias_val, metric
+
+def render_betas_selector_html(manifest, container_id,
+                                bias_label=r"\pi_b", metric_label="Threshold Basis"):
+    bias_values = sorted(manifest.keys(), key=float)
+    metric_values = sorted({m for b in manifest.values() for m in b})
+    default_bias, default_metric = bias_values[0], metric_values[0]
+    default_img = manifest[default_bias][default_metric]
+
+    manifest_json = json.dumps(manifest)
+    bias_options = "\n".join(f'<option value="{b}">{b}</option>' for b in bias_values)
+    metric_options = "\n".join(f'<option value="{m}">{m}</option>' for m in metric_values)
+
+    html = f"""<figure class="betas-selector" id="{container_id}" data-manifest='{manifest_json}'>
+<div class="betas-selector-controls">
+<label>${bias_label}$:
+<select class="betas-bias-select">{bias_options}</select>
+</label>
+<label>{metric_label}:
+<select class="betas-metric-select">{metric_options}</select>
+</label>
+</div>
+<img class="betas-selector-img" src="{default_img}" />
+</figure>
+<script>
+(function() {{
+var root = document.getElementById('{container_id}');
+var manifest = JSON.parse(root.getAttribute('data-manifest'));
+function update() {{
+var img = document.getElementsByClassName('betas-selector-img r-stretch')[0];
+var biasSel = root.querySelector('.betas-bias-select');
+var metricSel = root.querySelector('.betas-metric-select');
+if (!img || !biasSel || !metricSel) return;
+var entry = manifest[biasSel.value];
+var path = entry && entry[metricSel.value];
+if (path) {{ img.src = path; }}
+}}
+root.addEventListener('change', function(e) {{
+var cls = e.target.classList;
+if (cls.contains('betas-bias-select') || cls.contains('betas-metric-select')) {{
+update();
+}}
+}});
+}})();
+</script>"""
+    return "\n".join(line for line in html.splitlines() if line.strip() != "")
+
+manifest_betas = {}
+for bias_str, sim in all_sim_objs.items():
+    for metric in METRIC_CATEGORIES:
+        fpath, bias_val, metric_val = plot_betas(sim, bias_str, metric)
+        manifest_betas.setdefault(f"{bias_val:.2f}", {})[metric_val] = fpath
+
+
+```
+
+```{python}
+#| label: betas-selector
+#| output: asis
+print(render_betas_selector_html(manifest_betas, container_id="betas-selector-widget"))
+```
+
 ## How does the surprise look like?
 
 ```{python}
@@ -950,7 +1111,7 @@ def plot_surprise(
         weights_only=False
     )
 
-    fig, axes = plt.subplots(nrows = 2, ncols=3, figsize=(14, 8.5))
+    fig, axes = plt.subplots(nrows = 2, ncols=3, figsize=(17, 8.5))
     gen_round = sim_objs["credit_data"].gen_round
     corr = sim_objs["corr_to_hidden"][corr_idx].item()
     metric_to_name = {"roc" : "AUROC", "ks" : "KS-Statistic"}
@@ -1014,9 +1175,9 @@ def plot_surprise(
         ax_diffs.set_title("Surprise")
         ax_abs_diffs.set_title("Absolute surprise")
 
-        ax_abs.plot(sample_sizes, expectation, label=r"$\mathbb{E}($bias$)$", color=colors_for_lines["expectation"])
-        ax_abs.plot(sample_sizes, real_unb_acc, label="$m($unb$)$", color=colors_for_lines["real_unbiased"])
-        ax_abs.plot(sample_sizes, real_biased_acc, label="$m($bias$)$", color=colors_for_lines["real_biased"])
+        ax_abs.plot(sample_sizes, expectation, label=r"$\mathbb{E}$", color=colors_for_lines["expectation"])
+        ax_abs.plot(sample_sizes, real_unb_acc, label="$perf($unb$)$", color=colors_for_lines["real_unbiased"])
+        ax_abs.plot(sample_sizes, real_biased_acc, label="$perf($bias$)$", color=colors_for_lines["real_biased"])
 
         diff_to_unb = expectation - real_unb_acc
         diff_to_biased = expectation - real_biased_acc
@@ -1025,14 +1186,14 @@ def plot_surprise(
         ax_diffs.plot(
             sample_sizes,
             diff_to_unb,
-            label=r"$\mathbb{E}($bias$)$ - $m($unb$)$",
+            label=r"$\mathbb{E}$ - $perf($unb$)$",
             color=colors_for_lines["real_unbiased"]
             #s=2
         )
         ax_diffs.plot(
             sample_sizes,
             diff_to_biased,
-            label=r"$\mathbb{E}($bias$)$ - $m($bias$)$",
+            label=r"$\mathbb{E}$ - $perf($bias$)$",
             color=colors_for_lines["real_biased"]
             #s=2
         )
@@ -1109,7 +1270,7 @@ def render_surprise_selector_html(manifest, container_id,
 var root = document.getElementById('{container_id}');
 var manifest = JSON.parse(root.getAttribute('data-manifest'));
 function update() {{
-var img = root.querySelector('img[class*="surprise-selector-img"]');
+var img = document.getElementsByClassName('surprise-selector-img r-stretch')[0];
 var corrSel = root.querySelector('.surprise-corr-select');
 var biasSel = root.querySelector('.surprise-bias-select');
 var wSel = root.querySelector('.surprise-w-select');
@@ -1156,6 +1317,20 @@ print(render_surprise_selector_html(manifest_surprises, container_id="surprise-s
 
 # How to do Reinforcement Learning for RI
 
+## In evaluation lies the key
+
+* Biased acceptance policy stabilization in high confidence region.
+
+* Its expectation comes close to its performance in the future unbiased
+  accepts.
+
+* If we could infer from the future accepts the unbiased region, we should
+  expect the surprise w. r. t. to that region to reduce.
+
+* $\Rightarrow$ Surprise has potential to be used as reward signal,
+
+  * by inferring some lables of the rejected future accepts, specifically
+  * as a correction to the estimated probability of default.
 
 ## References
 
