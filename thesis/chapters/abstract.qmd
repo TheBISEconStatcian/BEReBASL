@@ -1,11 +1,15 @@
-  The Reject Inference (RI) problem asks how to (partially) correct the acceptance
-  decision induced bias in classification problems, by leveraging information
-  of rejected applicants, even though their outcome is unknown. This thesis introduces
-  a dynamic perspective on RI by arguing that discrepancies between the expected
-  performance of a classifier (e.g., estimated through cross-validation) and its
-  realized performance over future acceptance rounds constitute a signal, which I term
-  *surprise*, that allows to evidence the acceptance bias. First, the RI problem is
-  formulated within a measure-theoretic framework to make every underlying assumption
-  explicit. Second, the central hypothesis of surprise as a signal to observe the bias is formulated.
-  Third a careful simulation study evidencing the viability is presented. Finally,
-  an outlook on possible applications is proposed to exploit the signal.
+  The Reject Inference (RI) problem concerns the challenge of learning from
+  outcomes that are only observed for accepted applicants, and of using information
+  from rejected applicants whose outcomes remain unknown. This selective observation
+  induces acceptance bias and motivates methods for its identification and correction.
+  This thesis introduces a dynamic perspective on RI by proposing surprise as a signal
+  of acceptance bias. *Surprise* is defined as the discrepancy between the expected
+  performance of a classifier, as estimated from historical data, and its realized
+  performance over subsequent acceptance rounds. The central hypothesis is that this
+  discrepancy contains information about the underlying acceptance bias and therefore
+  provides a means of observing it indirectly. First, the RI problem is formulated within
+  a measure-theoretic framework, making the underlying assumptions explicit. Second, the
+  hypothesis that surprise provides an observable signal of acceptance bias is formally
+  formulated. Third, a controlled simulation study investigates the extent to which surprise
+  reflects the underlying bias. Finally, possible applications of the proposed signal and
+  directions for future research are discussed.
