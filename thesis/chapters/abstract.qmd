@@ -1,12 +1,11 @@
-  Financial Institutions support credit-granting decisions using scorecards trained
-  on historical data from previously accepted clients. Since rejected applicants are
-  typically ignored during training, the resulting models are affected by sample
-  selection bias. The leveraging of information from rejected applicants is known
-  as Reject Inference (RI). This thesis introduces a dynamic perspective on RI by
-  arguing that discrepancies between the expected performance of a scorecard
-  (e.g., estimated through cross-validation) and its realized performance over future
-  acceptance rounds constitute a valuable learning signal, which I term *surprise*.
-  First, the RI problem is formulated within a measure-theoretic framework to make every
-  underlying assumption explicit. Second, the central hypothesis is formulated and
-  supporting theoretical and empirical evidence is presented. Finally, an actor-critic
-  reinforcement learning agent is proposed to exploit the surprise signal.
+  The Reject Inference (RI) problem asks how to (partially) correct the acceptance
+  decision induced bias in classification problems, by leveraging information
+  of rejected applicants, even though their outcome is unknown. This thesis introduces
+  a dynamic perspective on RI by arguing that discrepancies between the expected
+  performance of a classifier (e.g., estimated through cross-validation) and its
+  realized performance over future acceptance rounds constitute a signal, which I term
+  *surprise*, that allows to evidence the acceptance bias. First, the RI problem is
+  formulated within a measure-theoretic framework to make every underlying assumption
+  explicit. Second, the central hypothesis of surprise as a signal to observe the bias is formulated.
+  Third a careful simulation study evidencing the viability is presented. Finally,
+  an outlook on possible applications is proposed to exploit the signal.

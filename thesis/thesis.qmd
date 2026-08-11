@@ -1,6 +1,6 @@
 ---
 title: Quantifying the Unknown
-subtitle: A surprised based reward signal for dynamic reject inference in credit scoring
+subtitle: A numerical analysis of surprise-based observability of acceptance bias in reject inference
 date: today
 date-format: "DD.MM.YYYY"
 authors:
