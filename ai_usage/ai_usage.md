@@ -68,6 +68,9 @@ opinion on naming.
   - [a201b10ed9ae47595d9da4dec27c90d7496a0e8b](https://github.com/TheBISEconStatcian/BEReBASL/commit/a201b10ed9ae47595d9da4dec27c90d7496a0e8b)
 - [Rewriting the (first) abstract](https://chatgpt.com/share/6a390caf-0204-83eb-bfd7-7fbe861fef2b)
 - [Solving positive definiteness space](https://chatgpt.com/share/6a3cfe56-1798-83eb-b376-a052dd725154)
+- [Rewriting again the abstract](https://chatgpt.com/share/6a7aec6d-cbd4-83eb-bfc0-d6acecef53f2)
+  - Original proposal: [64c7f01ca3cecafda818b8ab3639996f9a1fa34f](https://github.com/TheBISEconStatcian/BEReBASL/commit/64c7f01ca3cecafda818b8ab3639996f9a1fa34f)
+  - Corrections with AI generation: [f3a8e97122e7a1beafb89be59f210ba0a83b8e1a](https://github.com/TheBISEconStatcian/BEReBASL/commit/f3a8e97122e7a1beafb89be59f210ba0a83b8e1a)
 
 
 ## Links to `Copilot` usage
