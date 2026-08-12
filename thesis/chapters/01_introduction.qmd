@@ -1,5 +1,26 @@
 # Introduction
 
+The Reject Inference (RI) problem concerns the challenge of learning from
+outcomes that are only observed for accepted applicants, and of using information
+from rejected applicants whose outcomes remain unknown. This selective observation
+induces acceptance bias and motivates methods for its identification and correction.
+Reject Inference has been widely researched for applications in credit scoring, medical
+applications and 
+Although the potential of using more information seems promising, specially considering
+in its application
+While a large literature, specially in the credit scoring context, has emerged, most
+of it lacks in formalization of the studied problem and their results are hard to
+differentiate from simpler methods using only accepted applications [@ehrhardt2021rejectReview].
+
+Although at least some 
+
+This thesis takes a step back and postulates a more fundamental question: is it
+feasible to even observe (at least indirectly) the acceptance bias? 
+
+it is
+often unclear to what extent the proposed methods work. Often they are found to either
+be equivalent to methods ignoring the rejects
+
 Main contributions expected:
 
 * Measure Theoretic formalization of the RI problem for credit risk as a stochastic
