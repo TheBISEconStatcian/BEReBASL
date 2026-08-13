@@ -19,22 +19,22 @@ decision on. Therefore, RI constitutes inherently a dynamic problem. Despite tha
 authors like @kozdoi_et_al_BE_BASL generate simulation data using such an acceptance loop,
 it has not been yet tried to extract information from the dynamic structure of the loop itself.
 To do so I follow an intuition: the acceptance bias must be some sort of self-biasing mechanism,
-the longer a biased selection mechanism is used, the bias should become worse.
+the longer a biased selection mechanism is used, the bias should become worse or become "stable"
+in a "non-optimal selection region".
 
-
-
-Main contributions expected:
-
-* Measure Theoretic formalization of the RI problem for credit risk as a stochastic
-  process introducing a dynamic dimension as methodology to make more explicit all
-  assumptions on the DGP for simulation frameworks.
-* Simulation framework
-  * Types of classifiers evaluated (Accept based classifier, oracle naive, oracle comparable)
-  * Sensitivity parameters on strength of MNAR:
-    * Correlation of hidden factor
-    * Bias percentage
-* RL set up:
-  * Reward function as "surprise minimizer"
-  * "Batch of batches" perspective for optimizing global minimization instead of trying to
-    calculate individual rewards.
-  * RL Architecture cut for this set up
+To study this intuition, a rigorous and transparent methodology is unubiquitous.
+First, a short literature review is presented, which will highlight the critiques and
+methodological shortcomings in the RI literature this dynamic approach might help cover.
+Second, and answering to the very valid critique of @ehrhardt2021rejectReview on the
+lack of formality in many studies, I use the credit scoring setting to formulate a
+precise formulation of the RI problem, using measure theory as a language allowing to
+exactly define where randomness comes from and where premeditated decisions of the
+institution occur. Third, a simulation framework using the well known two class
+Linear Discriminant Analysis (LDA) setting is presented, which generated the data
+used in this research. Fourth, *surprise* is introduced as a way to indirectly
+measure the acceptance bias, motivated heuristically from a statistical reasoning.
+Sixth, a careful study of both the bias in the logistical regression used for the
+acceptance loop and the cross validation (CV) based cut-off selection mechanism is
+put in relation to the surprise measurements to evaluate whether the surprise does
+deliver an approximation of the bias. Finally, an outlook on the possible applications
+of surprise for RI-methods is given as motivation for further research.
