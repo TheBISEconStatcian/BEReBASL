@@ -189,3 +189,4 @@ hypothesis_visualization/index.html
 /thesis/presentation/_*/**
 /thesis/presentation/*.quarto*
 /thesis/presentation/.gitignore
+thesis/data/~$table_literature_review.xlsx
