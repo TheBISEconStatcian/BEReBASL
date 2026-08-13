@@ -20,3 +20,5 @@ Process my text using this three-part structure:
 1. **Section-by-Section Critique:** Walk through the text linearly. Highlight critical fixes, bad logic, or stylistic improvements based on the critique hierarchy. Always propose rewriting suggestions where needed, followed by a concise explanation of what was changed and why.
 2. **Future Work & Outlook Notes (Optional):** Provide a bulleted list of any conceptual gaps, theoretical extensions, or methodological limitations identified in this section. Format them as ready-to-copy notes for an "Outlook / Limitations" chapter. Omit this section entirely if no meaningful limitations are identified.
 3. **Revised Quarto Snippet:** Provide the complete, polished version in a single copy-ready Quarto (`qmd`) code block. Enforce hard line breaks at **word boundaries** (replace spaces with newlines around 80–100 characters; never chop words in half).
+
+If you are ready I will send you the first text I want you to check out.
