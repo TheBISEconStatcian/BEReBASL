@@ -11,29 +11,29 @@ results, leading some like @HandHanley1993CanRIWork to question whether RI can e
 work, its potential in such high-stakes decision systems keeps driving the search for
 this "holy grail".
 
-This work takes in some sense a step backwards in relationship to current literature
+This work takes in some sense a step backwards relative to current literature
 and studies RI itself from a fresh perspective. The acceptance bias
-occurs because based on (biased) historical data, new acceptance decision are made. This new
-accepts become later part of the history on which an institution will base further future
+occurs because based on (biased) historical data, new acceptance decisions are made. These
+new accepts later become part of the history on which an institution will base further future
 decision on. Therefore, RI constitutes inherently a dynamic problem. Despite that several
 authors like @kozdoi_et_al_BE_BASL generate simulation data using such an acceptance loop,
 it has not been yet tried to extract information from the dynamic structure of the loop itself.
-To do so I follow an intuition: the acceptance bias must be some sort of self-biasing mechanism,
-the longer a biased selection mechanism is used, the bias should become worse or become "stable"
-in a "non-optimal selection region".
+The intuition is straightforward: acceptance bias operates as a self-reinforcing mechanism.
+As a biased selection rule is applied repeatedly, the bias must either compound over time or
+stabilize within a sub-optimal equilibrium.
 
-To study this intuition, a rigorous and transparent methodology is unubiquitous.
+To study this intuition, a rigorous and transparent methodology is indispensable.
 First, a short literature review is presented, which will highlight the critiques and
 methodological shortcomings in the RI literature this dynamic approach might help cover.
 Second, and answering to the very valid critique of @ehrhardt2021rejectReview on the
 lack of formality in many studies, I use the credit scoring setting to formulate a
-precise formulation of the RI problem, using measure theory as a language allowing to
-exactly define where randomness comes from and where premeditated decisions of the
-institution occur. Third, a simulation framework using the well known two class
+precise formulation of the RI problem, using measure theory as a framework to precisely
+isolate the sources of stochasticity from the institution's deterministic decisions.
+Third, a simulation framework using the well known two class
 Linear Discriminant Analysis (LDA) setting is presented, which generated the data
 used in this research. Fourth, *surprise* is introduced as a way to indirectly
 measure the acceptance bias, motivated heuristically from a statistical reasoning.
-Sixth, a careful study of both the bias in the logistical regression used for the
+Fifth, a careful study of both the bias in the logistical regression used for the
 acceptance loop and the cross validation (CV) based cut-off selection mechanism is
 put in relation to the surprise measurements to evaluate whether the surprise does
 deliver an approximation of the bias. Finally, an outlook on the possible applications
