@@ -4,22 +4,24 @@ The Reject Inference (RI) problem concerns the challenge of learning from
 outcomes that are only observed for accepted applicants, and of using information
 from rejected applicants whose outcomes remain unknown. This selective observation
 induces acceptance bias and motivates methods for its identification and correction.
-Reject Inference has been widely researched for applications in credit scoring, medical
-applications and 
-Although the potential of using more information seems promising, specially considering
-in its application
-While a large literature, specially in the credit scoring context, has emerged, most
-of it lacks in formalization of the studied problem and their results are hard to
-differentiate from simpler methods using only accepted applications [@ehrhardt2021rejectReview].
+Reject Inference has been widely researched for applications in fields like credit
+scoring, medical applications or underwriting and rather indirectly from a theoretical
+perspective as a missing data problem. Although the research has delivered mixed
+results, leading some like @HandHanley1993CanRIWork to question whether RI can even
+work, its potential in such high-stakes decision systems keeps driving the search for
+this "holy grail".
 
-Although at least some 
+This work takes in some sense a step backwards in relationship to current literature
+and studies RI itself from a fresh perspective. The acceptance bias
+occurs because based on (biased) historical data, new acceptance decision are made. This new
+accepts become later part of the history on which an institution will base further future
+decision on. Therefore, RI constitutes inherently a dynamic problem. Despite that several
+authors like @kozdoi_et_al_BE_BASL generate simulation data using such an acceptance loop,
+it has not been yet tried to extract information from the dynamic structure of the loop itself.
+To do so I follow an intuition: the acceptance bias must be some sort of self-biasing mechanism,
+the longer a biased selection mechanism is used, the bias should become worse.
 
-This thesis takes a step back and postulates a more fundamental question: is it
-feasible to even observe (at least indirectly) the acceptance bias? 
 
-it is
-often unclear to what extent the proposed methods work. Often they are found to either
-be equivalent to methods ignoring the rejects
 
 Main contributions expected:
 
