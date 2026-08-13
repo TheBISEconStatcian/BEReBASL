@@ -1,40 +1,46 @@
 # Introduction
 
-The Reject Inference (RI) problem concerns the challenge of learning from
-outcomes that are only observed for accepted applicants, while leveraging information
-from rejected applicants whose outcomes remain unknown. This selective observation
-induces acceptance bias and motivates methods for its identification and correction.
-Reject Inference has been widely researched for applications in fields like credit
-scoring, medical applications or underwriting and rather indirectly from a theoretical
-perspective as a missing data problem. Although the research has delivered mixed
-results, leading some like @HandHanley1993CanRIWork to question whether RI can even
-work, its potential in such high-stakes decision systems keeps driving the search for
-this "holy grail".
+The Reject Inference (RI) problem concerns learning from outcomes observed
+only for accepted applicants while leveraging information from rejected
+applicants whose outcomes remain unknown. This selective observation induces
+acceptance bias and motivates methods for its identification and correction.
+Reject Inference has been widely studied in applications such as credit
+scoring, underwriting, and medical decision systems, as well as from a more
+abstract perspective as a missing data problem. Although both empirical and
+theoretical findings have been mixed, its potential impact in high-stakes
+decision systems continues to motivate the search for the "holy grail" to
+tackle down the problem.
 
-This work takes in some sense a step backwards relative to current literature
-and studies RI itself from a fresh perspective. The acceptance bias
-occurs because based on (biased) historical data, new acceptance decisions are made. These
-new accepts later become part of the history on which an institution will base further future
-decision on. Therefore, RI constitutes inherently a dynamic problem. Despite that several
-authors like @kozdoi_et_al_BE_BASL generate simulation data using such an acceptance loop,
-it has not been yet tried to extract information from the dynamic structure of the loop itself.
-The intuition is straightforward: acceptance bias operates as a self-reinforcing mechanism.
-As a biased selection rule is applied repeatedly, the bias must either compound over time or
-stabilize within a sub-optimal equilibrium.
+Rather than proposing a new correction method, this work revisits the RI
+problem itself from a different perspective. Acceptance decisions are
+repeatedly based on historically selected data, thereby perpetuating
+acceptance bias. These accepted applicants subsequently become part of the
+historical data used to make future decisions. RI is therefore inherently a
+dynamic problem. Although several authors, such as
+@kozdoi_et_al_BE_BASL, generate simulation data using such an acceptance
+loop, the dynamic structure of the loop itself has received
+little attention as a potential source of information. The intuition fueling
+this work is
+straightforward: acceptance bias likely operates as a self-reinforcing mechanism.
+As a biased selection rule is repeatedly applied, the resulting bias may
+compound over time or stabilize around a sub-optimal equilibrium.
 
-To study this intuition, a rigorous and transparent methodology is indispensable.
-First, a short literature review is presented, which will highlight the critiques and
-methodological shortcomings in the RI literature this dynamic approach might help cover.
-Second, and answering to the very valid critique of @ehrhardt2021rejectReview on the
-lack of formality in many studies, I use the credit scoring setting to formulate a
-precise formulation of the RI problem, using measure theory as a framework to precisely
-isolate the sources of stochasticity from the institution's deterministic decisions.
-Third, a simulation framework using the well known two class
-Linear Discriminant Analysis (LDA) setting is presented, which generated the data
-used in this research. Fourth, *surprise* is introduced as a way to indirectly
-measure the acceptance bias, motivated heuristically from a statistical reasoning.
-Fifth, a careful study of both the bias in the logistical regression used for the
-acceptance loop and the cross validation (CV) based cut-off selection mechanism is
-put in relation to the surprise measurements to evaluate whether the surprise does
-deliver an approximation of the bias. Finally, an outlook on the possible applications
-of surprise for RI-methods is given as motivation for further research.
+To study this intuition, a rigorous and transparent methodology is
+indispensable. First, a short literature review is presented, highlighting
+critiques and methodological shortcomings in the RI literature that the
+dynamic perspective may help address. Second, responding to the critique of
+@ehrhardt2021rejectReview regarding the lack of formalism in many RI studies,
+the credit scoring setting is used to formulate a precise definition of the
+RI problem, bridging the real world and Math. To do so, Measure theory provides
+a framework to distinguish clearly
+between stochastic components and the institution's deterministic decision
+rules. Third, a simulation framework based on the well-known two-class
+Linear Discriminant Analysis (LDA) setting is introduced to generate the
+data used throughout this research. Fourth, *surprise* is introduced as a
+heuristic quantity intended to indirectly capture acceptance bias.
+Fifth, the bias of the logistic regression model used
+in the acceptance loop and the cross-validation (CV) based cut-off selection
+mechanism are related to the surprise measurements to evaluate whether
+surprise provides an approximation of acceptance bias. Finally, an outlook
+on possible applications of surprise in RI methods is presented as
+motivation for future research.
