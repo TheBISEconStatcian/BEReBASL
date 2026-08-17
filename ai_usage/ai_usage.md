@@ -133,7 +133,12 @@ chat.
 
 ## Links to `Gemini`
 
-* [Decide which rendering tool to use and set up quarto project](https://gemini.google.com/share/c73006f0efb8)
+- [Decide which rendering tool to use and set up quarto project](https://gemini.google.com/share/c73006f0efb8)
+- [First corrections of introduction](https://share.gemini.google/d30ck06Q36OC)
+  - Original proposal: [3225caf7a5d0250c0400910b39cd4285895ac16d](https://github.com/TheBISEconStatcian/BEReBASL/commit/3225caf7a5d0250c0400910b39cd4285895ac16d)
+  - Corrections with AI generation: [26d0a12fdd72f7a035eaab6bf2435e614dc286c3](https://github.com/TheBISEconStatcian/BEReBASL/commit/26d0a12fdd72f7a035eaab6bf2435e614dc286c3) and [2e32053234b2f229264e6d294f806d43650535ef](https://github.com/TheBISEconStatcian/BEReBASL/commit/2e32053234b2f229264e6d294f806d43650535ef)
+- [Metaprompting for the AI writing assistant](https://share.gemini.google/fnPKswJzQRTp)
+
 
 ## Links to `Math AI` by [`DeepAI`](https://deepai.org/)
 
