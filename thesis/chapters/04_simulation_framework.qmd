@@ -284,7 +284,54 @@ from thesis.helper_scripts.dgp_plotting import plot_pairwise_dgp_with_perf_bayes
 plot_pairwise_dgp_with_perf_bayes_boundaries(dgp_base, **dgp_info_for_boundaries)
 ```
 
+## The acceptance loop
+
+To put in perspective the acceptance loop
+
+Algorithm \ref{alg:ac-forward-pass}
+
+\begin{algorithm} 
+\caption{Actor-Critic Forward Pass}
+\label{alg:ac-forward-pass}
+\begin{algorithmic}[1] 
+    
+    \Procedure{ActorCritic}{$A_{t-1}, M_{t-1}$}
+        \State $\mathbf{P} \gets [\ ]$, $A_t \gets [\ ]$ \Comment{$\mathbf{P}$roabilities and new $A$rchitecture lists}
+        \State $H_t, M_t \gets \texttt{CriticLSTM}\left(A_{t-1}, \texttt{hx=}M_{t-1}\right)$
+        \State $h_t \gets H_t\texttt{[-1, :]}$
+        \State $\mathbb{P}_{N_{TSF}} \gets \operatorname{softmax}\left(\texttt{AH}_1^{MLP}\left(h_t\right)\right)$ \Comment{$\mathbb{P}_{N_{TSF}} \in \mathbb{R}^{\max \mathcal{N}_{TSF}}$}
+        \State $N_{TSF} \gets \operatorname{MultiNomialSample}\left(\mathbb{P}_{N_{TSF}}\right)$
+        \State $A_t\texttt{.append}\left(N_{TSF}\right)$
+        \State $\mathbf{P}\texttt{.append}\left(\mathbb{P}_{N_{TSF}}\right)$
+        \State $\text{LogProbSum} \gets \log\mathbb{P}_{N_{TSF}}\texttt{[}N_{TSF} \texttt{]}$
+        \For{$\texttt{i}_A \in \{1, \ldots , N_{TSF}\}$}
+            \State $\mathbb{P}_{\texttt{i}_A} \gets \operatorname{softmax}\left(W_t^{\texttt{i}_A, h}h_t + W_t^{\texttt{i}_A, p}\mathbf{P}\texttt{[-1]} + b_t^{\texttt{i}_A}\right)$ \Comment{$\mathbb{P}_{\texttt{i}_A} \in \mathbb{R}^{\#TSF}$}
+            \State $TSF_{\texttt{i}_A} \gets 
+            \operatorname{MultiNomialSample}\left(\mathbb{P}_{\texttt{i}_A}\right)$
+            \State $\mathbf{P}\texttt{.append}\left(\mathbb{P}_{\texttt{i}_A}\right)$
+            \State $A_t\texttt{.append}\left(TSF_{\texttt{i}_A}\right)$
+            \State $\text{LogProbSum} \gets \text{LogProbSum} +  \log\mathbb{P}_{\texttt{i}_A}\texttt{[}TSF^e_{\texttt{i}_A} \texttt{]}$
+        \EndFor
+        \For{$\texttt{i}_A \in  \{1, \ldots , \max\mathcal{N}_{TSF}\} \setminus  \{1, \ldots , N_{TSF}\}$}
+            \State $\operatorname{NoGrad}\left(W_t^{\texttt{i}_A, h}, W_t^{\texttt{i}_A, p}, b_t^{\texttt{i}_A}\right)$
+        \EndFor
+        \State $\mathbb{P}_{AG} \gets \operatorname{softmax}\left(W_t^{AG, h}h_t + W_t^{AG, p}\mathbb{P}_{N_{TSF}} + b_t^{AG}\right)$ \Comment{$\mathbb{P}_{AG} \in \mathbb{R}^{\#AG}$}
+        \State $AG \gets \operatorname{MultiNomialSample}\left(\mathbb{P}_{AG}\right)$
+        \State $\mathbf{P}\texttt{.append}\left(\mathbb{P}_{AG}\right)$
+        \State $A_t\texttt{.append}\left(AG\right)$
+        \State $\text{LogProbSum} \gets \text{LogProbSum} +  \log\mathbb{P}_{AG}\texttt{[}AG \texttt{]}$
+        \State $V_{h_{t}} \gets \texttt{CriticPerceptron}\left(h_{t}\right)$ \Comment{Evaluate $h_{t}$ with Value Function}
+        \State $\operatorname{SaveInClass}\left(\text{LogProbSum}, V_{h_{t}}\right)$
+        \State \Return $\mathbf{P},\, A_t,\, M_t$ 
+    \EndProcedure
+\end{algorithmic} 
+\end{algorithm}
+
 ## Decision and scoring functions
+
+
+
+At the beginning of the loop a business rule is used, where values of the second component
 
 The decision function has two phases, the starting phase (where no data has been gathered yet)
 and the scoring function estimating phase. In the following is explained how in each moment
