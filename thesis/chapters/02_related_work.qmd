@@ -1,25 +1,31 @@
 # Related Work
 
-The RI problem can be seen as essentially a missing data problem [@ehrhardt2021rejectReview],
-and therefore is related to matters as sample selection, data representability and
-their consequences in estimation of classifiers, decision functions and evaluation.
+RI can be formulated as a selective observation problem and studied within the
+framework of missing-data theory. As such it also must handle statistical questions
+like identification, sample selection, as well as estimation and evaluation under bias.
 The review of @ehrhardt2021rejectReview revealed many structural problems in
-existing RI-methods and just like @HandHanley1993CanRIWork it concludes that for
-RI to be possible it is necessary to make strong assumptions or include external
-information like a labeled sample of a typical reject region. Furthermore, in a
+existing RI-methods. Also, just like @HandHanley1993CanRIWork, it concludes that for
+RI to perform (distinctly) better than using only the accepts, additional identifying
+assumptions or additional information beyond the observed accepted outcomes and
+applicant covariates. Furthermore, in a
 spirit close to @ehrhardt2021rejectReview, I believe that being explicit about
 the assumptions both on the data generating process studied, and the methodology
 help to rigorously assess the feasibility, potential, limitations and possible
 application fields of an RI approach.
 
-This being considered, this literature review considers the following questions
+Because the central concern of this thesis is not merely whether a particular RI
+procedure performs well, but under which conditions information about rejected
+applicants can be obtained from the available data, the literature is reviewed
+along four dimensions:
 
-1. How and why does the RI-approach work? Which assumptions are necessary and which
-   aspect is exploited to do RI.
-2. Do the authors discuss their assumptions explicitly and put them in relation to
-   practical and theoretical considerations?
-3. How do the authors asses their own work?
-4. Is the inherent dynamic feedback nature of the acceptance bias considered?
+- What information from the rejects does the RI-method exploit, and under what
+  assumptions does this information identify the target of interest?
+- Are the assumptions concerning the data-generating process, observation mechanism,
+  and methodology explicitly stated and theoretically/heuristically justified?
+- How do authors evaluate the validity, effectiveness, robustness, and practical
+  applicability of their proposed approach, and what limitations do they identify?
+- To what extent does the methodology account for the temporal and feedback structure
+  induced by repeated acceptance decisions?
 
 All of this information is summarized in table @tbl-lit-review in the appendix.
 First is clear that assumptions on the DGP and the methodology are often ignored, which
