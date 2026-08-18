@@ -27,7 +27,9 @@ along four dimensions:
 - To what extent does the methodology account for the temporal and feedback structure
   induced by repeated acceptance decisions?
 
-All of this information is summarized in table @tbl-lit-review in the appendix.
+All of this information is summarized in table @tbl-lit-review in the appendix. Thereby,
+when necessary the assumptions or limitations (sometimes inherent of the methodology)
+were explicitly stated rather than limiting to extract what the authors said explicitly.
 First is clear that assumptions on the DGP and the methodology are often ignored, which
 from my read also relates to a weaker discussion of the assessment of the goodness
 and practicality of the model. Second, papers using more information than only
