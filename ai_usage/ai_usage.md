@@ -74,6 +74,9 @@ opinion on naming.
 - [Rewriting and checking the introduction](https://chatgpt.com/share/6a82e947-d748-83eb-9255-f50fa7e9b8a3)
   - Starting point after initial corrections from `Gemini` worked in: [2e32053234b2f229264e6d294f806d43650535ef](https://github.com/TheBISEconStatcian/BEReBASL/commit/2e32053234b2f229264e6d294f806d43650535ef)
   - After changes: [037bcdcff79ef4752f9049f4e5eb3ff91fe6fda3](https://github.com/TheBISEconStatcian/BEReBASL/commit/037bcdcff79ef4752f9049f4e5eb3ff91fe6fda3)
+- [Conception of literature review and help redacting.](https://chatgpt.com/share/6a849c0c-270c-83eb-b0f6-057bf5cdf9e3). Thereby one ad verbatim copying was done from the AI:
+  - Content containing only text written by me: [358dc4282637c26c29d910ab305925e2cab65f81](https://github.com/TheBISEconStatcian/BEReBASL/commit/358dc4282637c26c29d910ab305925e2cab65f81)
+  - After copying and working in some suggestions: [94e769115ee9993d62aa975b2559500315cd117a](https://github.com/TheBISEconStatcian/BEReBASL/commit/94e769115ee9993d62aa975b2559500315cd117a)
 
 
 ## Links to `Copilot` usage
