@@ -1,11 +1,31 @@
 # Related Work
 
-## Training under sampling bias
+The RI problem can be seen as essentially a missing data problem [@ehrhardt2021rejectReview],
+and therefore is related to matters as sample selection, data representability and
+their consequences in estimation of classifiers, decision functions and evaluation.
+The review of @ehrhardt2021rejectReview revealed many structural problems in
+existing RI-methods and just like @HandHanley1993CanRIWork it concludes that for
+RI to be possible it is necessary to make strong assumptions or include external
+information like a labeled sample of a typical reject region. Furthermore, in a
+spirit close to @ehrhardt2021rejectReview, I believe that being explicit about
+the assumptions both on the data generating process studied, and the methodology
+help to rigorously assess the feasibility, potential, limitations and possible
+application fields of an RI approach.
 
-### Ignorable missingness approach (when RI is not necessary)
+This being considered, this literature review considers the following questions
 
-### Overview of used methods (main focus on RL methods)
+1. How and why does the RI-approach work? Which assumptions are necessary and which
+   aspect is exploited to do RI.
+2. Do the authors discuss their assumptions explicitly and put them in relation to
+   practical and theoretical considerations?
+3. How do the authors asses their own work?
+4. Is the inherent dynamic feedback nature of the acceptance bias considered?
 
-Strongly based on @kozdoi_et_al_BE_BASL
-
-## Applications in Credit scoring (main focus on RL methods)
+All of this information is summarized in table @tbl-lit-review in the appendix.
+First is clear that assumptions on the DGP and the methodology are often ignored, which
+from my read also relates to a weaker discussion of the assessment of the goodness
+and practicality of the model. Second, papers using more information than only
+cross-sectional features and the labels of the accepts tend to also conclude having
+better performance. Finally, no paper has been found that has formulated the RI problem
+from a dynamic perspective nor has it been researched whether this perspective can
+be used to obtain important learning signals.
