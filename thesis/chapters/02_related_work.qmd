@@ -27,13 +27,113 @@ along four dimensions:
 - To what extent does the methodology account for the temporal and feedback structure
   induced by repeated acceptance decisions?
 
-All of this information is summarized in table @tbl-lit-review in the appendix. Thereby,
-when necessary the assumptions or limitations (sometimes inherent of the methodology)
-were explicitly stated rather than limiting to extract what the authors said explicitly.
-First is clear that assumptions on the DGP and the methodology are often ignored, which
-from my read also relates to a weaker discussion of the assessment of the goodness
-and practicality of the model. Second, papers using more information than only
+All of this information is summarized in table
+\ref{tbl-lit-review}.
+Thereby, when necessary the assumptions or limitations (sometimes inherent
+of the methodology) were explicitly stated rather than limiting to extract what the authors
+said explicitly. First is clear that assumptions on the DGP and the methodology are often
+ignored, which from my read also relates to a weaker discussion of the assessment of the
+goodness and practicality of the model. Second, papers using more information than only
 cross-sectional features and the labels of the accepts tend to also conclude having
 better performance. Finally, no paper has been found that has formulated the RI problem
 from a dynamic perspective nor has it been researched whether this perspective can
 be used to obtain important learning signals.
+
+```{python}
+import pandas as pd
+import os
+#os.chdir("..")
+path_lit_tbl_xl = "./data/table_literature_review.xlsx"
+
+lit_review_tbl = pd.read_excel(path_lit_tbl_xl)
+
+boolean_cols = lit_review_tbl.columns[lit_review_tbl.dtypes == bool]
+
+boolean_is_true_str = r"$\checkmark$"
+boolan_is_false_str = ''
+
+lit_review_tbl[boolean_cols] = lit_review_tbl[boolean_cols].map(lambda x : boolean_is_true_str if x else boolan_is_false_str)
+
+fun_reflbl_to_ref = lambda ref : f"\\textcite{{{ref}}}" if True else f"@{ref}"#ref
+ref_colname = lit_review_tbl.columns[0]
+
+lit_review_tbl[ref_colname] = lit_review_tbl[ref_colname].apply(fun_reflbl_to_ref)
+#lit_review_tbl = lit_review_tbl.iloc[:-2, :2]
+```
+
+
+
+```{python}
+#| output: asis
+
+widths = [
+    0.075, # references
+    0.16, # RI Approach
+    0.15, # Key identifiying
+    0.065, # Ass. explicit
+    0.06, #Th heur just
+    0.065, #infers rej
+    0.055, # Type result
+    0.08, # Can RI work
+    0.115, # main challenge
+    0.055, # dynamic persp
+]
+alignements = ["C" if c in boolean_cols else "p" for c in lit_review_tbl.columns]
+
+total_width_wished = 0.74
+sum_widhts = sum(widths)
+norm = sum_widhts/total_width_wished
+footnote = (
+    "The used abbreviations mean: assump. = assumptions, heur. = heuristically, "
+    "theo. = theoretical/theoretically, persp. = perspective, emp.=empirical, sim.=simulation,"
+    "EM = Expectation Maximization."
+)
+
+lit_review_tbl.columns = [f"\\textbf{{{c}}}" for c in lit_review_tbl.columns]
+tex_tbl = (
+    lit_review_tbl
+    .to_latex(
+        escape=False,
+        index=False,
+        caption="Literature Review",
+        label="tbl-lit-review",
+        #position="t!",
+        longtable=True,
+        column_format= "".join(
+            [a + f'{{{w / norm}\\linewidth}}' for a, w in zip(alignements, widths)]
+        )
+    )
+)
+
+print(
+    r"""
+\tiny
+\renewcommand{\arraystretch}{1.5}
+\clearpage
+    """
+)
+begin_footnote = (
+  "\\midrule\n"
+  rf"\multicolumn{{{lit_review_tbl.shape[1]}}}"
+  r"{p{0.96\linewidth}}{"
+)
+footnote_wrapped = (
+  begin_footnote +
+    r"""
+\textit{Note:} """ + footnote +
+r"""
+}\\
+\end{longtable}
+"""
+)
+print(tex_tbl.replace(r'\end{longtable}', footnote_wrapped))
+print(r"""
+\renewcommand{\arraystretch}{1}
+\normalsize
+"""
+)
+```
+
+One observation that has been repeatedly done is that model performance evaluation based
+on only accepts tends to overestimate the model performance
+[@kozdoi_et_al_BE_BASL, @BanasikCrook2003SampleSelBias]
