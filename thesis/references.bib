@@ -222,7 +222,7 @@ keywords = {Reject inference, Credit scoring, Semi-supervised Support Vector Mac
 abstract = {Credit scoring models are commonly built on a sample of accepted applicants whose repayment and behaviour information is observable once the loan has been issued. However in practice these models are regularly applied to new applicants, which may cause sample bias. This bias is even more pronounced in online lending, where over 90\% of total loan requests are rejected. Reject inference is a technique to infer the outcomes for rejected applicants and incorporate them in the scoring system, with the expectation that predictive accuracy is improved. This paper extends previous studies in two main ways: firstly, we propose a new method involving machine learning to solve the reject inference problem; secondly, the Semi-supervised Support Vector Machines model is found to improve the performance of scoring models compared to the industrial benchmark of logistic regression, based on 56,626 accepted and 563,215 rejected online consumer loans.}
 }
 
-@article{Mancisdor_et_al_2020_DeepGenM_for_RI,
+@article{MancisdorEtAl2020DeepGenMForRI,
 title = {Deep generative models for reject inference in credit scoring},
 journal = {Knowledge-Based Systems},
 volume = {196},
@@ -324,7 +324,7 @@ eprint = {
 
 @article{CrookBanasik2004DoesRIimprove,
 title = {Does reject inference really improve the performance of application scoring models?},
-journal = {Journal of Banking & Finance},
+journal = {Journal of Banking \& Finance},
 volume = {28},
 number = {4},
 pages = {857-874},
@@ -426,7 +426,7 @@ eprint = {
     abstract = { One of the aims of credit scoring models is to predict the probability of repayment of any applicant and yet such models are usually parameterised using a sample of accepted applicants only. This may lead to biased estimates of the parameters. In this paper we examine two issues. First, we compare the classification accuracy of a model based only on accepted applicants, relative to one based on a sample of all applicants. We find only a minimal difference, given the cutoff scores for the old model used by the data supplier. Using a simulated model we examine the predictive performance of models estimated from bands of applicants, ranked by predicted creditworthiness. We find that the lower the risk band of the training sample, the less accurate the predictions for all applicants. We also find that the lower the risk band of the training sample, the greater the overestimate of the true performance of the model, when tested on a sample of applicants within the same risk band — as a financial institution would do. The overestimation may be very large. Second, we examine the predictive accuracy of a bivariate probit model with selection (BVP). This parameterises the accept–reject model allowing for (unknown) omitted variables to be correlated with those of the original good–bad model. The BVP model may improve accuracy if the loan officer has overridden a scoring rule. We find that a small improvement when using the BVP model is sometimes possible. }
 }
 
-@article{95863761-0196-32fd-a55a-8a819c38b819,
+@article{MengSchmidt1985CostPartialObs,
  ISSN = {00206598, 14682354},
  URL = {http://www.jstor.org/stable/2526528},
  author = {Chun-Lo Meng and Peter Schmidt},
@@ -438,4 +438,117 @@ eprint = {
  urldate = {2026-08-20},
  volume = {26},
  year = {1985}
+}
+
+@InProceedings{MaldonadoParedes2010SemiSupSVM,
+author="Maldonado, Sebasti{\'a}n and Paredes, Gonzalo",
+editor="Perner, Petra",
+title="A Semi-supervised Approach for Reject Inference in Credit Scoring Using SVMs",
+booktitle="Advances in Data Mining. Applications and Theoretical Aspects",
+year="2010",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="558--571",
+abstract="This paper presents a novel semi-supervised approach that determines a linear predictor using Support Vector Machines (SVMs) and incorporates information on rejected loans, assuming that the labeled data (accepted applicants) and unlabeled data (rejected applicants) are not drawn from the same distribution. We use a self-training algorithm in order to predict how likely a rejected applicant would have repaid had the applicant received credit. A modification to the self-training algorithm based on Platt's probabilistic output for SVMs is introduced. Experiments with two toy data sets; one well-known benchmark Credit Scoring data set, and one project performed for a Chilean financial institution demonstrate that our approach accomplishes the best classification performance compared to well-known reject inference alternatives and another state-of-the-art semi-supervised method for SVMs (Transductive SVM).",
+isbn="978-3-642-14400-4"
+}
+
+@article{ShengEtAl2024RICostSenstiveJointDistAdap,
+title = {Reject inference in credit scoring based on cost-sensitive learning and joint distribution adaptation method},
+journal = {Expert Systems with Applications},
+volume = {251},
+pages = {124072},
+year = {2024},
+issn = {0957-4174},
+doi = {https://doi.org/10.1016/j.eswa.2024.124072},
+url = {https://www.sciencedirect.com/science/article/pii/S0957417424009382},
+author = {Feng Shen and Zhiyuan Yang and Jia Kuang and Zhangyao Zhu},
+keywords = {Credit scoring, CS4VM, Joint distribution adaptation, Reject inference},
+abstract = {As traditional credit evaluation methods generally only use accepted sample modeling, the rejected data is omitted, which means the model's prediction of new customers is biased. However, reject inference can be used to solve this credit evaluation sample selection bias. This paper proposes a new reject inference method based on joint distribution adaptation (JDA) and cost-sensitive semi-supervised support vector machines (CS4VM). First, this method uses both accepted (labeled) samples and rejected (unlabeled) samples modeling, which overcomes the deviations in traditional credit evaluation methods. Second, as the accepted sample and the rejected sample distributions are different, this method reduces the distribution differences between the accepted and rejected sample sets, which ensures that the sample data conforms to the basic assumptions in the semi-supervised model, and improves the performance of the classification model. Third, this method reduces the overall cost in the actual credit business by considering both the traditional misclassification costs when mining the default samples and the different decision weights for the accepted and rejected samples. Finally, an empirical study verifies the excellent predictive performance of the proposed method and effectively reduces the total credit costs.}
+}
+
+@article{ChenAstebro2010RIBoundCollapseBayesian,
+  author    = {Chen, Gongyue and Astebro, Thomas B.},
+  title     = {Bound and Collapse Bayesian Reject Inference for Credit Scoring},
+  year      = {2010},
+  month     = {July},
+  note      = {Available at SSRN},
+  url       = {https://ssrn.com/abstract=579001},
+  doi       = {10.2139/ssrn.579001}
+}
+
+@article{Xia2019ANR,
+  title={A Novel Reject Inference Model Using Outlier Detection and Gradient Boosting Technique in Peer-to-Peer Lending},
+  author={Yufei Xia},
+  journal={IEEE Access},
+  year={2019},
+  volume={7},
+  pages={92893-92907},
+  url={https://api.semanticscholar.org/CorpusID:198930061}
+}
+
+@article{ElAnnas2022SemisupervisedAH,
+  title={Semi-supervised adapted HMMs for P2P credit scoring systems with reject inference},
+  author={Monir El Annas and Badreddine Benyacoub and Mohamed Ouzineb},
+  journal={Computational Statistics},
+  year={2022},
+  volume={38},
+  pages={149 - 169},
+  url={https://api.semanticscholar.org/CorpusID:248806109}
+}
+
+@article{XiaEtAl2018RIPesimisticLikelihood,
+title = {A rejection inference technique based on contrastive pessimistic likelihood estimation for P2P lending},
+journal = {Electronic Commerce Research and Applications},
+volume = {30},
+pages = {111-124},
+year = {2018},
+issn = {1567-4223},
+doi = {https://doi.org/10.1016/j.elerap.2018.05.011},
+url = {https://www.sciencedirect.com/science/article/pii/S1567422318300590},
+author = {Yufei Xia and Xiaoli Yang and Yeying Zhang},
+keywords = {Big data applications, Contrastive pessimistic likelihood, Credit scoring, Data analytics, Gradient boosting decision tree estimation, Machine learning, P2P lending, Reject inference, Semi-supervised learning},
+abstract = {The majority of current credit-scoring models are built solely on accepted samples and thus cause sample bias. Sample bias is particularly severe in the peer-to-peer (P2P) lending domain due to its comparatively high rejection rate. Reject inference solves sample bias by inferring the possible outcomes of rejected samples and incorporating them into credit score modeling. This study addresses the problem of reject inference in a specific P2P lending domain from the perspective of semi-supervised learning. A novel reject inference method (CPLE-LightGBM) is proposed by combining the contrastive pessimistic likelihood estimation framework and an advanced gradient boosting decision tree classifier (LightGBM). The performance of the proposed CPLE-LightGBM method is validated on multiple datasets, and results demonstrate the efficiency of our proposal. Analysis of the influence of rejection rate on predictive accuracy reveals the usefulness of sampling in rejected datasets.}
+}
+
+@article{TianEtAl2018RIKernelFreeFuzzySVM,
+title = {A new approach for reject inference in credit scoring using kernel-free fuzzy quadratic surface support vector machines},
+journal = {Applied Soft Computing},
+volume = {73},
+pages = {96-105},
+year = {2018},
+issn = {1568-4946},
+doi = {https://doi.org/10.1016/j.asoc.2018.08.021},
+url = {https://www.sciencedirect.com/science/article/pii/S1568494618304812},
+author = {Ye Tian and Ziyang Yong and Jian Luo},
+keywords = {Reject inference, Credit scoring, Kernel-free quadratic surface SVM, Outlier detection, Online lending},
+abstract = {Credit scoring models have offered benefits to lenders and borrowers for many years. However, in practice these models are normally built on a sample of accepted applicants and fail to consider the remaining rejected applicants. This may cause a sample bias which is an important statistical issue, especially in the online lending situation where a large proportion of requests are rejected. Reject inference is a method for inferring how rejected applicants would have behaved if they had been granted and incorporating this information in rebuilding a more accurate credit scoring system. Due to the good performances of SVM models in this area, this paper proposes a new approach based on the state-of-the-art kernel-free fuzzy quadratic surface SVM model. It is worth pointing out that our method not only performs very well in classification as some latest works, but also handles some big issues in the classical SVM models, such as searching proper kernel functions and solving complex models. Besides, this paper is the first one to eliminate the bad effect of outliers in credit scoring. Moreover, we use two real-world loan data sets to compare our method with some benchmark methods. Particularly, one of the data set is very valuable for the study of reject inference, because the outcomes of rejected applicants are partially known. Finally, the numerical results strongly demonstrate the superiority of the proposed method in applicability, accuracy and efficiency.}
+}
+
+@article{KangEtAl2021GraphBasedSemiRI,
+title = {A graph-based semi-supervised reject inference framework considering imbalanced data distribution for consumer credit scoring},
+journal = {Applied Soft Computing},
+volume = {105},
+pages = {107259},
+year = {2021},
+issn = {1568-4946},
+doi = {https://doi.org/10.1016/j.asoc.2021.107259},
+url = {https://www.sciencedirect.com/science/article/pii/S1568494621001824},
+author = {Yanzhe Kang and Ning Jia and Runbang Cui and Jiang Deng},
+keywords = {Financial technology, Credit scoring, Reject inference, Imbalanced learning, Semi-supervised learning, Label spreading},
+abstract = {Credit scoring has been attracting increasing attention in the Chinese consumer financial industry. Traditional approaches are easily influenced by sample selection bias because they use accepted applicant samples only, while the applicant population also includes rejected applicants. Reject inference is a technique to infer good/bad labels for rejected applicants, which can overcome biases in credit scoring. However, previously proposed reject inference methods usually ignore the imbalanced distribution in accepted data, which means that good applicants are much more than bad ones in most practical consumer loan applications. Both the neglect of rejected data and the imbalanced distribution in accepted data weaken the performance of current credit scoring models. In this paper, we propose a novel reject inference framework that takes into account the imbalanced data distribution for consumer credit scoring. First, we use an advanced graph-based semi-supervised learning algorithm to solve the reject inference problem, which is called label spreading. Second, faced with an imbalanced distribution of good and bad samples in accepted applicants, we conduct imbalanced learning using a modified Synthetic Minority Over-sampling Technique before reject inference. Then, six binary classifiers are studied in our proposed framework for credit scoring modeling. Finally, we present the results of four exact experiments as well as online A/B tests for performance evaluation using data provided by a leading Chinese fintech company. Empirical results indicate that the proposed framework performs better than traditional scoring models across different evaluation metrics, representing a progressive method that promotes credit scoring research as well as improving fintech practices.}
+}
+
+@article{Feelders2000RIMixtureModels,
+author = {Feelders, A.J.},
+title = {Credit scoring and reject inference with mixture models},
+journal = {Intelligent Systems in Accounting, Finance and Management},
+volume = {9},
+number = {1},
+pages = {1-8},
+doi = {https://doi.org/10.1002/(SICI)1099-1174(200003)9:1<1::AID-ISAF177>3.0.CO;2-\#},
+url = {https://onlinelibrary.wiley.com/doi/abs/10.1002/\%28SICI\%291099-1174\%28200003\%299\%3A1\%3C1\%3A\%3AAID-ISAF177\%3E3.0.CO\%3B2-\%23},
+eprint = {https://onlinelibrary.wiley.com/doi/pdf/10.1002/\%28SICI\%291099-1174\%28200003\%299\%3A1\%3C1\%3A\%3AAID-ISAF177\%3E3.0.CO\%3B2-\%23},
+abstract = {Abstract Reject inference is the process of estimating the risk of defaulting for loan applicants that are rejected under the current acceptance policy. We propose a new reject inference method based on mixture modeling, that allows the meaningful inclusion of the rejects in the estimation process. We describe how such a model can be estimated using the EM-algorithm. An experimental study shows that inclusion of the rejects can lead to a substantial improvement of the resulting classification rule. Copyright © 2000 John Wiley \& Sons, Ltd.},
+year = {2000}
 }

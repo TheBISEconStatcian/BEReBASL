@@ -3,6 +3,7 @@
 RI can be formulated as a selective observation problem and studied within the
 framework of missing-data theory. As such it also must handle statistical questions
 like identification, sample selection, as well as estimation and evaluation under bias.
+A beautiful example is the influence of @MengSchmidt1985CostPartialObs in the RI literature.
 The review of @ehrhardt2021rejectReview revealed many structural problems in
 existing RI-methods. Also, just like @HandHanley1993CanRIWork, it concludes that for
 RI to perform (distinctly) better than using only the accepts, additional identifying
@@ -50,7 +51,7 @@ lit_review_tbl = pd.read_excel(path_lit_tbl_xl)
 boolean_cols = lit_review_tbl.columns[lit_review_tbl.dtypes == bool]
 
 boolean_is_true_str = r"$\checkmark$"
-boolan_is_false_str = ''
+boolan_is_false_str = r''
 
 lit_review_tbl[boolean_cols] = lit_review_tbl[boolean_cols].map(lambda x : boolean_is_true_str if x else boolan_is_false_str)
 
@@ -60,7 +61,6 @@ ref_colname = lit_review_tbl.columns[0]
 lit_review_tbl[ref_colname] = lit_review_tbl[ref_colname].apply(fun_reflbl_to_ref)
 #lit_review_tbl = lit_review_tbl.iloc[:-2, :2]
 ```
-
 
 
 ```{python}
@@ -86,7 +86,7 @@ norm = sum_widhts/total_width_wished
 footnote = (
     "The used abbreviations mean: assump. = assumptions, heur. = heuristically, "
     "theo. = theoretical/theoretically, persp. = perspective, emp.=empirical, sim.=simulation,"
-    "EM = Expectation Maximization."
+    "EM = Expectation Maximization, AR=Accept/Rejects."
 )
 
 lit_review_tbl.columns = [f"\\textbf{{{c}}}" for c in lit_review_tbl.columns]
@@ -133,6 +133,7 @@ print(r"""
 """
 )
 ```
+
 
 One observation that has been repeatedly done is that model performance evaluation based
 on only accepts tends to overestimate the model performance

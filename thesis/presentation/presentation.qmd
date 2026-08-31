@@ -322,7 +322,7 @@ $$
     * $\Rightarrow$ implicitly assume equality in distribution.
 
 * Other methods exist based on extra assumptions - still in research or abandoned.^[
-  E.g. @LiEtAl2017SemisupervisedSVM, @Mancisdor_et_al_2020_DeepGenM_for_RI,
+  E.g. @LiEtAl2017SemisupervisedSVM, @MancisdorEtAl2020DeepGenMForRI,
   @Anderson2019BayesianNetForRI or @bansikCrook2007
 ]   
 
