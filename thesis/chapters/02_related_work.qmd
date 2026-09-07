@@ -30,15 +30,19 @@ along four dimensions:
 
 All of this information is summarized in table
 \ref{tbl-lit-review}.
-Thereby, when necessary the assumptions or limitations (sometimes inherent
-of the methodology) were explicitly stated rather than limiting to extract what the authors
-said explicitly. First is clear that assumptions on the DGP and the methodology are often
-ignored, which from my read also relates to a weaker discussion of the assessment of the
-goodness and practicality of the model. Second, papers using more information than only
-cross-sectional features and the labels of the accepts tend to also conclude having
-better performance. Finally, no paper has been found that has formulated the RI problem
-from a dynamic perspective nor has it been researched whether this perspective can
-be used to obtain important learning signals.
+There these dimensions of the literature analysis have been divided in several dimensions.
+For each paper, I document the specific **RI Approach** and the **Key Identifying Assumptions**
+required for the method to perform (meaningfully) in practice. I track whether these
+assumptions are openly acknowledged and considered (**Assump. Explicit?**), and whether the
+authors provide a rigorous **Theoretical or Heuristic Justification** for their model's
+viability. Crucially, the table flags whether the validation methodology **infers the rejects'
+labels for evaluation**, which highlights a circular validation vulnerability where models
+are tested against extrapolated pseudo-ground-truths rather than true outcomes. Lastly, I
+classify the Result Type (theoretical, empirical, or simulated), summarize the empirical
+consensus on whether **RI actually works**, pinpoint the **Main Challenge** limiting the
+approach (such as computational scalability or error propagation), and indicate whether the
+framework incorporates a **Dynamic Perspective** to account for the self-reinforcing nature
+of selection bias across successive lending cycles.
 
 ```{python}
 import pandas as pd
