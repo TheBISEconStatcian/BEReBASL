@@ -1,4 +1,4 @@
-# Related Work
+# Related work
 
 RI can be formulated as a selective observation problem and studied within the
 framework of missing-data theory. As such it also must handle statistical questions
