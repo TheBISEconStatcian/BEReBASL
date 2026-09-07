@@ -152,3 +152,11 @@ chat.
   * [d879a3956d35d2217306c88fa655115bf53056dc](https://github.com/TheBISEconStatcian/BEReBASL/commit/d879a3956d35d2217306c88fa655115bf53056dc)
   * [85b48080ca356cc855f33af1513503a675c98d1a](https://github.com/TheBISEconStatcian/BEReBASL/commit/85b48080ca356cc855f33af1513503a675c98d1a)
   * [a50f1acdac1acf7bc2292b94cae7ef685f829178](https://github.com/TheBISEconStatcian/BEReBASL/commit/a50f1acdac1acf7bc2292b94cae7ef685f829178)
+
+## Links to `NotebookLM`
+
+* [For help understanding papers in literature review, specifically:](https://notebook.google.com/notebook/04119a5a-ad03-4972-8a0d-47438ef851e3)
+  - Identifiying underlying assumptions
+  - Double checking understanding of methodology and experimental design
+  - Formulating into one accurate sentence the text fields in the literature review table.
+  - Explaining in a paragraph the table columns (which can be tracked in the commit [93bfe0a55e447caa16ab26b8891a308168d57350](https://github.com/TheBISEconStatcian/BEReBASL/commit/93bfe0a55e447caa16ab26b8891a308168d57350))
