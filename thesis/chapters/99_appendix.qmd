@@ -14,6 +14,7 @@ AI's were
 * Perplexit [@perplexity]
 * GitHub Copilot [@github_copilot]
 * DeepAI [@deepai]
+* NotebookLM [@google_notebooklm_2024]
 
 A close bookkeeping of the usage can be seen on [GitHub](https://github.com/TheBISEconStatcian/BEReBASL/blob/main/ai_usage/ai_usage.md)
 
