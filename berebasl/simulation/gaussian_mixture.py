@@ -188,7 +188,7 @@ def mvn_random_sample(
     
     eps = torch.empty(shape, dtype=mean.dtype, device = mean.device).normal_(generator=rng)
 
-    deviations = torch.matmul(cov_chol_decomp, eps.unsqueeze(-1)).squeeze(-1) # apply decomp to each sampled vector
+    deviations = torch.matmul(cov_chol_decomp, eps.unsqueeze_(-1)).squeeze_(-1) # apply decomp to each sampled vector
 
 
     return mean + deviations
