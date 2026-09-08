@@ -142,3 +142,10 @@ print(r"""
 One observation that has been repeatedly done is that model performance evaluation based
 on only accepts tends to overestimate the model performance
 [@kozdoi_et_al_BE_BASL, @BanasikCrook2003SampleSelBias]
+Interestingly having a theoretical/heuristic discussion does not imply that the methodology
+is contradictory to itself. For example the @ShenEtAl2020ThreeStageRI vouch for the usage
+of Self-Thought-Learning for higher level features representation because it does not require
+the accepts and rejects features to belong to the same region, but they also use three-way
+decision theory to select rejects for STL that are alike to the accepts in the Mahalanobis
+Distance sense. I.e. they choose rejects that can be expected to come from the same features'
+distribution as the accepts.
