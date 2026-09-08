@@ -237,7 +237,7 @@ $$
 \left\{\left(X_{m,i}^{(t)}, X_{h,i}^{(t)}, Y_{m, i}^{(t)}, Z^{(t)}_i \right)\right\}_{i=1}^{N_t},
 $$
 which, conditional on $s_t$, forms an i.i.d. family for each fixed acceptance
-round. This conditional i.i.d. characteristic already hints that across acceptance
+round, since $d$ is known. This conditional i.i.d. characteristic already hints that across acceptance
 rounds the distribution of each family may (and likely does) change. These changes
 are not exogenous, but dependent on the families of earlier acceptance rounds through
 estimation of $s_t$. Further consider that the probability kernels governing the feature
