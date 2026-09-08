@@ -38,7 +38,7 @@ rules. Third, a simulation framework based on the well-known two-class
 Linear Discriminant Analysis (LDA) setting is introduced to generate the
 data used throughout this research. Fourth, *surprise* is introduced as a
 heuristic quantity intended to indirectly capture acceptance bias.
-Fifth, the bias of the logistic regression model used
+Fifth, the bias of the logistic regression (LR) model used
 in the acceptance loop and the cross-validation (CV) based cut-off selection
 mechanism are related to the surprise measurements to evaluate whether
 surprise provides an approximation of acceptance bias. Finally, an outlook

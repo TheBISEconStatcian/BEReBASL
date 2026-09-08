@@ -262,7 +262,7 @@ $$
 where the codomain denotes the measurable space of all admissible score functions for
 time $t$. See that $\ell_t$ does not restrict $s_t$ to always be estimated
 by some specific procedure, such that the score function at one acceptance round could
-be based on a XGB classification forest and in another by a support vector machine.
+be based on a random forest and in another by a support vector machine.
 Finally, it should be noted that although for $d$ a similar definition of some decision
 modeling procedure could be done, it is assumed in this thesis that given $s_t$,
 $d$ does not change across $t$, since such dynamics are not considered in this thesis.
@@ -346,7 +346,7 @@ also apply, rendering ignorable^[
 if an estimator is consistent, then it also generates an unbiased scoring
 function in the sense of this thesis. This argument is often used by FIs
 and critics of RI to defend the usage of classical statistical estimators
-like the logistic regression without needing to consider the data missingness,
+like LR without needing to consider the data missingness,
 either assuming $f_l=0$ or that the model features contain enough information
 of the latent factors, so that the omitted variable bias is negligible.
 If the FI collects enough data of the applicant, this might be a somewhat
