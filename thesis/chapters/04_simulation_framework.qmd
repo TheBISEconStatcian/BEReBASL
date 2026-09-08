@@ -1,19 +1,9 @@
 # Simulation framework
 
-This thesis uses an acceptance loop which has been further developed
-from the loop described in @kozdoi_et_al_BE_BASL. In this section the
-components of the loop are defined, i.e.
-
-- The joint distribution $\mathbb{P}_{(Y, X)}$ of the repayment variable
-  and the covariates,
-- the acceptance decision $Z^{(t)}$ for each acceptance round, meaning formulating
-    - the estimation method of the score function $s_t$,
-    - the threshold calculation and
-    - the complete decision function $d$ for both the MAR and MNAR cases
-- from which the rest of the RVs and functions get formulated.
-
-After defining each of the components an overview of the process as an algorithm
-is provided.
+This thesis uses an acceptance loop which has been further developed from the loop
+described in @kozdoi_et_al_BE_BASL. Here I try to make very transparent how I modeled
+each component, so that the reader may judge whether my assumptions and formulation from
+the previous section are reflected in the simulations.
 
 ## Applicants' population {#sec-app-population-simulation}
 
@@ -26,11 +16,15 @@ the "noiseless" repayment outcome. I describe the population with this variable,
 since it is less convoluted, is the object that the scorecard will
 attempt to model and is easily bridged to the idea of a good and bad applicants.
 The clean model corresponds to the classical two class multivariate Gaussian problem
-of linear discriminant analysis. It might feel out of the decade to use such a simple
+of linear discriminant analysis (LDA). It might feel out of the decade to use such a simple
 DGP, however using the very well known statistical properties of this model allows
-carefully study the RI framework presented here very carefully.
+carefully study the RI-problem very carefully.
 
-It holds $\tilde{Y} \sim Bernoulli(\pi_{b})$ with $\pi_b \in (0,1)$
+It holds 
+$$
+\tilde{Y} \sim Bernoulli(\pi_{b})
+$$ {#eq-Y-tilde-unconditional}
+with $\pi_b \in (0,1)$
 the probability of a bad applicant. The observable features vector $X$^[
     Recall from @eq-X-joint-observable-feats-vec: $X = \left(X_m^{\top}, X_h^{\top} \right)^{\top}$
 ]
@@ -93,8 +87,15 @@ $${#eq-marginal-of-X}
 
 which is the pdf of a Gaussian Mixture and thus finally:
 $$
-\mathbb{P}(\tilde{Y} = o | X=x) = p_{\tilde{Y} | X} (o, x) = \frac{\phi_{X_o}(x) p_{\tilde{Y}}(o)}{p_X(x)}
+\mathbb{P}(\tilde{Y} = o | X=x) = p_{\tilde{Y} | X} (o, x) = \frac{\phi_{X_o}(x) p_{\tilde{Y}}(o)}{p_X(x)}.
 $${#eq-posterior-of-Y}
+
+As known from LDA, we can quickly see from @eq-posterior-of-Y that a LR estimating
+$\mathbb{P}(\tilde{Y} = b | X=x)$ having access to all covariates, has a functional
+form that with proper parameter choosing would deliver exactly @eq-posterior-of-Y 
+[@hastie2009elements, Ch. 4]. Considering the consistency of LR under regularity conditions
+and that LR is widely used in real life credit scoring applications, it evidences a further
+reason to choose this DGP: we can expect LR to be very good approximator of the posterior.
 
 Now let us assume that $\epsilon, \varepsilon$ are Bernoulli distributed
 with parameters $\pi_{\epsilon} := \mathbb{P}(\epsilon =\text{no idiosyncratic shock}) > 0$
@@ -136,9 +137,21 @@ which does represent the best estimation we can hope to get from $s_t$.
 For the simulation I have chosen a fairly simple DGP, so that its
 statistical properties are easily understood. Namely, $f_m = 2$, $f_h = 1$,
 $\Sigma_g = \Sigma_b = \Sigma$, such that the distributional differences
-between $X_o$ and $X_g$ are solely characterized by the mean difference.
+between $X_o$ and $X_g$ are solely characterized by the mean difference. I also
+set $\pi_{\epsilon} = 1$, meaning no idyiosincratic shocks are considered.^[
+    Although this decision seems arbitrary and maybe even oversimplifying consider that
+    this case would deliver the same decision boundary under symmetric idiosnycratic shocks
+    ($\pi_{\varepislon, b} = 1/2$), which is arguably the most natural way to model the shocks.
+    Therefore in this case having a $\pi_{\epsilon} < 1$ would only generate a higher variance
+    of $Y | X$ (see that a bernoulli variable has its highest variance when the parameter is
+    exactly $0.5$), which would make the classification problem more difficult but it would
+    be less interesting and almost irrelevant when studying the RI problem from a dynamic
+    perspective. Specially considering that LR is robust to class outliers
+    [@hastie2009elements, Ch. 4.4.5]
+]
 The covariance matrix is characterized as follows
 $$
+\Sigma(\sigma_{m, 12}, \sigma_{mh}) = 
 \Sigma = \begin{pmatrix}
 1 & \sigma_{m, 12} & \sigma_{mh} \\
 \sigma_{m, 12} & 1 & \sigma_{mh} \\
@@ -157,6 +170,7 @@ mu_b = tex_obj_b[tex_obj_b.find("\\mu"):tex_obj_b.find(", \\Sigma")]
 
 mus_report_str = (
     "$$\n" + mu_b + ", \\; " + mu_g + ".\n$$"
+    + " {#eq-mus-chosen}"
 )
 
 display(Markdown(mus_report_str))
@@ -171,8 +185,7 @@ matrices in this form in order to choose sensible values for $\sigma_{m, 12}$ an
 $\sigma_{mh}$. A useful way is to look at the performance of the classifiers given
 by @eq-pd-with-shock-perf-bayes and @eq-pd-with-shock-perf-bayes-reduced-model, which
 are the bayes classifiers^[
-    Also known as "the generative model" in the linear discriminant
-    analysis literature
+    Also known as "the generative model" in the LDA-literature.
 ]
 for $Y | X$ and $Y | X_m$ respectively. Their (theoretical) performance can be
 measured as their (Bayes) error rate, which is the probability that the classifier
@@ -286,9 +299,10 @@ plot_pairwise_dgp_with_perf_bayes_boundaries(dgp_base, **dgp_info_for_boundaries
 
 ## The acceptance loop
 
-To put in perspective the acceptance loop
-
-Algorithm \ref{alg:ac-forward-pass}
+To visualize exactly how the acceptance loop was created it is helpful to look directly
+to the complete loop, after defining the applicant's distribution. In Algorithm
+\ref{alg:ac-forward-pass}
+the whole process can be seen. 
 
 \begin{algorithm} 
 \caption{Actor-Critic Forward Pass}
