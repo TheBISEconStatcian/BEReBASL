@@ -92,8 +92,10 @@ $${#eq-posterior-of-Y}
 
 As known from LDA, we can quickly see from @eq-posterior-of-Y that a LR estimating
 $\mathbb{P}(\tilde{Y} = b | X=x)$ having access to all covariates, has a functional
-form that with proper parameter choosing would deliver exactly @eq-posterior-of-Y 
-[@hastie2009elements, Ch. 4]. Considering the consistency of LR under regularity conditions
+form that with proper parameter choosing would deliver exactly @eq-posterior-of-Y.^[
+    See @hastie2009elements Ch. 4 for more details
+]
+Considering the consistency of LR under regularity conditions
 and that LR is widely used in real life credit scoring applications, it evidences a further
 reason to choose this DGP: we can expect LR to be very good approximator of the posterior.
 
@@ -119,7 +121,7 @@ $$
 from that it follows that
 $$
 X_{m,o} := X_m | \tilde{Y} = o \sim \mathcal{N} \left(\mu_{m, o}, \Sigma_{m, o} \right)
-$$
+$$ {#eq-marginal-of-X-m}
 which is just the RV induced by a marginal distribution of $X$. Then we can calculate
 that
 $$
@@ -141,13 +143,13 @@ between $X_o$ and $X_g$ are solely characterized by the mean difference. I also
 set $\pi_{\epsilon} = 1$, meaning no idyiosincratic shocks are considered.^[
     Although this decision seems arbitrary and maybe even oversimplifying consider that
     this case would deliver the same decision boundary under symmetric idiosnycratic shocks
-    ($\pi_{\varepislon, b} = 1/2$), which is arguably the most natural way to model the shocks.
+    , i.e. $\pi_{\varepsilon, b} = 0.5$, which is arguably the most natural way to model the shocks.
     Therefore in this case having a $\pi_{\epsilon} < 1$ would only generate a higher variance
-    of $Y | X$ (see that a bernoulli variable has its highest variance when the parameter is
+    of $Y \mid X$ (see that a bernoulli variable has its highest variance when the parameter is
     exactly $0.5$), which would make the classification problem more difficult but it would
     be less interesting and almost irrelevant when studying the RI problem from a dynamic
     perspective. Specially considering that LR is robust to class outliers
-    [@hastie2009elements, Ch. 4.4.5]
+    [@hastie2009elements, Ch. 4]
 ]
 The covariance matrix is characterized as follows
 $$
@@ -177,6 +179,13 @@ display(Markdown(mus_report_str))
 
 bayes_err_full_base = dgp_base.bayes_error_under_equal_covs().item()
 bayes_err_str = f"{bayes_err_full_base*100:.2f}"
+
+sigma_m12 = dgp_base.bad_mixture.cov[0,1].item()
+sigma_m12_str = f"{sigma_m12:.1f}"
+wished_corr_str = f"{wished_corr:.1f}"
+
+min_corr_str = f"{all_corrs.amin().item():.1f}"
+max_corr_str = f"{all_corrs.amax().item():.1f}"
 ```
 
 The form in @eq-general-form-Sigma for the variance covariance matrix was selected
@@ -225,28 +234,46 @@ $$
 \forall \sigma_{m, 12} \exists \sigma_{mh} : P_e^{*}=P^m_e
 $${#eq-equal-error-rates}
 
-and for many of the cases it does not require the error rate to be zero. Since as it 
-will be further explained in @sec-hidden-feats-overwrites, the MNAR-causing acceptance
-decision mechanism depends entirely on $X_h$, the cases in @eq-equal-error-rates result
-very interesting, as they allow to study MNAR-ness with almost no effect of the hidden
-variable bias.
-
-The last claim is non-trivial and should be argued for. A DGP with $P_e^{*}=P^m_e$
+and for many of the cases it does not require the error rate to be zero. As it will be explained
+in @sec-the-acceptance-loop
+, the MNAR-ness will be modeled via overwrites in dependence of
+extreme values of $X_h$. This kind of mechanism naturally induces a missing variable bias,
+but the cases in @eq-equal-error-rates allow to study a classification case where the hidden
+variable bias should be negligible in the following sense. A DGP with $P_e^{*}=P^m_e$
 implies that for this DGP there exists a classifier depending solely on $X_m$ that
 has a discriminatory power as good as a classifier using the full features vector.
-Further, see that the joint distribution $(Y, X_m)$
+Further, see that the joint distribution $(Y, X_m)$ as a marginal of $(Y, X)$ is in itself
+also a LDA-type of DGP,^[
+    This is evident from @eq-marginal-of-X-m together with the fact that the unconditional
+    distribution of $Y$ does not get changed by integrating out $X_h$
+] which can be consistently estimated by a technique like LR.
 
- This set is specially interesting for
-studying the MNAR mechanism, which as defined in @eq-mnar-only-model where the MNAR
-mechanism is dependent on the latent factor $X_h$. 
+With these observations it became clear that it was sensible to choose a $\sigma_{m, 12}$
+for which @eq-equal-error-rates would be fulfilled without the error rates being zero.
+In order to do a good analysis of the MNAR effect in relationship with the inevitable
+missing variable bias, it was sensible to choose a $\sigma_{m, 12}$ with a wide range of
+values of $P_e^{*}/P^m_e$ for a granular control of the effect of the omitted variable and
+with a relatively high $P^m_e$, so that the ratio differences also imply important differences
+in the achievable Bayes rate and the classification problem does not become too trivial.
+As depicted in the middle panel it was set $\sigma_{m, 12} = `{python} sigma_m12_str`$.
+
+The final step is choosing $\sigma_{mh}$, which was done analyzing the right panel. For the
+"base simulation", meaning the base case from which every sensitivity analysis will follow,
+a value with resulting negligible omitted variable bias was selected, namely
+$\sigma_{mh} = `{python} wished_corr_str`$. For the base simulation is then
 
 
-Its Bayes Error rate is `{python} bayes_err_str`$\%$. We can see a
-visualization of the complete dgp in @fig-3d-base-dgp, whereby the Perfect Bayes Boundary
-corresponds to the classification boundary of a classifier given by 
+Other values to be used later in the analysis
+were selected as a grid with equidistant points from `{python} min_corr_str` to
+`{python} max_corr_str`. For the base simulation is then 
+$P_e^{*}=P^m_e= `{python} bayes_err_str`\%$.
+
+
+
+We can see a visualization of the complete base dgp in @fig-3d-base-dgp, whereby the
+Perfect Bayes Boundary corresponds to the classification boundary of a classifier given by 
 @eq-pd-with-shock-perf-bayes. This boundary is calculated in the appendix
-(see @sec-dec-boundary-perf-bayes-idyiosincratic-shocks) and can be
-rewritten from @eq-decision-boundary-equal-covs as the hyperplane
+(see @sec-dec-boundary-perf-bayes-idyiosincratic-shocks) and can be rewritten from @eq-decision-boundary-equal-covs as the hyperplane $\mathcal{D}^*$ defined by
 $$
 W x - \beta = \log c
 $${#eq-hyperplane-decision-boundary}
@@ -268,17 +295,32 @@ plot3d_with_perf_bayes_boundary(dgp_base, dgp_info_for_boundaries["W"], dgp_info
 
 Considering the bayes error rate of the problem, the good separability by the
 hyperplane of the perfect bayes decision boundary observable in @fig-3d-base-dgp,
-it is clear that a logit model (which also has a linear discriminant) with no
-missing variable bias, should have no problem estimating a good classifier. To check
+even more evidence can be given to argue that a LR should not have any problem calculating
+the separation boundary, given all relevant variables. To check
 out how difficult the problem gets while ignoring one of the variables, a pairwise
-component plot as in @fig-pairwise-base-dgp is a good diagnostic. There the perfect
-bayes boundary was calculated using the hyperplane described in @eq-hyperplane-decision-boundary,
-whereby the non considered component of the features in each plot was set to its
-expected value of $X$ given no shock. Meaning with $r$ component's position in $X$ of the
+component plot as in @fig-pairwise-base-dgp is a good diagnostic. There, two decision
+boundaries are plotted. The first one is a projection of $\mathcal{D}^*$ into a two
+dimensional plane by setting the component not in the pairwise plot to its expected value.
+Meaning with $r$ component's position in $X$ of the
 non-shown component, it was set in @eq-hyperplane-decision-boundary
 $$
-x\mathtt{[r]} = \mathbb{E}(X | \epsilon = \text{no shock})\mathtt{[r]} = (\pi_b)\mu_b\mathtt{[r]} + (1-\pi_b)\mu_g\mathtt{[r]}
+x\mathtt{[r]} = \mathbb{E}(X | \epsilon = \text{no shock})\mathtt{[r]} = (\pi_b)\mu_b\mathtt{[r]} + (1-\pi_b)\mu_g\mathtt{[r]}.
 $$
+The other boundary is called $\mathcal{D}^r$ and corresponds to the decision boundary if
+the non-shown component was integrated out of the joint distribution and then given such a
+DGP calculating the boundary of the byes classifier.
+
+Through @fig-pairwise-base-dgp we can see in the left panel that the projected $\mathcal{D}^*$
+and $\mathcal{D}^r$ return the same decision boundary when considering only $X_m$. Furhter,
+the projections of $\mathcal{D}^*$ in the middle and right panels show a line (almost)
+parallel to the $X_h$ axis in both cases, which shows that the bayes classifier with full
+information ignores that variable. However in both of those panels the $\mathcal{D}^r$
+differ from the projected one, showing that although the full information model ignores
+$X_h$, it still contains relevant information on the repayment outcome. This conclussion
+can of course also be obtained from eyeballing the data structure in those panels. All of
+these observations strengthen the argument for using this DGP with overwrites based on
+$X_h$ as a way to generate an MNAR-mechanism without inducing any (relevant) omitted variable
+bias.
 
 It is clear that @fig-pairwise-base-dgp also suggests that the classification
 problem shoud also be well solved by a logistic regression considering only two
@@ -297,7 +339,50 @@ from thesis.helper_scripts.dgp_plotting import plot_pairwise_dgp_with_perf_bayes
 plot_pairwise_dgp_with_perf_bayes_boundaries(dgp_base, **dgp_info_for_boundaries)
 ```
 
-## The acceptance loop
+As a final remark, I believe it is important to make transparent how the sampling of
+$\mathbb{P}_{X,Y}$ is done, as this study is mostly numerical and therefore the simulation
+implementation should also be looked critically upon. The used logic is summarised in algorithm
+\ref{alg:sampling-x-y}.
+First the realizations of $Y$ are sampled from a Bernoulli distribution as defined in
+@eq-Y-tilde-unconditional. These values are effectively reorganized to be able to have
+contiguous memory buffers later for the features' realizations, increasing its efficiency.
+Then the corresponding amount of samples from $X_{b}$ and $X_g$ are sampled^[
+    For MVN sampling the standard methodology via cholesky decomposition of $\Sigma$ and
+    standard white noise was used. See for example @wiki:multivariate_normal_sampling
+    for another wording of this method.
+] 
+and stacked together, which allows to cheaply mantain the order. At the end the 
+realizations are returned.
+
+\begin{algorithm} 
+\caption{Sampling from $\mathbb{P}_{X, Y}$}
+\label{alg:sampling-x-y}
+\begin{algorithmic}[1]
+    \Statex \textbf{Note:} Here the random variables and their realizations are represented with the same notation for convenience
+    \Procedure{CreditDGP.sample}{$\sigma_{m,12}, \sigma_{mh}, \pi_b, n$}
+        \Statex \textbf{1. Sampling good and bad components} while ensuring contiguous memory per class
+        \State $\forall i \in \{1, \ldots, n\}: B_i \overset{iid}{\sim} \operatorname{Bernoulli}(\pi_b) \in \{0, 1\}$ with $\mathbb{P}(B_i = 1) = \pi_b$
+        \State $n_b \gets \sum_{i=1}^n B_i$, $n_g \gets n - n_b$
+        \State $\mathbf{Y} \gets (\underbrace{b, \ldots, b}_{n_b \text{ times}}, \underbrace{g, \ldots, g}_{n_g \text{ times}})$
+        \Comment{$\mathbf{Y} \in \{b, g\}^{n}$}
+        
+        \Statex \textbf{2. Multivariate Gaussian sampling} for goods and bads
+        \State $\Sigma_{chol} \gets \operatorname{CholeskyDecomposition(\Sigma(\sigma_{m,12}, \sigma_{mh}))}$ \Comment{See \eqref{eq-general-form-Sigma}}
+        
+        \For{$o \in \{b, g\}$}
+            \State $\mathbf{m}_o \gets ( \mu_o, \ldots, \mu_o)^\top \in \mathbb{R}^{n \times f}$
+            \State $\mathbf{E} \gets (E_1, \ldots, E_n)^\top$, $\forall j \in \{1, \ldots, n\}: E_j \overset{iid}{\sim} \mathcal{N}(0_f, I_f)$
+            \Statex \Comment{Done via i.i.d. sampling of $n\cdot f$ univariate standard normals}
+            \State $\mathbf{X}_o \gets \mathbf{m}_o + \mathbf{E} \Sigma_{chol}^\top$
+        \EndFor
+
+        \State $\mathbf{X} \gets \begin{pmatrix}\mathbf{X}_b \\ \mathbf{X}_g\end{pmatrix}$
+        \State \Return $\mathbf{X},\, \mathbf{Y}$ 
+    \EndProcedure
+\end{algorithmic} 
+\end{algorithm}
+
+## The acceptance loop {#sec-the-acceptance-loop}
 
 To visualize exactly how the acceptance loop was created it is helpful to look directly
 to the complete loop, after defining the applicant's distribution. In Algorithm
