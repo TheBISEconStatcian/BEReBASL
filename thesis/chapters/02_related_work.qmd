@@ -47,6 +47,7 @@ of selection bias across successive lending cycles.
 ```{python}
 import pandas as pd
 import os
+import bibtexparser
 #os.chdir("..")
 path_lit_tbl_xl = "./data/table_literature_review.xlsx"
 
@@ -58,6 +59,22 @@ boolean_is_true_str = r"$\checkmark$"
 boolan_is_false_str = r''
 
 lit_review_tbl[boolean_cols] = lit_review_tbl[boolean_cols].map(lambda x : boolean_is_true_str if x else boolan_is_false_str)
+
+# Get year information out of the references file
+bib_path = "./references.bib"
+bib = bibtexparser.parse_file(bib_path)
+
+year_author_idx = pd.MultiIndex.from_tuples(
+  [(
+    int(bib.entries_dict[ref].fields_dict["year"].value),
+    bib.entries_dict[ref].fields_dict["author"].value.replace("{", '').replace('}', ''),
+  )
+  for ref in lit_review_tbl["Reference"].values],
+  names=("Year", "Author(s)")
+)
+
+lit_review_tbl.index = year_author_idx
+lit_review_tbl.sort_index(inplace=True)
 
 fun_reflbl_to_ref = lambda ref : f"\\textcite{{{ref}}}" if True else f"@{ref}"#ref
 ref_colname = lit_review_tbl.columns[0]
