@@ -55,12 +55,10 @@ Consider a FI operating under the following assumptions:
    i.e. $\ell_t = \ell_{t'}$ for $t, t' \in \mathbf{T}$.
 4. The cutoff $c_t$ is chosen consistently across rounds according
    to the same business criterion.
-5. The missing data process satisfies the MAR assumption, meaning
-   $f_h = 0$ and $Z^{(t)}_i$ is fully determined by $\hat{s}_t$,
-   $c_t$ and $X^{(t)}_{m,i}$ for
-   $t \in \mathbf{T}, i \in \{1, \ldots, N_t\}$.^[
-   Recall @eq-Z-t-with-threshold-and-scorecard-no-overwrites.
+5. The missing data process satisfies the MAR assumption^[
+    Recall @eq-mar-only-model.
    ]
+   for $t \in \mathbf{T}, i \in \{1, \ldots, N_t\}$.
 
 Under MAR, the repayment behaviour of an applicant is independent
 of the acceptance decision once the observable characteristics are
