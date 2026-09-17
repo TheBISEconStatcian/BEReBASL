@@ -77,6 +77,10 @@ opinion on naming.
 - [Conception of literature review and help redacting.](https://chatgpt.com/share/6a849c0c-270c-83eb-b0f6-057bf5cdf9e3). Thereby one ad verbatim copying was done from the AI:
   - Content containing only text written by me: [358dc4282637c26c29d910ab305925e2cab65f81](https://github.com/TheBISEconStatcian/BEReBASL/commit/358dc4282637c26c29d910ab305925e2cab65f81)
   - After copying and working in some suggestions: [94e769115ee9993d62aa975b2559500315cd117a](https://github.com/TheBISEconStatcian/BEReBASL/commit/94e769115ee9993d62aa975b2559500315cd117a)
+- [Corrections on the related work section](https://chatgpt.com/share/6aabb6ae-4444-83eb-9cb2-673d667897e6)
+  - Original draft by me: [61e753569a4cd332797003d5a80c4d3887e846d8](https://github.com/TheBISEconStatcian/BEReBASL/commit/61e753569a4cd332797003d5a80c4d3887e846d8)
+  - Copied and pasted corrections: [873b2ad1e58b80d237e996b9bc0ea6d5b6b842ce](https://github.com/TheBISEconStatcian/BEReBASL/commit/873b2ad1e58b80d237e996b9bc0ea6d5b6b842ce)
+  - Tweaks by me: [c6c2b81c00598d8934997909550a506880b18786](https://github.com/TheBISEconStatcian/BEReBASL/commit/c6c2b81c00598d8934997909550a506880b18786)
 
 
 ## Links to `Copilot` usage
