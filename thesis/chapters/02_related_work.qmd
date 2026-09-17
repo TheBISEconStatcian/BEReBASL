@@ -30,8 +30,9 @@ along four dimensions:
   induced by repeated acceptance decisions, including potential self-reinforcement
   of selection bias?
 
-All of this information is summarized in Table \ref{tbl-lit-review}. For each paper,
-I document the specific **RI Approach** and the **Key Identifying Assumptions**
+All of this information is summarized in Table
+\ref{tbl-lit-review}.
+For each paper, I document the specific **RI Approach** and the **Key Identifying Assumptions**
 required for the method to perform meaningfully in practice. I aim to minimize
 implicit assumptions and to formulate them according to the strongest plausible
 interpretation consistent with the paper. I track whether these assumptions are
@@ -46,12 +47,11 @@ narrative of the paper (discussion, experimental design, etc.) is consistent wit
 the stated assumptions and justification.
 
 Finally, I classify the Result Type (theoretical, empirical, or simulated), the
-data basis on which the results were shown, if data were used, summarize the
+data basis (**test pool**) on which the results were shown, if data were used, summarize the
 paper's conclusion regarding whether the proposed RI method works, identify the
 **Main Challenge** limiting the approach, such as computational scalability or
 error propagation, and indicate whether the framework incorporates a **Dynamic
-Perspective** to account for the self-reinforcing nature of selection bias across
-successive lending cycles.
+Perspective** to model the RI problem or considers it in their approach.
 
 ```{python}
 import pandas as pd
@@ -171,16 +171,16 @@ are often not made explicit, which I consider harmful for the credibility of the
 proposals and, in some cases, potentially contradictory. For example,
 @XiaEtAl2018RIPesimisticLikelihood does not appear to acknowledge that the proposed
 weighting scheme requires the estimated probability of default (PD) to be
-meaningfully calibrated. They use standard LightGBM, which is not in itself
+(approximately) meaningfully calibrated. They use standard LightGBM, which is not in itself
 guaranteed to produce calibrated probabilities. Furthermore, it is interesting to
 find cases such as @ChenAstebro2010RIBoundCollapseBayesian, where missing not at
 random (MNAR) is assumed explicitly, while the simulated accepts and rejects are
-generated from the labeled accepts using a missing-at-random (MAR) mechanism.
+generated from the labeled accepts using a missing at random (MAR) mechanism.
 This creates a mismatch between the assumed observation mechanism and the mechanism
 used to construct the simulation.
 
 Another case worth highlighting is @ElAnnas2022SemisupervisedAH. They implicitly
-assume that a Markov chain over the ordered feature sequence can be meaningfully
+assume that a Markov chain over an ordered feature sequence can be meaningfully
 linked to hidden states related to loan outcomes. This relationship is established
 algorithmically, and the empirical results appear to support the claim. However,
 they do not discuss the role of the feature ordering or whether this ordering has
@@ -193,8 +193,8 @@ RI problem.
 Also, @Anderson2019BayesianNetForRI exemplifies that being explicit about the
 assumptions does not necessarily mean that they are sufficiently well justified to
 support an analysis of the proposed approach. See that they do not justify their
-approach in the second column. In their case, it is assumed that causal
-relationships between features are non-cyclic, but it is not argued under which
+approach as noted in the second column. In their case, it is assumed that causal
+relationships between features are acyclic, but it is not argued under which
 circumstances this should be expected. For example, marital status and asset
 holdings may be mutually related over time: financial circumstances may influence
 marriage decisions, while marriage may subsequently influence asset accumulation.
@@ -263,7 +263,7 @@ reinforcing the findings of @ehrhardt2021rejectReview and
 @HandHanley1993CanRIWork on the necessity of further identifying assumptions. In
 the literature reviewed here, I found no paper that explicitly incorporates the
 inherent dynamic nature of the RI problem in credit scoring. I believe this aspect
-may provide a basis for formulating an additional plausible assumption when
+may provide a basis for formulating a novel plausible assumption when
 developing RI methods.
 
 In conclusion, the literature review identified three recurring issues that, in
@@ -283,12 +283,10 @@ diagnostic signal for this bias (Sec. @sec-hyp-def) along with numerical evidenc
 (Sec. @sec-hyps-num-evidence).
 
 Third, many papers have proposed solutions to the RI problem since at least
-@Feelders2000RIMixtureModels, published in 2000, yet the literature continues to
+@Feelders2000RIMixtureModels, yet the literature continues to
 treat RI as a problem with substantial unresolved issues. I speculate that this
 persistence is partly related to the limited credibility of some evaluation
 methods, conceptual weaknesses, and limited reproducibility of results. Although
 a full answer to this shortcoming is not provided here, I give an outlook on how
 the hypotheses investigated in this thesis may inform the structure and evaluation
 of RI approaches and thereby help address the issues identified above.
-
-
