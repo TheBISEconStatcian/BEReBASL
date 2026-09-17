@@ -238,7 +238,7 @@ $$
 s_t : \mathbb{R}^{f_m} \to \mathbb{R}, \; 
 \mathcal{B}\left(\mathbb{R}^{f_m}\right)-\mathcal{B}\left(\mathbb{R}\right) \text{ measurable}
 $$
-be a score function and
+be a (risk) score function and
 $$
 d : \mathbb{R} \times \mathbb{R}^{f_h} \to \{a, r\}, \;
     \left(\mathcal{B}\left(\mathbb{R}\right)
