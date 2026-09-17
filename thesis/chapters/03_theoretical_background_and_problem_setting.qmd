@@ -1,4 +1,4 @@
-# Theoretical background and problem setting
+# Theoretical background and problem setting {#sec-theor-bg-and-problem-setting}
 
 Following the spirit of @ehrhardt2021rejectReview, I begin by formally
 presenting the Reject Inference (RI) Problem in Credit Risk as understood and

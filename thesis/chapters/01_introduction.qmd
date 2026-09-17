@@ -26,9 +26,10 @@ As a biased selection rule is repeatedly applied, the resulting bias may
 compound over time or stabilize around a sub-optimal equilibrium.
 
 To study this intuition, a rigorous and transparent methodology is
-indispensable. First, a short literature review is presented, highlighting
-critiques and methodological shortcomings in the RI literature that the
-dynamic perspective may help address. Second, responding to the critique of
+indispensable. First, a literature review is presented, highlighting
+critiques and methodological shortcomings in the RI literature motivating the
+following sections and specially highlighting the potential of using a dynamic
+perspective. Second, responding to the critique of
 @ehrhardt2021rejectReview regarding the lack of formalism in many RI studies,
 the credit scoring setting is used to formulate a precise definition of the
 RI problem, bridging the real world and Math. To do so, Measure theory provides

@@ -1,4 +1,4 @@
-# Simulation framework
+# Simulation framework {#sec-sim-framework}
 
 This thesis uses an acceptance loop which has been further developed from the loop
 described in @kozdoi_et_al_BE_BASL. Here I try to make very transparent how I modeled

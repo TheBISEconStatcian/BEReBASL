@@ -10,7 +10,7 @@ which allows gathering evidence on the plausibility of such hypothesis.
 Having delivered this evidence, a reward signal is defined along to a formulation
 of the RI problem as a reinforcement learning problem.
 
-## Hypothesis definition
+## Hypothesis definition {#sec-hyp-def}
 
 To formalize the statement "the bias should be observable and can be minimized"
 we need to first formulate what is understood as bias and how one can
@@ -96,7 +96,7 @@ at least within the context of this thesis, surprise provides a
 natural candidate reward signal for learning policies that mitigate
 the effects of such departures.
 
-### Empirical evidence of the bias observability as surprise
+## Empirical evidence of the bias observability as surprise {#sec-hyps-num-evidence}
 
 Lets see
 
@@ -200,33 +200,4 @@ NEED TO FIND A WAY TO MAKE THIS SMALLER
 plot_acc_rates_per_round(base_sim_objs)
 ```
 
-### Formulating the hypothesis
-
-### Checking the hypothesis
-
-Although a theoretical check of the hypothesis might result interesting,
-it is neither straigh
-
-#### Classifiers definition
-
-#### Evidence of hypothesis plausibility given the simulation grid results {#sec-empirical-hypothesis-checking}
-
-## RI as a dynamic RL problem
-
-### Reward signal definition
-
-### Problem formulation
-
-## RL Agent
-
-### Explaining the Data-Structure
-
-### RL-method used
-
-#### Why this method?
-
-#### Presentation of the architecture
-
-#### Training loop algorithm
-
-#### Transparency on metaparameters
+## Outlook on possible applications
