@@ -1,54 +1,57 @@
 # Related work
 
 RI can be formulated as a selective observation problem and studied within the
-framework of missing-data theory. As such it also must handle statistical questions
-like identification, sample selection, as well as estimation and evaluation under bias.
-The review of @ehrhardt2021rejectReview revealed many structural problems in
-existing RI-methods. Among these structural issues, one problem stands out in particular:
-just as in @HandHanley1993CanRIWork, the conclusion is
-that for RI to perform (distinctly) better than using only the accepts, one needs additional
-identifying assumptions or supplementary information beyond the observed accepted outcomes
-and applicant covariates. Furthermore, in a
-spirit close to @ehrhardt2021rejectReview, I believe that being explicit about
-the assumptions both on the data generating process studied, and the methodology
-help to rigorously assess the feasibility, potential, limitations and possible
-application fields of an RI approach, besides helping to formulate meaningful experimental
-settings.
+framework of missing-data theory. Accordingly, it raises questions of
+identification, sample selection, estimation, and evaluation under selection bias.
+The review of @ehrhardt2021rejectReview identified many structural problems in
+existing RI methods. Among these issues, one problem stands out in particular:
+as in @HandHanley1993CanRIWork, the conclusion is that for RI to provide
+information beyond that available from the accepts, additional identifying
+assumptions or supplementary information are required beyond the observed accepted
+outcomes and applicant covariates. Furthermore, in a spirit close to
+@ehrhardt2021rejectReview, I believe that being explicit about the assumptions
+concerning both the data-generating process (DGP) and the methodology is important
+for rigorously assessing the feasibility, potential, limitations, and possible
+application fields of an RI approach, as well as for formulating meaningful
+experimental settings.
 
 Because the central concern of this thesis is not merely whether a particular RI
 procedure performs well, but under which conditions information about rejected
 applicants can be obtained from the available data, the literature is reviewed
 along four dimensions:
 
-- What information from the rejects does the RI-method exploit, and under what
+- What information from the rejects does the RI method exploit, and under what
   assumptions does this information identify the target of interest?
 - Are the assumptions concerning the data-generating process, observation mechanism,
-  and methodology explicitly stated and theoretically/heuristically justified?
+  and methodology explicitly stated and theoretically or heuristically justified?
 - How do authors evaluate the validity, effectiveness, robustness, and practical
   applicability of their proposed approach, and what limitations do they identify?
 - To what extent does the methodology account for the temporal and feedback structure
-  induced by repeated acceptance decisions?
+  induced by repeated acceptance decisions, including potential self-reinforcement
+  of selection bias?
 
-All of this information is summarized in table
-\ref{tbl-lit-review}.
-There these dimensions of the literature analysis have been divided in several dimensions.
-For each paper, I document the specific **RI Approach** and the **Key Identifying Assumptions**
-required for the method to perform (meaningfully) in practice. Thereby I try to keep implicit
-assumptions to a minimum and to formulate them in such way that make the proposed approach
-as sensible as possible. I track whether these
-assumptions are openly acknowledged and considered (**Assump. Explicit?**), and whether the
-authors provide a rigorous **Theoretical or Heuristic Justification** for their model's
-viability. These flags as boolean values are sometimes insufficient, as the authors may
-for example consider almost all assumptions but a hidden one. The criterion to setting both
-of them to true is whether the most important assumptions where made explicit (either by citing
-a known methodology, from which its assumptions can be deduced or by stating them specifically)
-*and* the narrative of the paper (discussion, experimental design, etc.) is consistent with
-the assumptions/justification. Finally, I classify the Result Type (theoretical, empirical,
-or simulated), the data basis on which the results were shown (if data was used), summarize
-the paper's consensus on whether **RI actually works**, pinpoint the **Main Challenge** limiting
-the approach (such as computational scalability or error propagation), and indicate whether the
-framework incorporates a **Dynamic Perspective** to account for the self-reinforcing nature
-of selection bias across successive lending cycles.
+All of this information is summarized in Table \ref{tbl-lit-review}. For each paper,
+I document the specific **RI Approach** and the **Key Identifying Assumptions**
+required for the method to perform meaningfully in practice. I aim to minimize
+implicit assumptions and to formulate them according to the strongest plausible
+interpretation consistent with the paper. I track whether these assumptions are
+openly acknowledged and considered (**Assump. Explicit?**), and whether the authors
+provide a rigorous **Theoretical or Heuristic Justification** for the viability of
+their approach. These flags as Boolean values are sometimes insufficient, as the
+authors may consider almost all assumptions while leaving one important assumption
+implicit. The criterion for setting both to true is whether the most important
+assumptions were made explicit, either by citing a known methodology from which
+their assumptions can be deduced or by stating them specifically, *and* whether the
+narrative of the paper (discussion, experimental design, etc.) is consistent with
+the stated assumptions and justification.
+
+Finally, I classify the Result Type (theoretical, empirical, or simulated), the
+data basis on which the results were shown, if data were used, summarize the
+paper's conclusion regarding whether the proposed RI method works, identify the
+**Main Challenge** limiting the approach, such as computational scalability or
+error propagation, and indicate whether the framework incorporates a **Dynamic
+Perspective** to account for the self-reinforcing nature of selection bias across
+successive lending cycles.
 
 ```{python}
 import pandas as pd
@@ -163,100 +166,129 @@ print(r"""
 )
 ```
 
-Consistent with the findings of @ehrhardt2021rejectReview I see that often the assumptions
-are not explicit, which I find to be harmful for the credibility of the proposals and even
-to lead to contradictions. For example @XiaEtAl2018RIPesimisticLikelihood fail to identify
-that the proposed weighting scheme requires the model's PD to be calibrated to be meaningful.
-Thereby they use standard LightGBM, which per se is not ensured to be calibrated. Furthermore, it is
-interesting to find cases like @ChenAstebro2010RIBoundCollapseBayesian where even though
-MNAR is assumed explicitly, they simulate rejects and accepts pool from the labeled accepts
-by choosing cut-offs with a MAR mechanism. Another case worth highlighting is
-@ElAnnas2022SemisupervisedAH. They implicitly assume that a Markov chain along the features can be meaningfully
-tied to hidden states related to the loan outcomes, which is achieved algorithmically, and
-the empirical results seem to support the claim. However, they fail to discuss which role
-the order of the features play and also whether a semantic relationship is thereby ensured,
-making it questionable to what extent the found success of the approach is just "good luck"
-in the made experiment. These observations strengthen my belief in the utility of being explicit
-on which assumptions are made when studying the RI problem.
+Consistent with the findings of @ehrhardt2021rejectReview, I find that assumptions
+are often not made explicit, which I consider harmful for the credibility of the
+proposals and, in some cases, potentially contradictory. For example,
+@XiaEtAl2018RIPesimisticLikelihood does not appear to acknowledge that the proposed
+weighting scheme requires the estimated probability of default (PD) to be
+meaningfully calibrated. They use standard LightGBM, which is not in itself
+guaranteed to produce calibrated probabilities. Furthermore, it is interesting to
+find cases such as @ChenAstebro2010RIBoundCollapseBayesian, where missing not at
+random (MNAR) is assumed explicitly, while the simulated accepts and rejects are
+generated from the labeled accepts using a missing-at-random (MAR) mechanism.
+This creates a mismatch between the assumed observation mechanism and the mechanism
+used to construct the simulation.
 
-Also, @Anderson2019BayesianNetForRI exemplifies, that being explicit with the assumptions
-does not necessarily mean that they are well pondered to make a good analysis of
-the proposed approach. See that they do not justify their approach (second column). In their case
-it is assumed that causal non-cyclic relationships between features are given, but it is
-not argued under which circumstances this should be expected. For example, the marital status
-and the assets hold by an applicant are not necessarily acyclic. It could be in some cases
-that someone gets married (partly) because of its assets, but then it buys more assets to
-provide a better living standard for its spouse. In general, I found that the lack of a
-heuristic or theoretical justification for the approach always weakened the credibility of
-the approach, which can make it harder to make RI a standard for the industry.
-Nonetheless, being explicit on both assumptions and justification is not foolproof.
-E.g. @ShenEtAl2020ThreeStageRI vouch for the usage of
-Self-Thought-Learning for higher level features representation because it does not require
-the accepts and rejects features to belong to the same region, but they also use three-way
-decision theory to select rejects for STL that are alike to the accepts in the Mahalanobis
-Distance sense. I.e. they choose rejects that could be expected to come from the same features'
-distribution as the accepts.
+Another case worth highlighting is @ElAnnas2022SemisupervisedAH. They implicitly
+assume that a Markov chain over the ordered feature sequence can be meaningfully
+linked to hidden states related to loan outcomes. This relationship is established
+algorithmically, and the empirical results appear to support the claim. However,
+they do not discuss the role of the feature ordering or whether this ordering has
+a substantive interpretation that justifies the Markov assumption. This raises the
+question of whether the observed success is partly an artifact of the particular
+feature ordering or experimental design. These observations strengthen my belief
+in the utility of being explicit about which assumptions are made when studying the
+RI problem.
 
-It also stands out that although many papers introduce the RI problem as an open problem
-without (really) promising solutions, a fair amount of papers in table
-\ref{tbl-lit-review}
-conclude that their own method works, at least moderately. This conclusion is however often
-hard to believe. On the one hand some papers like @LiEtAl2017SemisupervisedSVM and
-@TianEtAl2018RIKernelFreeFuzzySVM evaluate the RI method by using a (partially) extrapolated
-sample containing also rejects, which inherently leads to a circular relation.
-On the other hand other papers, generate artificial rejects from the accepts by
-using some rule to hide to the learner the labels of some of the accepts
-[@ChenAstebro2010RIBoundCollapseBayesian; @MaldonadoParedes2010SemiSupSVM; @ribeiro2025balancingperformancerejectinclusion]. 
-This is however filtering further the accepts that should already belong to the most
-creditworthy part of the population, which is likely not very representative of
-a real dataset. Simulation based work also sometimes uses an unrealistic DGP
-like @BuckerEtAl2013MNARRI which assumes observability, outcome and features
-are i.i.d. across the applicants, which is not likely in a dynamic environment or
-@Feelders2000RIMixtureModels who uses a very abstract decision rule. See that the
-unrealistic DGP is accompanied by a lack of explicit modeling from the FI's reality
-to a mathematical description of the DGP. The rest of the papers base their results on
-changes of some classification metric on holdout accepts. This approach is likely too narrow,
-as it is hard to generalize those results to an understanding of how an RI based acceptance
-policy would perform. One option is using metrics designed specifically for the RI problem,
-which seem to be more adequate to evaluate the performance of RI approaches
-[@ribeiro2025balancingperformancerejectinclusion; @kozdoi_et_al_BE_BASL]. Another one, that
-is hard to implement, is doing A/B testing like @KangEtAl2021GraphBasedSemiRI, which would
-be the best possible way to actually prove if the method works.
+Also, @Anderson2019BayesianNetForRI exemplifies that being explicit about the
+assumptions does not necessarily mean that they are sufficiently well justified to
+support an analysis of the proposed approach. See that they do not justify their
+approach in the second column. In their case, it is assumed that causal
+relationships between features are non-cyclic, but it is not argued under which
+circumstances this should be expected. For example, marital status and asset
+holdings may be mutually related over time: financial circumstances may influence
+marriage decisions, while marriage may subsequently influence asset accumulation.
+In general, I consistently found that a lack of theoretical or heuristic
+justification weakened the credibility of an approach, which may hinder confidence
+in RI methods and their adoption in practice.
 
-Now it is also worth taking a look into the most promising proposals, meaning the ones that
-can show good results in a sensible experimental setting, do not base on unplausible
-assumptions and have a convincing evaluation method given the approach. These are for me
-only four: Bayesian Evaluation [@kozdoi_et_al_BE_BASL], cost sensitive S3VM with JDA
-[@ShengEtAl2024RICostSenstiveJointDistAdap] and the seminal semi-supervised SVM for credit
-scoring [@MaldonadoParedes2010SemiSupSVM].^[
-  See that this model is not the most common benchmark with the literature tending to
-  prefer the kernel based SVM of @LiEtAl2017SemisupervisedSVM. I still prefer this work
-  as it remains a base on which the literature develops new methods and is a work that
-  fulfills the aforementioned conditions.
+Nonetheless, being explicit about both assumptions and justification is not
+foolproof. For example, @ShenEtAl2020ThreeStageRI motivate the usage of
+Self-Thought-Learning (STL) for higher-level feature representation by arguing that
+the accepts and rejects do not need to belong to the same region. However, they also
+use three-way decision theory to select rejects for STL that are similar to the
+accepts in the Mahalanobis-distance sense. In other words, they select rejects that
+could be expected to come from the same feature distribution as the accepts. This
+partially reintroduces the distributional similarity assumption that the preceding
+argument seeks to relax.
+
+It also stands out that although many papers introduce the RI problem as an open
+problem without really promising solutions, a substantial number of papers in
+Table \ref{tbl-lit-review} conclude that their proposed method performs well, at
+least under the evaluation setting considered. This conclusion is, however, often
+difficult to assess. On the one hand, some papers such as
+@LiEtAl2017SemisupervisedSVM and @TianEtAl2018RIKernelFreeFuzzySVM evaluate the
+RI method using a (partially) extrapolated sample containing also rejects, which
+can create a circular evaluation procedure. On the other hand, other papers
+generate artificial rejects from the accepts by using some rule to hide the labels
+of a subset of the accepts
+[@ChenAstebro2010RIBoundCollapseBayesian; @MaldonadoParedes2010SemiSupSVM;
+@ribeiro2025balancingperformancerejectinclusion]. This amounts to selecting a
+subset from a population that has already been selected as relatively creditworthy,
+making the resulting artificial rejects potentially unrepresentative of actual
+rejects.
+
+Simulation-based work also sometimes uses an unrealistic DGP. For example,
+@BuckerEtAl2013MNARRI assumes that applicants are independent and identically
+distributed (i.i.d.) with respect to their observable characteristics, outcomes,
+and observation mechanism, which is unlikely to represent a dynamic lending
+environment. Similarly, @Feelders2000RIMixtureModels uses a very abstract decision
+rule. More generally, unrealistic DGPs are sometimes accompanied by a lack of
+explicit modeling of how the financial institution's (FI) reality is translated
+into a mathematical description of the DGP.
+
+The remaining papers largely evaluate their methods through changes in some
+classification metric on holdout accepts. This approach is likely too narrow, as
+it is difficult to generalize such results to an understanding of how an RI-based
+acceptance policy would perform. One option is to use metrics designed specifically
+for the RI problem, which appear more adequate for evaluating RI approaches
+[@ribeiro2025balancingperformancerejectinclusion; @kozdoi_et_al_BE_BASL]. Another,
+although difficult to implement, is randomized A/B testing as in
+@KangEtAl2021GraphBasedSemiRI, which provides a much more direct empirical test of
+the consequences of deploying an RI-based policy.
+
+It is also useful to examine the methods that, in my assessment, combine sensible
+experimental settings, plausible assumptions, and convincing evaluation methods.
+I identify three in particular: Bayesian Evaluation [@kozdoi_et_al_BE_BASL],
+cost-sensitive semi-supervised support vector machine (S3VM) with joint
+distribution adaptation (JDA) [@ShengEtAl2024RICostSenstiveJointDistAdap], and the
+seminal semi-supervised SVM for credit scoring [@MaldonadoParedes2010SemiSupSVM].^[
+  See that this model is not the most common benchmark in the literature, which
+  tends to prefer the kernel-based SVM of @LiEtAl2017SemisupervisedSVM. I still
+  prefer this work as it remains a basis on which later literature develops new
+  methods and because it fulfills the aforementioned conditions.
 ]
-Besides Bayesian Evaluation, all of these methods base on further assumptions, reinforcing
-the findings of @ehrhardt2021rejectReview and @HandHanley1993CanRIWork on the necessity
-of further identifying assumptions. See that among the complete literature review no paper
-has used the inherent dynamic nature of the RI problem in credit scoring. I believe this
-aspect can help to develop a new sensible assumption while developing RI methods.
+Besides Bayesian Evaluation, the other methods rely on additional assumptions,
+reinforcing the findings of @ehrhardt2021rejectReview and
+@HandHanley1993CanRIWork on the necessity of further identifying assumptions. In
+the literature reviewed here, I found no paper that explicitly incorporates the
+inherent dynamic nature of the RI problem in credit scoring. I believe this aspect
+may provide a basis for formulating an additional plausible assumption when
+developing RI methods.
 
-In conclusion the literature review has found three fundamental issues, which seem to be
-weakening at least an important part the research. First is not considering which assumptions
-are needed for the approach to work and the ground question on why is it worth a shot trying
-out the proposed methodology. To address this I carefully explain my assumptions on the DGP
-and make transparent how I have implemented them, including a narrative on why this simulation
-is a valid way to study the RI problem by tying it to an FI's point of view
-(Sec. @sec-theor-bg-and-problem-setting and @sec-sim-framework). Second, it seems like it
-is indispensable to use further assumptions than the typical ones made in credit scoring
-or "vanilla" classification problems. As an answer I propose the hypothesis of a
-self-reinforcing acceptance-bias as a plausible assumption that can be used to help identify
-new models through *surprise* (Sec. @sec-hyp-def) along with numerical evidence
-(Sec. @sec-hyps-num-evidence). Third, it was seen that
-many papers claim to shine some light to the RI problem beginning, at least since
-@Feelders2000RIMixtureModels, so over 25 years ago, but the literature still sees RI as
-a problem where no really convincing solution has been found. I believe this comes
-from the aforementioned low credibility of the results mostly because of the evaluation
-methods, from the conceptional weaknesses or from the results not being widely reproducible.
-Although a full answer to this shortcoming is not provided here, I give an outlook on how
-to structure RI approaches using the hypotheses researched that may help alleviate the
-speculated reasons from above.
+In conclusion, the literature review identified three recurring issues that, in
+my assessment, weaken a substantial part of the existing research. First is the
+lack of explicit consideration of which assumptions are needed for an approach to
+work and the underlying question of why the proposed methodology should be expected
+to work. To address this, I carefully explain my assumptions on the DGP and make
+transparent how I have implemented them, including a narrative on why this
+simulation is a valid way to study the RI problem by tying it to an FI's point of
+view (Sec. @sec-theor-bg-and-problem-setting and @sec-sim-framework).
+
+Second, the literature review suggests that meaningful RI identification generally
+requires additional assumptions beyond those typically used in credit scoring or
+standard classification problems. As an answer, I propose the hypothesis of
+self-reinforcing acceptance bias and investigate whether *surprise* can serve as a
+diagnostic signal for this bias (Sec. @sec-hyp-def) along with numerical evidence
+(Sec. @sec-hyps-num-evidence).
+
+Third, many papers have proposed solutions to the RI problem since at least
+@Feelders2000RIMixtureModels, published in 2000, yet the literature continues to
+treat RI as a problem with substantial unresolved issues. I speculate that this
+persistence is partly related to the limited credibility of some evaluation
+methods, conceptual weaknesses, and limited reproducibility of results. Although
+a full answer to this shortcoming is not provided here, I give an outlook on how
+the hypotheses investigated in this thesis may inform the structure and evaluation
+of RI approaches and thereby help address the issues identified above.
+
+
