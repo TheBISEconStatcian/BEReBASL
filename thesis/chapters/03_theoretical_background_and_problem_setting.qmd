@@ -1,5 +1,7 @@
 # Theoretical background and problem setting {#sec-theor-bg-and-problem-setting}
 
+Having identified the importance of teh 
+
 Following the spirit of @ehrhardt2021rejectReview, I begin by formally
 presenting the Reject Inference (RI) Problem in Credit Risk as understood and
 approached in this thesis, so that the hypothesis formulation and the
@@ -351,7 +353,7 @@ either assuming $f_l=0$ or that the model features contain enough information
 of the latent factors, so that the omitted variable bias is negligible.
 If the FI collects enough data of the applicant, this might be a somewhat
 credible claim, but is it really enough to just ignore the missingness mechanism?
-Later the hypothesis checking section (@sec-empirical-hypothesis-checking) will
+Later the hypothesis checking section (@sec-hyps-num-evidence) will
 give some perspective on this regard.
 
 The last case (MNAR) is the hardest case, as the missing data cannot be ignored and
