@@ -107,3 +107,6 @@ for ch in chapters:
 {{< pagebreak >}}
 
 {{< include chapters/99_appendix.qmd >}}
+
+\listoftables
+\listoffigures
