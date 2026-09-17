@@ -1,5 +1,0 @@
-# Results of Agent
-
-## "Base Experiment"
-
-## Sensitivity analysis

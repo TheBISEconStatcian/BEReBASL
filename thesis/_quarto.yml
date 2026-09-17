@@ -33,6 +33,8 @@ format:
     fig-cap-location: bottom
     keep-tex: true
     equation-labels: parenthetical
+    lof: true   # List of Figures
+    lot: true   # List of Tables
 
 # If you want to keep the others just in case:
   html: default

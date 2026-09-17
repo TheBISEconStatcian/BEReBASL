@@ -97,11 +97,12 @@ for ch in chapters:
 
 {{< pagebreak >}}
 
-{{< include chapters/06_results.qmd >}}
-
-{{< pagebreak >}}
-
 {{< include chapters/07_conclussion.qmd >}}
+
+## References {.unnumbered .unlisted}
+
+::: {#refs}
+:::
 
 {{< pagebreak >}}
 
