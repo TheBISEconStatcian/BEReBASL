@@ -8,6 +8,7 @@ For the master's thesis the following AI's have been used
 * Claude
 * GitHub Copilot
 * DeepAI
+* NotebookLM
 
 For each used chat a link is provided to be called if wished. I always add a small description on the general topic of the chat. When I see it necessary/sensible I also add some more notes on the purpose/themes of the chat as sub-bullet points. Further small chats have been used regarding variable
 naming, small refactoring, synonym finding, reformulation of single sentences or asking small and
