@@ -174,8 +174,8 @@ weighting scheme requires the estimated probability of default (PD) to be
 (approximately) meaningfully calibrated. They use standard LightGBM, which is not in itself
 guaranteed to produce calibrated probabilities. Furthermore, it is interesting to
 find cases such as @ChenAstebro2010RIBoundCollapseBayesian, where missing not at
-random (MNAR) is assumed explicitly, while the simulated accepts and rejects are
-generated from the labeled accepts using a missing at random (MAR) mechanism.
+random is assumed explicitly, while the simulated accepts and rejects are
+generated from the labeled accepts using a missing at random mechanism.
 This creates a mismatch between the assumed observation mechanism and the mechanism
 used to construct the simulation.
 
