@@ -1,9 +1,10 @@
 # Simulation framework {#sec-sim-framework}
 
-This thesis uses an acceptance loop which has been further developed from the loop
-described in @kozdoi_et_al_BE_BASL. Here I try to make very transparent how I modeled
-each component, so that the reader may judge whether my assumptions and formulation from
-the previous section are reflected in the simulations.
+Having defined the theoretical background it is time to outline a simulation framework
+that fulfills the conditions from before and allows to cleanly study the hypotheses that
+will be presented in @sec-hyp-def. Here I use an acceptance loop which has been further
+developed from the loop described in @kozdoi_et_al_BE_BASL. This section portrays the
+implementation and justifies the design decisions made thereby.
 
 ## Applicants' population {#sec-app-population-simulation}
 
