@@ -18,6 +18,34 @@ AI's were
 
 A close bookkeeping of the usage can be seen on [GitHub](https://github.com/TheBISEconStatcian/BEReBASL/blob/main/ai_usage/ai_usage.md)
 
+## Guide on mathematical notation
+
+Some of the notation used can be misunderstood. Therefore some help
+to understand certain notations is provided in Table @tbl-math-notations. For the table let $M \in \mathbb{R}^{n \times m}$ with
+$n, m \in \mathbb{N} \setminus \{1\}$, $S$ some set, $A$ a tensor of rank greater 0.
+
+| Notation        | Meaning |
+|-----------------|-----------------|
+| $|M|$           | Given $n=m$ the determinant of $M$    |
+| $|S|$          | Cardinality of $S$ (amount of elements) |
+| $(s \in S | \text{condition})$ | Given $S$ containing tensors, a way to define a tensor of one higher rank, new dimension appended at the beginning. Analogous on how one defines a set | 
+| $A[\ldots]$ | Slice of $A$ following notational [`numpy`'s conventions](https://numpy.org/doc/stable/user/basics.indexing.html), see the example for slicing below |
+| $M^\top$  | Transpose of $M$ |
+
+: Some notations {#tbl-math-notations tbl-colwidths="[30, 70]"}
+
+Some examples to understand all the slicing operations done in the thesis are now provided:
+
+* Let $M' = M[1:, :m-1]$ then $M' \in \mathbb{R}^{n-1 \times m-1}$ where $M'$ contains
+  the last $n-1$ rows of $M$ and its first $m-1$ columns.
+* $M'[0, :]= M'[0] \in \mathbb{R}^{m-1}$ is the vector (rank 1 tensor) of the first row of
+  $M'$
+* $M'[:, 0] \in \mathbb{R}^{n}$ is the vector (rank 1 tensor) of the first column of
+  $M'$
+* Let $0 < k < n-1$ and $\tilde{M} = (M[:, j] | j \in \mathbb{N}, j < k)$, then
+  $\tilde{M} \in \mathbb{R}^{k \times n-1}$
+* $M[0,0] \in \mathbb{R}$ is the scalar at the first row and column of $M$
+
 ## Mathematical derivations/proofs
 
 ### Set of positive definite variance covariance matrices for the simulation {#sec-set-pos-definite-vcovs}
