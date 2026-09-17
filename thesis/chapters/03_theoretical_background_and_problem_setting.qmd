@@ -1,8 +1,7 @@
 # Theoretical background and problem setting {#sec-theor-bg-and-problem-setting}
 
-Having identified the importance of teh 
-
-Following the spirit of @ehrhardt2021rejectReview, I begin by formally
+Having identified the importance of transparent assumptions and following
+the spirit of @ehrhardt2021rejectReview, I begin by formally
 presenting the Reject Inference (RI) Problem in Credit Risk as understood and
 approached in this thesis, so that the hypothesis formulation and the
 theoretical properties of the proposed solution can be precisely formulated.
@@ -74,10 +73,99 @@ literature.
 Finally, note that the acceptance process is sequential. Newly accepted applicants
 generate additional observations, which are incorporated into the historical data
 and used to re-estimate the scorecard. This, in turn, changes future acceptance
-decisions. In other words, the decision rule evolves over time, and this time
+decisions because of novel data driven changes in the estimated scorecard.
+In other words, the decision rule evolves over time, and this time
 dimension must be considered when modeling the reject inference problem.
 To capture this, I group time into *acceptance rounds*, where each round begins
-with a re-estimation of the scorecard.
+with a re-estimation of the scorecard. At some acceptance round this cyclic process
+can be visualized like in Figure @fig-fis-acc-dec-loop. There it is specially clear where
+RI typically plays a role (red arrow), influencing the learning algorithm that returns
+the scorecard, which impacts the FI's acceptance decision.
+
+```{python}
+#| echo: false
+#| output: true
+#| label: fig-fis-acc-dec-loop
+#| fig-cap: "Overview of an FI's acceptance process"
+import graphviz
+from IPython.display import Image
+
+def get_base_graph():
+    dot = graphviz.Digraph(
+        graph_attr={
+            'rankdir': 'LR',
+            'splines': 'spline',
+            'nodesep': '0.2',
+            'ranksep': '0.4',
+            'pad': '0.05',
+            'margin': '0',
+            'fontname': 'Helvetica-Bold',
+            'fontsize': '14',
+            'compound': 'true',
+        },
+        node_attr={
+            'shape': 'box',
+            'style': 'filled,rounded',
+            'fillcolor': '#f8fafc',
+            'color': '#cbd5e1',
+            'fontname': 'Helvetica',
+            'fontsize': '12',
+            'height': '0.1',
+            'width': '0.1'
+        },
+        edge_attr={
+            'color': '#64748b',
+            'arrowsize': '0.6',
+            'fontsize': '10',
+            'fontname': 'Helvetica'
+        }
+    )
+
+    with dot.subgraph(name='cluster_HIST') as c:
+        c.attr(label='Hist. Data', bgcolor='#f1f5f9', color='#cbd5e1')
+        c.node('H_Rejects', 'Rejects')
+        c.node('H_Accepts', 'Accepts')
+        c.edge('H_Accepts', 'H_Rejects', style='invisible', arrowhead='none')
+
+    with dot.subgraph(name='cluster_INPUTS') as c:
+        c.attr(label='Decision Inputs', bgcolor='#f1f5f9', color='#cbd5e1')
+        c.node('Alg', 'Learning\nAlgorithm')
+        c.node('Feat_M', 'Model Features')
+        c.node('Feat_H', 'Hidden Features')
+
+    dot.node('Scorecard', 'Scorecard', shape='cds')
+
+    with dot.subgraph(name='cluster_EXECUTION') as c:
+        c.attr(label='Decision', bgcolor='#f1f5f9', color='#cbd5e1')
+        c.node('FI_Decision', 'FI Decision', shape='cds', fillcolor='#1e3a8a', fontcolor='#ffffff', color='#1d4ed8')
+        c.node('New_Accepts', 'New Accepts')
+        c.node('New_Rejects', 'New Rejects')
+
+    dot.node("Passer", "", style='invis')
+    dot.edge("Passer", "Alg", style='invis')
+    dot.node("Passer2", "", style='invis')
+    dot.edge("Passer2", "Alg", style='invis')
+
+    dot.edge('H_Accepts', 'Alg:w')
+    dot.edge('Alg', 'Scorecard', label='Trains')
+    dot.edge('Feat_M', 'Scorecard')
+    dot.edge('Scorecard', 'FI_Decision')
+    dot.edge('Feat_H', 'FI_Decision')
+    dot.edge('FI_Decision', 'New_Accepts')
+    dot.edge('FI_Decision', 'New_Rejects')
+
+    dot.edge('New_Accepts', 'H_Accepts', style='dashed', constraint='false')
+    dot.edge('New_Rejects:w', 'H_Rejects', style='dashed', constraint='false')
+    return dot
+
+# Render original graph
+dot_visible = get_base_graph()
+
+dot_visible.edge('H_Rejects', 'Alg:w', color='#ef4444', fontcolor="black", label="RI")
+
+png_bytes = dot_visible.pipe(format="png")
+Image(png_bytes)
+```
 
 ## Measure theoretic description {#sec-measure-theoretic-desc-ri-problem}
 
@@ -90,7 +178,8 @@ since I believe some nuances are more confusing than helpful, particularly for
 a master's thesis. 
 
 Let $\mathbf{T} = \{0, 1, ..., T\} \subseteq {\mathbb{N}}_0$ be the set
-indexing the acceptance rounds and $t \in \mathbf{T}$. Further let 
+indexing the acceptance rounds and $t \in \mathbf{T}$, where $t=0$ denotes the first time
+an FI will grant any loans. Further let 
 $X_m, X_h, X_l, Y, Y_m^{(t)}, Z^{(t)}, \epsilon$ and $\varepsilon$ be RVs on the
 probability space $(\Omega, \mathcal{F}, \mathbb{P})$. Define with 
 $j \in \{m, h, l\}$
@@ -117,13 +206,13 @@ Further with $V$ a placeholder for $Y, Z^{(t)}$ and $Y_m^{(t)}$ let
 $$
 V : (\Omega, \mathcal{F}) \to \left( E_V, 2^{E_V} \right)
 $$
-with
+with $2^{E_V}$ the power set of $E_V$ and
 $$
 E_Y = \{g,b\}, \quad E_{Z^{(t)}} = \{a,r\}, \quad E_{Y_m^{(t)}} = \{g,b, \texttt{na}\}
 $$
 
 be the RVs describing the repayment type, acceptance decision and observable repayment
-outcome of the loan applied for defined $\forall \omega \in \Omega$ as
+outcome of the loan applied for. Let further $\forall \omega \in \Omega$:
 $$
 Y(\omega) = \begin{cases}
     b & \text{if applicant is a defaulter} \\
@@ -163,7 +252,7 @@ an acceptance decision function. Then
 $$
 \forall \omega \in \Omega: \:
 Z^{(t)}(\omega) =
-d_t\left(
+d\left(
     s_t\left(X_m(\omega)\right),
     X_h(\omega)
 \right)
@@ -186,10 +275,11 @@ $$
 $$
 
 the RVs defining whether an idiosyncratic shock occurs and its effect (e.g. if there
-is a shock in the labor market and whether it is positive or negative for the applicant).
-From this perspective is easy to precisely formulate the difference between a good/bad
+is a shock in the labor market and whether it is positive or negative for the applicant's
+finances).
+From this perspective is easy to precisely formulate the difference between a good or bad
 applicant and a loan. A loan is a bad loan if $Y = b$, an applicant is a bad applicant
-if $Y = b | \{\epsilon = \text{no external effect}\}$
+if $Y = b | \{\epsilon = \text{no idiosyncratic shock}\}$
 
 See that from @eq-y-as-measurable-function in connection with @eq-z-t-as-measurable-function
 the FI is modeled to be a "good selector" of features, since all the variables
@@ -264,7 +354,11 @@ $$
 where the codomain denotes the measurable space of all admissible score functions for
 time $t$. See that $\ell_t$ does not restrict $s_t$ to always be estimated
 by some specific procedure, such that the score function at one acceptance round could
-be based on a random forest and in another by a support vector machine.
+be based on a random forest and in another by a support vector machine.^[
+    Although an SVM does not deliver a scoring in the traditional sense, there
+    are methods to make it deliver one, for example Platt scaling [@platt1999probabilistic]
+    or see the predicitons values -1, 1 as scores themselves.
+]
 Finally, it should be noted that although for $d$ a similar definition of some decision
 modeling procedure could be done, it is assumed in this thesis that given $s_t$,
 $d$ does not change across $t$, since such dynamics are not considered in this thesis.
@@ -278,7 +372,7 @@ $$
 X_m^{:t} = \bigcup_{\tau = 0}^{t-1}
  \left\{X^{(\tau)}_{m,i}\right\}_{i=1}^{N_\tau}
 $$
-and $X_h^{:t}$, $X^{:t}$, $Y^{:t}$, $Y_m^{:t}$ be defined analogously
+and $X_h^{:t}$, $X^{:t}$, $Y^{:t}$, $Y_m^{:t}$ be defined analogously. They
 represent the "flattened" past random variables in the processes.
 
 The three canonical cases of missingness are Missing Completely at Random (MCAR),
