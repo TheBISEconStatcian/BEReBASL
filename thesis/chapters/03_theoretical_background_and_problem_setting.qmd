@@ -240,7 +240,7 @@ s_t : \mathbb{R}^{f_m} \to \mathbb{R}, \;
 $$
 be a (risk) score function and
 $$
-d : \mathbb{R} \times \mathbb{R}^{f_h} \to \{a, r\}, \;
+d_t : \mathbb{R} \times \mathbb{R}^{f_h} \to \{a, r\}, \;
     \left(\mathcal{B}\left(\mathbb{R}\right)
     \otimes
     \mathcal{B}\left(\mathbb{R}^{f_h}\right)\right) - 2^{\{a, r\}}
@@ -252,7 +252,7 @@ an acceptance decision function. Then
 $$
 \forall \omega \in \Omega: \:
 Z^{(t)}(\omega) =
-d\left(
+d_t\left(
     s_t\left(X_m(\omega)\right),
     X_h(\omega)
 \right)
@@ -350,7 +350,7 @@ trained on other data). For $t>0$, $s_t$ is assumed to be generated through a me
 learning procedure
 $$
 \ell_t : \left(O_{:t}, \mathcal{O}_{:t}\right) \to \left(S_t, \mathcal{S}_t \right)
-$$
+$$ {#eq-learning-proc-of-st}
 where the codomain denotes the measurable space of all admissible score functions for
 time $t$. See that $\ell_t$ does not restrict $s_t$ to always be estimated
 by some specific procedure, such that the score function at one acceptance round could
@@ -359,9 +359,11 @@ be based on a random forest and in another by a support vector machine.^[
     are methods to make it deliver one, for example Platt scaling [@platt1999probabilistic]
     or see the predicitons values -1, 1 as scores themselves.
 ]
-Finally, it should be noted that although for $d$ a similar definition of some decision
-modeling procedure could be done, it is assumed in this thesis that given $s_t$,
-$d$ does not change across $t$, since such dynamics are not considered in this thesis.
+Finally, $d_t$ could be formalized in an analogous way to $s_t$. The only diffference
+is that here the role of the measurable learning procedure would be some measurable
+acceptance decision where the domain also considers the past score functions. An explicit
+formalization will not be done, since it does not give any imporant insights further than
+the historical dependence already precised by @eq-learning-proc-of-st.
 
 ## Formalization of the missing data mechanism {#sec-formalization-missing-data-mechanism}
 
