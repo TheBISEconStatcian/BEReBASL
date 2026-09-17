@@ -21,8 +21,9 @@ A close bookkeeping of the usage can be seen on [GitHub](https://github.com/TheB
 ## Guide on mathematical notation
 
 Some of the notation used can be misunderstood. Therefore some help
-to understand certain notations is provided in Table @tbl-math-notations. For the table let $M \in \mathbb{R}^{n \times m}$ with
-$n, m \in \mathbb{N} \setminus \{1\}$, $S$ some set, $A$ a tensor of rank greater 0.
+to understand certain notations is provided in Table @tbl-math-notations. Thereby let
+$M \in \mathbb{R}^{n \times m}$ with $n, m \in \mathbb{N} \setminus \{1\}$, $S$ some set,
+$A$ a tensor of rank greater 0 and $a$ any "scalar" element (a rank 0 tensor).
 
 | Notation        | Meaning |
 |-----------------|-----------------|
@@ -31,6 +32,8 @@ $n, m \in \mathbb{N} \setminus \{1\}$, $S$ some set, $A$ a tensor of rank greate
 | $(s \in S | \text{condition})$ | Given $S$ containing tensors, a way to define a tensor of one higher rank, new dimension appended at the beginning. Analogous on how one defines a set | 
 | $A[\ldots]$ | Slice of $A$ following notational [`numpy`'s conventions](https://numpy.org/doc/stable/user/basics.indexing.html), see the example for slicing below |
 | $M^\top$  | Transpose of $M$ |
+| $\mathtt{nrows}(M)$ | Dimensionality of first dimension. In this case $n$ |
+| $\vec{a}_n$ | A vector with $n$ entries, all of them equal to $a$ |
 
 : Some notations {#tbl-math-notations tbl-colwidths="[30, 70]"}
 

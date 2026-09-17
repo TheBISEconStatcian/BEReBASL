@@ -165,6 +165,8 @@ $$ {#eq-general-form-Sigma}
 and the means are given by
 ```{python}
 #| notebook-links: false
+from berebasl.simulation.acceptance_loop import generate_initial_and_holdout_population
+from inspect import signature
 tex_obj_g, _ = dgp_base.good_mixture.univariate_mixture_as_tex("g")
 mu_g = tex_obj_g[tex_obj_g.find("\\mu"):tex_obj_g.find(", \\Sigma")]
 
@@ -187,6 +189,11 @@ wished_corr_str = f"{wished_corr:.1f}"
 
 min_corr_str = f"{all_corrs.amin().item():.1f}"
 max_corr_str = f"{all_corrs.amax().item():.1f}"
+
+n_0, n_1 = base_sim["sample_sizes"][:2].numpy().tolist()
+n = n_1 - n_0
+
+p_init = signature(generate_initial_and_holdout_population).parameters["top_percent"].default
 ```
 
 The form in @eq-general-form-Sigma for the variance covariance matrix was selected
@@ -309,7 +316,7 @@ x\mathtt{[r]} = \mathbb{E}(X | \epsilon = \text{no shock})\mathtt{[r]} = (\pi_b)
 $$
 The other boundary is called $\mathcal{D}^r$ and corresponds to the decision boundary if
 the non-shown component was integrated out of the joint distribution and then given such a
-DGP calculating the boundary of the byes classifier.
+DGP calculating the boundary of the bayes classifier.
 
 Through @fig-pairwise-base-dgp we can see in the left panel that the projected $\mathcal{D}^*$
 and $\mathcal{D}^r$ return the same decision boundary when considering only $X_m$. Furhter,
@@ -347,13 +354,9 @@ implementation should also be looked critically upon. The used logic is summaris
 First the realizations of $Y$ are sampled from a Bernoulli distribution as defined in
 @eq-Y-tilde-unconditional. These values are effectively reorganized to be able to have
 contiguous memory buffers later for the features' realizations, increasing its efficiency.
-Then the corresponding amount of samples from $X_{b}$ and $X_g$ are sampled^[
-    For MVN sampling the standard methodology via cholesky decomposition of $\Sigma$ and
-    standard white noise was used. See for example @wiki:multivariate_normal_sampling
-    for another wording of this method.
-] 
-and stacked together, which allows to cheaply mantain the order. At the end the 
-realizations are returned.
+Then the corresponding amount of samples from $X_{b}$ and $X_g$ are sampled
+and stacked together, which allows to cheaply mantain the relationship between features
+and labels. At the end the sampled features and labels are returned.
 
 \begin{algorithm} 
 \caption{Sampling from $\mathbb{P}_{X, Y}$}
@@ -368,7 +371,7 @@ realizations are returned.
         \Comment{$\mathbf{Y} \in \{b, g\}^{n}$}
         
         \Statex \textbf{2. Multivariate Gaussian sampling} for goods and bads
-        \State $\Sigma_{chol} \gets \operatorname{CholeskyDecomposition(\Sigma(\sigma_{m,12}, \sigma_{mh}))}$ \Comment{See \eqref{eq-general-form-Sigma}}
+        \State $\Sigma_{chol} \gets \operatorname{CholeskyDecomposition}(\Sigma(\sigma_{m,12}, \sigma_{mh}))$ \Comment{See Eq.~\ref{eq-general-form-Sigma}}
         
         \For{$o \in \{b, g\}$}
             \State $\mathbf{m}_o \gets ( \mu_o, \ldots, \mu_o)^\top \in \mathbb{R}^{n \times f}$
@@ -385,78 +388,61 @@ realizations are returned.
 
 ## The acceptance loop {#sec-the-acceptance-loop}
 
+After defining the ground applicant's distribution, the easiest way to characterize the
+remaining parts of the DGP is to look directly into the implementation of the acceptance
+loop.^[
+    See Figure @fig-fis-acc-dec-loop for a low-detail overview of the acceptance loop
+] 
+
 To visualize exactly how the acceptance loop was created it is helpful to look directly
 to the complete loop, after defining the applicant's distribution. In Algorithm
-\ref{alg:ac-forward-pass}
+\ref{alg:acceptance-loop}
 the whole process can be seen. 
 
 \begin{algorithm} 
-\caption{Actor-Critic Forward Pass}
-\label{alg:ac-forward-pass}
-\begin{algorithmic}[1] 
-    
-    \Procedure{ActorCritic}{$A_{t-1}, M_{t-1}$}
-        \State $\mathbf{P} \gets [\ ]$, $A_t \gets [\ ]$ \Comment{$\mathbf{P}$roabilities and new $A$rchitecture lists}
-        \State $H_t, M_t \gets \texttt{CriticLSTM}\left(A_{t-1}, \texttt{hx=}M_{t-1}\right)$
-        \State $h_t \gets H_t\texttt{[-1, :]}$
-        \State $\mathbb{P}_{N_{TSF}} \gets \operatorname{softmax}\left(\texttt{AH}_1^{MLP}\left(h_t\right)\right)$ \Comment{$\mathbb{P}_{N_{TSF}} \in \mathbb{R}^{\max \mathcal{N}_{TSF}}$}
-        \State $N_{TSF} \gets \operatorname{MultiNomialSample}\left(\mathbb{P}_{N_{TSF}}\right)$
-        \State $A_t\texttt{.append}\left(N_{TSF}\right)$
-        \State $\mathbf{P}\texttt{.append}\left(\mathbb{P}_{N_{TSF}}\right)$
-        \State $\text{LogProbSum} \gets \log\mathbb{P}_{N_{TSF}}\texttt{[}N_{TSF} \texttt{]}$
-        \For{$\texttt{i}_A \in \{1, \ldots , N_{TSF}\}$}
-            \State $\mathbb{P}_{\texttt{i}_A} \gets \operatorname{softmax}\left(W_t^{\texttt{i}_A, h}h_t + W_t^{\texttt{i}_A, p}\mathbf{P}\texttt{[-1]} + b_t^{\texttt{i}_A}\right)$ \Comment{$\mathbb{P}_{\texttt{i}_A} \in \mathbb{R}^{\#TSF}$}
-            \State $TSF_{\texttt{i}_A} \gets 
-            \operatorname{MultiNomialSample}\left(\mathbb{P}_{\texttt{i}_A}\right)$
-            \State $\mathbf{P}\texttt{.append}\left(\mathbb{P}_{\texttt{i}_A}\right)$
-            \State $A_t\texttt{.append}\left(TSF_{\texttt{i}_A}\right)$
-            \State $\text{LogProbSum} \gets \text{LogProbSum} +  \log\mathbb{P}_{\texttt{i}_A}\texttt{[}TSF^e_{\texttt{i}_A} \texttt{]}$
+\caption{Acceptance Loop}
+\label{alg:acceptance-loop}
+\begin{algorithmic}[1]
+    \Procedure{AcceptanceLoop}{$\sigma_{m,12}, \sigma_{mh}, \pi_b, \mathtt{k}, \mathtt{CV}, \texttt{opt\_crit}, p_{\mathtt{bias}}$}
+    \Require $\sigma_{m,12}, \sigma_{mh}, \pi_b$ fulfilling conditions above. $p_{\mathtt{bias}} \in [0,1)$
+    \Require \texttt{opt\_crit} a criterion to calculate acceptance threshold. $\mathtt{k}, \mathtt{CV} \in \mathbb{N} \setminus \{1\}$
+        \State $\mathtt{DGP} \gets \mathtt{CreditDGP}(\pi_b, \mu_b, \mu_g, \Sigma(\sigma_{m, 12}, \sigma_{mh}))$
+        \Statex
+        \Comment{
+            See Eq.~\ref{eq-Y-tilde-unconditional}, \ref{eq-general-form-Sigma} and \ref{eq-mus-chosen} for parameter definitions
+        }
+
+        \State $n_{\mathtt{i}} \gets `{python} n_0`, f_m \gets 2, f_h \gets 1, f \gets f_m + f_h, n \gets `{python} n`$
+        \State $\mathbf{X}, \mathbf{Y} \gets \mathtt{DGP.sample}(n=n_{\mathtt{i}})$
+        \Comment{$\mathbf{X} \in \mathbb{R}^{n_{\mathtt{i}} \times f}, \mathbf{Y} \in \{b, g\}^{n_{\mathtt{i}}}$, Sampling follows Alg. \ref{alg:sampling-x-y}}
+        \State $q_{\mathtt{init}} \gets `{python} p_init`$
+        \State $\tilde{\tau}_{\mathtt{init}} = \mathtt{quantile}_{1-q_{\mathtt{init}}}(\mathbf{X}[:, f-1])$ \Comment{Empirical upper quantile}
+        \State $\mathbf{Z} \gets (a \texttt{ if } \mathbf{X}[j, f-1] > \tilde{\tau}_{\mathtt{init}} \texttt{ else } r)_{j \in \{0, \ldots n_{\mathtt{i}}-1\}}$
+        \Comment{$\mathbf{Z}\in \{a, r\}^{n_{\mathtt{i}}}$}
+        \State $\mathbf{G} \gets \vec{0}_{n_{\mathtt{i}}}$ \Comment{$\mathbf{G} \in \mathbb{N}_0^{n_{\mathtt{i}}}$}
+        \For{$t \in \{1, \ldots , T\}$} \Comment{$T = 300$ in experiments}
+            \State $\mathbf{N}_a \gets \{k \in \mathbb{N}_o | k < \mathtt{nrows}\left(\mathbf{X}\right),  \mathbf{Z}[j] = a\}$, $n_a \gets |\mathbf{N}_a|$
+            \State $\mathbf{X}_{hist}^{(t)} \gets \left(\mathbf{X}[j, \mathtt{:} \! f_m] \middle | j \in \mathbf{N}_a  \right)$, $\mathbf{Y}_{hist}^{(t)} \gets (\mathbf{Y}[j]| j \in \mathbf{N}_a) \in \{b,g\}^{n_a}$
+            \Statex \Comment{$\mathbf{X}_{hist}^{(t)} \in \mathbb{N}^{n_a \times f}$, $\mathbf{Y}_{hist}^{(t)} \in \{b,g\}^{n_a}$}
+            \State $s_t \gets \mathtt{trainLR}\left(\mathbf{X}_{hist}^{(t)}, \mathbf{Y}_{hist}^{(t)}\right)$ \Comment{LR trained with Newton-Ralphson}
+            \State $\tau_t \gets \mathtt{CalcCVThreshold}\left(\mathbf{X}_{hist}^{(t)}, \mathbf{Y}_{hist}^{(t)}, \mathtt{k}, \mathtt{CV}, \texttt{opt\_crit}\right)$ \Comment{$\tau_t \in [0,1]$}
+            \State $\mathbf{X}_{new}^{(t)}, \mathbf{Y}_{new}^{(t)} \gets \mathtt{DGP.sample}(n=n)$
+            \State $\mathbf{Z}^{(t)} \gets \left(z_0, \ldots, z_{n-1} \right)^\top$, $z_j = a$ \textbf{if} $s_t\left(\mathbf{X}_{new}^{(t)}[j, \mathtt{:} \! f_m]\right) < \tau_t$ \textbf{else} $z_j = r$
+            \State $\tilde{\pi} \gets p_{\mathtt{bias}}$
+            \If{$\tilde{\pi} > 0$} \Comment{Incorporate MNAR mechanism then}
+                \State $x_b \gets \mathtt{quantile}_{1-\frac{\tilde{\pi}}{2}}\left(\mathbf{X}_{new}^{(t)}[:, f-1]\right)$
+                \State $x_g \gets  \mathtt{quantile}_{\frac{\tilde{\pi}}{2}}\left(\mathbf{X}_{new}^{(t)}[:, f-1]\right)$
+                \State $\forall j \in \{0, \ldots, n-1\}: \mathbf{Z}^{(t)}[j] \gets \begin{cases}
+                    a & z_j < x_g \\
+                    r & z_j > x_b \\
+                    z_j & \text{else}
+                \end{cases}$
+            \EndIf
+            \State $\mathbf{X} \gets \begin{pmatrix} \mathbf{X} \\ \mathbf{X}_{new}^{(t)} \end{pmatrix}$,
+            $\mathbf{Y} \gets \begin{pmatrix} \mathbf{Y} \\ \mathbf{Y}_{new}^{(t)} \end{pmatrix}$,
+            $\mathbf{Z} \gets \begin{pmatrix} \mathbf{Z} \\ \mathbf{Z}^{(t)} \end{pmatrix}$,
+            $\mathbf{G} \gets \begin{pmatrix} \mathbf{G} \\ \vec{t}_{n} \end{pmatrix}$
         \EndFor
-        \For{$\texttt{i}_A \in  \{1, \ldots , \max\mathcal{N}_{TSF}\} \setminus  \{1, \ldots , N_{TSF}\}$}
-            \State $\operatorname{NoGrad}\left(W_t^{\texttt{i}_A, h}, W_t^{\texttt{i}_A, p}, b_t^{\texttt{i}_A}\right)$
-        \EndFor
-        \State $\mathbb{P}_{AG} \gets \operatorname{softmax}\left(W_t^{AG, h}h_t + W_t^{AG, p}\mathbb{P}_{N_{TSF}} + b_t^{AG}\right)$ \Comment{$\mathbb{P}_{AG} \in \mathbb{R}^{\#AG}$}
-        \State $AG \gets \operatorname{MultiNomialSample}\left(\mathbb{P}_{AG}\right)$
-        \State $\mathbf{P}\texttt{.append}\left(\mathbb{P}_{AG}\right)$
-        \State $A_t\texttt{.append}\left(AG\right)$
-        \State $\text{LogProbSum} \gets \text{LogProbSum} +  \log\mathbb{P}_{AG}\texttt{[}AG \texttt{]}$
-        \State $V_{h_{t}} \gets \texttt{CriticPerceptron}\left(h_{t}\right)$ \Comment{Evaluate $h_{t}$ with Value Function}
-        \State $\operatorname{SaveInClass}\left(\text{LogProbSum}, V_{h_{t}}\right)$
-        \State \Return $\mathbf{P},\, A_t,\, M_t$ 
     \EndProcedure
-\end{algorithmic} 
+\end{algorithmic}
 \end{algorithm}
-
-## Decision and scoring functions
-
-
-
-At the beginning of the loop a business rule is used, where values of the second component
-
-The decision function has two phases, the starting phase (where no data has been gathered yet)
-and the scoring function estimating phase. In the following is explained how in each moment
-the function looks like.
-
-### Starting the loop: business rule
-
-Since it is hard to 
-
-### Scoring function estimation
-
-### CV based threshold {#sec-cv-based-threshold}
-
-Then at each acceptance round, the chosen threshold by CV is denoted as $c_t$ and the
-decision function is therefore
-
-
-### Hidden features overwrites {#sec-hidden-feats-overwrites}
-
-$$
-Z^{(t)}_i(\omega) = \begin{cases}
-a & \hat{s}_t \left(X^{(t)}_{m, i} (\omega) \right) > c_t  \\
-r & \hat{s}_t \left(X^{(t)}_{m, i} (\omega) \right) \leq c_t
-\end{cases}
-$${#eq-Z-t-with-threshold-and-scorecard-no-overwrites}
-
-## Acceptance loop algorithm
-
