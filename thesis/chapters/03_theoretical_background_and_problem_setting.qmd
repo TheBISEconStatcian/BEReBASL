@@ -436,7 +436,7 @@ also consistent under this kind of missingness mechanism
 wrong, as Quasi-Maximum-Likelihood consistency results would
 also apply, rendering ignorable^[
     Ignorable in the sense of @rubinMissingMechanismsOriginal, i.e.
-    one can train the model using only the data using only complete
+    one can train the model using only complete
     cases and still obtain consistent or unbiased results.
 ] the missing data mechanism. Of course
 if an estimator is consistent, then it also generates an unbiased scoring
@@ -450,7 +450,7 @@ credible claim, but is it really enough to just ignore the missingness mechanism
 Later the hypothesis checking section (@sec-hyps-num-evidence) will
 give some perspective on this regard.
 
-The last case (MNAR) is the hardest case, as the missing data cannot be ignored and
+The last case (MNAR) is the hardest case to handle, as the missing data cannot be ignored and
 still be able to train an unbiased scoring function. Formally it can be written as
 a negation of @eq-mar-only-model, i.e.
 $$
@@ -476,7 +476,7 @@ Z^{(t)} | X_m^{:t} \cancel{\perp\!\!\!\perp} Y^{:t}
 $${#eq-mnar-as-not-independence}
 
 Furthermore consider that MNAR (at least as modeled here) inherently implies an omitted
-variable bias, as $Y^{:t} \cancel{\perp\!\!\!\perp} X_h^{:t}$. This makes the evaluation
+variable bias for $f_h> 0$, as $Y^{:t}$ depends on $X_h^{:t}$ as well. This makes the evaluation
 of the effectivness of RI as a tool to correct for MNAR complicated, as one cannot cleanly
 separate the effect of MNAR-ness and of the omitted variable on the performance loss of
 the score-card estimation. At most one can reduce the effect of the omitted variable bias
