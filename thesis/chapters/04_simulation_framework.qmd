@@ -225,7 +225,7 @@ derivation). In @fig-all-bayes-errs the results of this analysis is shown.
 
 ```{python}
 #| label: fig-all-bayes-errs
-#| fig-cap: "Representation of joint distribution $(Y, X)$"
+#| fig-cap: "Analysis of Bayes Errors distributions for admisible covariance matrices"
 from thesis.helper_scripts.sensitivity_analysis import wrapper_bayes_errors_plot
 wrapper_bayes_errors_plot(
     max_corrs=500,
