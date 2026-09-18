@@ -403,10 +403,3 @@ through cross-validation on historical accepts to be close to the
 performance observed on future accepted applicants, implying only
 small values of the surprise signal $\eta^{(t)}$.
 
-## Implementation notes for transparency
-
-Although the code-basis is publicly available, much of the simulation classes were created
-to be much more general than what I used in the simulations of this study. Therefore this
-section helps the reader to get a "snippet" making clear the logic of certain parts, instead
-of having to go through the complete code basis to get the inner workings and then be able
-to judge whether they are to be considered adequate.
