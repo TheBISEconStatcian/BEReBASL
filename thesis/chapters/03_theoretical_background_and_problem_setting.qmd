@@ -1,4 +1,4 @@
-# Theoretical background and problem setting {#sec-theor-bg-and-problem-setting}
+# Theoretical background {#sec-theor-bg}
 
 Having identified the importance of transparent assumptions and following
 the spirit of @ehrhardt2021rejectReview, I begin by formally

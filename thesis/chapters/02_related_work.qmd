@@ -273,7 +273,7 @@ work and the underlying question of why the proposed methodology should be expec
 to work. To address this, I carefully explain my assumptions on the DGP and make
 transparent how I have implemented them, including a narrative on why this
 simulation is a valid way to study the RI problem by tying it to an FI's point of
-view (Sec. @sec-theor-bg-and-problem-setting and @sec-sim-framework).
+view (Sec. @sec-theor-bg and @sec-sim-framework).
 
 Second, the literature review suggests that meaningful RI identification generally
 requires additional assumptions beyond those typically used in credit scoring or
