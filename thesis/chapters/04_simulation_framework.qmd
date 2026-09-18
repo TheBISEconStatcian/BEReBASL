@@ -9,7 +9,7 @@ implementation and justifies the design decisions made thereby.
 ## Applicants' population {#sec-app-population-simulation}
 
 Recalling section @sec-measure-theoretic-desc-ri-problem, according to
-the probabilistic model for the RL problem it suffices to define the
+the probabilistic model for the RI problem it suffices to define the
 distributions of the repayment outcome and the features to define the applicants'
 population. In the simulation I do not consider latent features (case $f_l = 0$).
 Further let $\tilde{Y} := Y | \{\epsilon = \text{no external effect}\}$ denote
