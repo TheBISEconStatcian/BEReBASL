@@ -2,7 +2,7 @@
 
 Having defined the theoretical background, it is now time to outline a simulation
 framework that fulfills the conditions established above and allows me to study the
-hypotheses presented in @sec-hyp-def. I use an acceptance loop that is further
+hypotheses to be presented in @sec-hyp-def. I use an acceptance loop that is further
 developed from the loop described in @kozdoi_et_al_BE_BASL. This section describes
 the implementation and justifies the main design decisions.
 
@@ -11,13 +11,12 @@ the implementation and justifies the main design decisions.
 Recalling Section @sec-measure-theoretic-desc-ri-problem, the applicant population
 is determined by the joint distribution of the repayment outcome and the features.
 In the simulation, I do not consider latent features (case $f_l = 0$). I first
-define a baseline repayment outcome $\tilde{Y}$ representing the outcome in the
-absence of an idiosyncratic shock. This variable simplifies the description of
-the applicant population and provides the cleanest connection to the distinction
-between good and bad applicants. In the base simulation, no idiosyncratic shocks
-are used, so $\tilde{Y}=Y$.
+define a baseline repayment outcome $\tilde{Y} := Y | \{\epsilon = \text{no external effect}\}$
+representing the outcome in the absence of an idiosyncratic shock. This variable simplifies
+the description of the applicant population and provides the cleanest connection to the distinction
+between good and bad applicants as discussed in the last section.
 
-The chosen DGP is a two-class Gaussian model that specializes to the classical
+The chosen DGP of $(\tilde{Y}, X)$ is a two-class Gaussian model that specializes to the classical
 linear discriminant analysis (LDA) setting through the common-covariance
 assumption imposed below. Although this is a deliberately simple DGP, its
 well-known statistical properties make it possible to study the RI problem in a
@@ -30,8 +29,11 @@ $$
 $$ {#eq-Y-tilde-unconditional}
 
 with $\pi_b \in (0,1)$ denoting the probability of a bad applicant. The observable
-feature vector $X$[^1] is defined as a Gaussian mixture with two components, a good
-one (paying population) and a bad one (defaulters). With $o \in \{g,b\}$, the
+feature vector $X$^[
+    Recall from @eq-X-joint-observable-feats-vec: $X=(X_m^\top,X_h^\top)^\top$.
+]
+is defined as a Gaussian mixture with two components, a good
+one (payers) and a bad one (defaulters). With $o \in \{g,b\}$, the
 class-conditional distributions are characterized as
 
 $$
@@ -64,15 +66,18 @@ $$
 :=
 \frac{1}{\sqrt{(2\pi)^f |\Sigma_o|}}
 \exp\left\{
--\frac{1}{2}(x-\mu_o)^\top \Sigma_o^{-1}(x-\mu_o)
+    -\frac{1}{2}(x-\mu_o)^\top \Sigma_o^{-1}(x-\mu_o)
 \right\}.
 $$
 
 For further analysis, it is useful to write down the joint distribution of
 $(X,\tilde{Y})$, which corresponds to the marginal distribution of
 $\mathbb{P}_{X_m,X_h,X_l,Y}$ over the latent feature component, conditional on
-the absence of an external effect. Its density[^2] is defined as the
-Radon--Nikodym derivative
+the absence of an idiosyncratic shock. Its density^[
+    Following @Pollard_2001 [Ch. 3, Sec. 1], densities are understood in the
+    Radon--Nikodym sense with respect to a dominating measure.
+]
+is defined as the Radon-Nikodym derivative
 
 $$
 p_{X,\tilde{Y}}
@@ -133,27 +138,23 @@ $$ {#eq-posterior-of-Y}
 
 When the class-conditional covariance matrices are equal,
 the posterior in @eq-posterior-of-Y has the familiar logistic form. Consequently,
-logistic regression (LR) is correctly specified for
+LR is correctly specified for
 $\mathbb{P}(\tilde{Y}=b\mid X=x)$ in this setting [@hastie2009elements, Ch. 4].
 Under standard regularity conditions, the maximum-likelihood estimator is then
 consistent. Since LR is also widely used in practical credit scoring applications,
 this provides an additional reason to choose the present DGP.
 
-I next introduce idiosyncratic shocks. Let $\epsilon$ indicate whether an
-idiosyncratic shock occurs, and let $\varepsilon$ determine the outcome generated
-under a shock. I assume that these variables are independent of $(X,\tilde{Y})$.
-More precisely,
+I next introduce idiosyncratic shocks into the model. As defined from @eq-y-as-measurable-function
+onwards, $\epsilon$ indicate whether an idiosyncratic shock occurs and $\varepsilon$ the outcome generated
+under a shock. Recall that these variables are independent of $(X,\tilde{Y})$ and from one
+another. Both of these RVs are assumed to be Bernoulli distributed with
 
 $$
 \mathbb{P}(\epsilon=\text{no shock})
 =
 \pi_\epsilon
 >0
-$$
-
-and
-
-$$
+\;\text{ and } \;
 \mathbb{P}(\varepsilon=b)
 =
 \pi_{\varepsilon,b}
@@ -173,17 +174,10 @@ p_{\tilde{Y}\mid X}(b\mid x)
 (1-\pi_\epsilon)\pi_{\varepsilon,b}
 $$ {#eq-pd-with-shock-perf-bayes}
 
-which defines the Bayes-optimal conditional probability of a bad outcome. In the
-base simulation, I set $\pi_\epsilon=1$, so that $Y=\tilde{Y}$ and the additional
-shock mechanism is absent.
+which defines the Bayes-optimal conditional probability of a bad outcome.
 
 Since the FI does not use $X_h$ when constructing the scorecard, the score
-function $s_t$ can only approximate
-
-$$
-\mathbb{P}(Y=b\mid X_m=x_m).
-$$
-
+function $s_t$ can only approximate $\mathbb{P}(Y=b\mid X_m=x_m)$.
 This distribution can be obtained by integrating out $X_h$. Writing
 $x=(x_m^\top,x_h^\top)^\top$, @eq-join-density-x-tilde-y gives
 
@@ -233,17 +227,19 @@ which is the Bayes-optimal conditional probability available to a scorecard
 restricted to $X_m$.
 
 For the simulation, I choose a deliberately simple DGP so that its statistical
-properties are easy to understand. Specifically, $f_m=2$, $f_h=1$, and
-
-$$
-\Sigma_g=\Sigma_b=\Sigma,
-$$
-
-so that the class-conditional distributions differ only through their means.
-This common-covariance specification is the LDA setting used throughout the
+properties are easy to understand. Specifically, $f_m=2$, $f_h=1$, and 
+$\Sigma_g=\Sigma_b=\Sigma$, so that the class-conditional distributions differ only through
+their means. This common-covariance specification is the LDA setting used throughout the
 simulation. I also set $\pi_\epsilon=1$, so that no idiosyncratic shocks are
-considered.[^3]
-
+considered.^[
+    Although this excludes idiosyncratic shocks from the base simulation, the
+    mechanism is retained in the general DGP because it provides a useful extension.
+    Under symmetric shocks, it would leave the decision boundary unchanged while
+    increasing the conditional variance of $Y\mid X$. That would complicate the classification
+    problem, but it would be irrelevant to the study of RI as a dynamic problem. Specially
+    considering that LR as the scorecard to be used is robust to class outliers
+    [@hastie2009elements, Ch. 4]
+]
 The common covariance matrix is parameterized as
 
 $$
@@ -267,10 +263,10 @@ from berebasl.simulation.acceptance_loop import generate_initial_and_holdout_pop
 from inspect import signature
 
 tex_obj_g, _ = dgp_base.good_mixture.univariate_mixture_as_tex("g")
-mu_g = tex_obj_g[tex_obj_g.find("\mu"):tex_obj_g.find(", \Sigma")]
+mu_g = tex_obj_g[tex_obj_g.find("\\mu"):tex_obj_g.find(", \\Sigma")]
 
 tex_obj_b, _ = dgp_base.bad_mixture.univariate_mixture_as_tex("b")
-mu_b = tex_obj_b[tex_obj_b.find("\mu"):tex_obj_b.find(", \Sigma")]
+mu_b = tex_obj_b[tex_obj_b.find("\\mu"):tex_obj_b.find(", \\Sigma")]
 
 mus_report_str = (
     "$$\n" + mu_b + ", \\; " + mu_g + ".\n$$"
@@ -297,25 +293,30 @@ n_0, n_1 = base_sim["sample_sizes"][:2].numpy().tolist()
 
 n = n_1 - n_0
 
-p_init = signature(
+q_init = signature(
     generate_initial_and_holdout_population
 ).parameters["top_percent"].default
 
-n_a_at_0 = int(p_init * n_0)
-````
+n_a_at_0 = int(q_init * n_0)
+```
 
-The form in @eq-general-form-Sigma allows me to vary the dependence structure
+The form in @eq-general-form-Sigma allows to vary the dependence structure
 within the chosen standardized covariance parameterization while maintaining
 positive definiteness. The admissible values of $\sigma_{m,12}$ and $\sigma_{mh}$
-can therefore be selected by studying the resulting Bayes error rates.
+can therefore be selected to study the possible DGPs induced by them.
 
 A useful diagnostic is the performance of the classifiers defined by
 @eq-pd-with-shock-perf-bayes and @eq-pd-with-shock-perf-bayes-reduced-model.
-These are the Bayes classifiers[^4] for $Y\mid X$ and $Y\mid X_m$, respectively.
+These are the Bayes classifiers^[
+    Also known as the generative model in the LDA literature.
+]
+for $Y\mid X$ and $Y\mid X_m$, respectively.
 Their theoretical performance is measured by the Bayes error rate, defined as the
 probability that the classifier makes an incorrect prediction when classifying as
 bad whenever the predicted probability of bad exceeds the predicted probability
-of good, and as good otherwise.[^5]
+of good, and as good otherwise.^[
+    This rule does not include a reject-option or abstention class.
+]
 
 The Bayes error rate can be calculated analytically using
 @eq-bayes-error-rate-formula, as derived in the appendix
@@ -350,33 +351,33 @@ wrapper_bayes_errors_plot(
 )
 ```
 
-In the left panel we see the heat map of the ratio $P_e^*/P_e^m$. The graphic
-shows numerically that
+In the left panel of Figure @fig-all-bayes-errs we see the heat map of the ratio $P_e^*/P_e^m$.
+The graphic shows numerically that
 
-$$$
+$$
 \forall \sigma_{m,12}\;
 \exists \sigma_{mh}:
 P_e^*=P_e^m.
 $$ {#eq-equal-error-rates}
 
-For many of these cases, equality does not require the Bayes error rate to be
-zero. As explained in @sec-the-acceptance-loop, the MNAR mechanism is introduced
+For many of these cases, @eq-equal-error-rates does not imply the Bayes error rate being
+zero. As to be disclosed in @sec-the-acceptance-loop, the MNAR mechanism is introduced
 through overwrites based on extreme values of $X_h$. Such a mechanism creates
-dependence of the acceptance decision on a hidden variable. The cases in
-@eq-equal-error-rates are useful because they allow me to study this MNAR effect
+dependence of the acceptance decision on a hidden variable, which would generate an omitted
+variable bias when estimating a scorecard based on the model variables. The cases in
+@eq-equal-error-rates are useful because they allow to study this MNAR effect
 while keeping the achievable Bayes classification error of the reduced model equal
-to that of the full model.
-
-In particular, if $P_e^*=P_e^m$, the Bayes risk achievable from $X_m$ is equal to
-that achievable from the complete feature vector. In the chosen base case, the
-full Bayes boundary also has an approximately zero coefficient on $X_h$. Thus,
+to that of the full model. Thus,
 $X_h$ can remain marginally associated with the repayment outcome while providing
 essentially no additional discriminatory information for the Bayes classification
 boundary once the model features $X_m$ are given.
 
-The joint distribution $(Y,X_m)$ is itself an LDA-type DGP.[^6] Consequently, an
-appropriately specified LR can consistently estimate its conditional class
-probability under the usual regularity conditions.
+The joint distribution $(Y,X_m)$ is itself an LDA-type DGP.^[
+    This follows from @eq-marginal-of-X-m together with the fact that integrating
+    out $X_h$ leaves the common class-conditional covariance structure for $X_m$.
+]
+Consequently, an appropriately specified LR can consistently estimate through maximum likelihood
+its conditional class probability under the usual regularity conditions.
 
 These observations motivate the choice of $\sigma_{m,12}$ for which
 @eq-equal-error-rates holds without the Bayes error rates being zero. To study the
@@ -385,63 +386,27 @@ $\sigma_{m,12}$ for which the ratio $P_e^*/P_e^m$ varies substantially over the
 admissible values of $\sigma_{mh}$. At the same time, $P_e^m$ should remain
 sufficiently high that the classification problem is not trivial.
 
-As depicted in the middle panel, I set
-
-$$$
-
-# \sigma_{m,12}
-
-`{python} sigma_m12`
-.
-
-$$
-
-I then choose $\sigma_{mh}$ using the right panel. For the base simulation, I
-select a value for which the contribution of $X_h$ to the full Bayes boundary is
-negligible, namely
-
-$$
-
-# \sigma_{mh}
-
-`{python} wished_corr`
-.
-
-$$
-
-For the base simulation, this gives
-
-$$
-
-# P_e^*
-
-# P_e^m
-
-`{python} bayes_err_str`%.
-
-$$
-
-Other values used later in the sensitivity analysis are selected on an equidistant
+As depicted in the middle panel of Figure @fig-all-bayes-errs, I set
+$\sigma_{m, 12} = `{python} sigma_m12`$. I then choose $\sigma_{mh}$ using the right panel.
+For the base simulation, I select a value for which the contribution of $X_h$ to the full
+Bayes boundary is negligible, namely $\sigma_{mh} = `{python} wished_corr`$. For the base
+simulation, this gives $P_e^{*}=P^m_e= `{python} bayes_err_str`\%$. Other values of $\sigma_{mh}$
+used later in the sensitivity analysis are selected on an equidistant
 grid from `{python} min_corr_str` to `{python} max_corr_str`.
 
 The complete base DGP is visualized in @fig-3d-base-dgp. The Perfect Bayes Boundary
 corresponds to the classification boundary of the classifier defined by
 @eq-pd-with-shock-perf-bayes. This boundary is derived in the appendix
-(see @sec-dec-boundary-perf-bayes-idyiosyncratic-shocks). Under equal covariance,
-it can be written as the hyperplane $\mathcal{D}^*$
-
+(see @sec-dec-boundary-perf-bayes-idyiosyncratic-shocks) using the equal covariance.
+It can be written as the hyperplane $\mathcal{D}^*$
 $$
-
 w^\top x-\beta=\log c
-
 $${#eq-hyperplane-decision-boundary}
 
 with
 
 $$
-
 w=\Sigma^{-1}(\mu_b-\mu_g),
-
 $$
 
 $\beta=w^\top(\mu_b+\mu_g)/2$, and $c>0$ a constant that depends on the
@@ -489,15 +454,7 @@ shown in the pairwise plot at its unconditional mean. For a component indexed by
 $r$, this gives
 
 $$
-
-# x[r]
-
-# \mathbb{E}(X\mid\epsilon=\text{no shock})[r]
-
-\pi_b\mu_b[r]
-+
-(1-\pi_b)\mu_g[r].
-
+x\mathtt{[r]} = \mathbb{E}(X | \epsilon = \text{no shock})\mathtt{[r]} = (\pi_b)\mu_b\mathtt{[r]} + (1-\pi_b)\mu_g\mathtt{[r]}.
 $$
 
 The second boundary, denoted by $\mathcal{D}^r$, is obtained by integrating out the
@@ -531,17 +488,17 @@ informative about the repayment outcome.
 These observations depend only weakly on the exact value used for the projection.
 The reason is that the component of the normal vector corresponding to $X_h$ is
 numerically zero, namely
-
-$$
-
--2.22\cdot 10^{-16}.
-
-$$
-
-The realizations of $X_h$ also almost always lie within the interval $[-6,6]$,
+<!--`{python} '$' + w_xh_str + '$'` no idea why it does not work--> 
+$-2.22 \cdot 10^{-16}$.
+The realizations of $X_h$ also almost always lie within the interval $[-6,6]$^[
+    This interval comes from a visual inspection of the data, not a proper
+    definition of a range where the probability of $X_h$ lying there would be very
+    big. However given the class conditional means and the unit variance of $X_h$
+    one could expect such a "properly calculated" interval to lie within $[-6,6]$
+],
 so the contribution of $X_h$ to the classification boundary is negligible. These
-properties make the DGP useful for introducing an MNAR mechanism based on $X_h$
-without simultaneously inducing substantial omitted-variable bias in the
+properties further clarify the usefulness of the DGP for introducing an MNAR mechanism
+based on $X_h$ without simultaneously inducing substantial omitted-variable bias in the
 classification boundary.
 
 The pairwise plot also indicates that the classification problem should be well
@@ -554,7 +511,7 @@ increases the separation available when $X_h$ is observed, while a negative
 correlation should have the opposite effect.
 
 As a final remark, it is important to make the sampling mechanism of
-$\mathbb{P}_{X,Y}$ transparent because the study is primarily numerical. The
+$\mathbb{P}_{X,Y}$ transparent because the rest of the study is primarily numerical. The
 simulation implementation should therefore be open to scrutiny. The sampling
 logic is summarized in Algorithm \ref{alg:sampling-x-y}.
 
@@ -649,12 +606,13 @@ implementation.
 
 \end{algorithm}
 
-\normalsize
 
 ## The acceptance loop {#sec-the-acceptance-loop}
 
 After defining the underlying applicant distribution, the remaining parts of the
-DGP can be characterized through the implementation of the acceptance loop.[^7]
+DGP can be characterized through the implementation of the acceptance loop.^[
+    See @fig-fis-acc-dec-loop for a low-detail overview of the acceptance loop.
+]
 A detailed representation is given in Algorithm \ref{alg:acceptance-loop}.
 
 The key dynamic feature of the simulation is that applicants in each round are
@@ -662,7 +620,8 @@ generated independently from the same underlying DGP. Temporal dependence is
 introduced through the acceptance mechanism and the accumulation of accepted
 observations used to estimate subsequent scorecards. Thus, the applicant
 population itself is stationary, while the observed training population evolves
-through repeated selection.
+through repeated selection - as required in the model under Section
+@sec-measure-theoretic-desc-ri-problem.
 
 At initialization, the acceptance policy is based on a business rule that is
 consistent with the true DGP: higher values of the second component of $X_m$ tend
@@ -678,7 +637,7 @@ a scorecard and a CV-based decision function.
 
 \begin{algorithmic}[1]
 
-    \Procedure{AcceptanceLoop}{$\sigma_{m,12}, \sigma_{mh}, \pi_b,
+    \Procedure{AcceptanceLoop}{$\sigma_{m,12}, \sigma_{mh},
     \mathtt{k}, \mathtt{CV}, \texttt{opt\_crit}, p_{\mathtt{bias}}$}
 
     \Require
@@ -689,6 +648,7 @@ a scorecard and a CV-based decision function.
     $\texttt{opt\_crit}$ a criterion for calculating the acceptance threshold,
     $\mathtt{k}\geq2$, $\mathtt{CV}\geq1$
 
+        \State $\pi_b \gets 0.5$
         \State
         $\mathtt{DGP}
         \gets
@@ -696,17 +656,16 @@ a scorecard and a CV-based decision function.
         (\pi_b,\mu_b,\mu_g,\Sigma(\sigma_{m,12},\sigma_{mh}))$
 
         \Comment{
-        See Eq. \ref{eq-Y-tilde-unconditional},
-        \ref{eq-general-form-Sigma},
-        and \ref{eq-mus-chosen}
+            See definitions in Eq.~\ref{eq-Y-tilde-unconditional}, \ref{eq-general-form-Sigma}
+            and \ref{eq-mus-chosen}
         }
 
         \State
-        $n_i\gets `{python} n_0`,
-        f_m\gets2$,
-        $f_h\gets1$,
-        $f\gets f_m+f_h$,
-        $n\gets `{python} n`$
+        $n_i \gets `{python} n_0`,
+        f_m \gets 2$,
+        $f_h \gets 1$,
+        $f \gets f_m+f_h$,
+        $n \gets `{python} n`$
 
         \State
         $\mathbf{X},\mathbf{Y}
@@ -715,11 +674,12 @@ a scorecard and a CV-based decision function.
 
         \Comment{
         $\mathbf{X}\in\mathbb{R}^{n_i\times f}$,
-        $\mathbf{Y}\in\{b,g\}^{n_i}$
+        $\mathbf{Y}\in\{b,g\}^{n_i}$,
+        Sampling follows Alg. \ref{alg:sampling-x-y}
         }
 
         \State
-        $q_{\mathtt{init}}\gets `{python} p_init`$
+        $q_{\mathtt{init}} \gets `{python} q_init`$
 
         \State
         \label{al:init-th}
@@ -736,7 +696,9 @@ a scorecard and a CV-based decision function.
         \left(
         a\text{ if }\mathbf{X}[j,f-1]>\tilde{\tau}_{\mathtt{init}}
         \text{ else }r
-        \right)_{j\in\{0,\ldots,n_i-1\}}$
+        \mid
+        j \in \{0,\ldots,n_i-1\}
+        \right)$
 
         \Comment{$\mathbf{Z}\in\{a,r\}^{n_i}$}
 
@@ -745,17 +707,15 @@ a scorecard and a CV-based decision function.
 
         \Comment{$\mathbf{G}\in\mathbb{N}_0^{n_i}$}
 
-        \For{$t\in\{1,\ldots,T\}$}
-
-            \Comment{$T=300$ in the experiments}
+        \For{$t\in\{1,\ldots,T\}$}   \Comment{$T=300$ in the experiments}
 
             \State
             $\mathbf{N}_a
             \gets
-            \{j\in\mathbb{N}_0:
+            \{j\in\mathbb{N}_0 |
             j<\mathtt{nrows}(\mathbf{X}),
             \mathbf{Z}[j]=a\}$,
-            $n_a\gets|\mathbf{N}_a|$
+            $n_a \gets |\mathbf{N}_a|$
 
             \State
             $\mathbf{X}_{hist}^{(t)}
@@ -765,48 +725,49 @@ a scorecard and a CV-based decision function.
             \mid
             j\in\mathbf{N}_a
             \right)$
+            \Comment{
+            $\mathbf{X}_{hist}^{(t)}\in\mathbb{R}^{n_a\times f_m}$
+            }
 
-            \State
+
+            \State 
             $\mathbf{Y}_{hist}^{(t)}
             \gets
             \left(
             \mathbf{Y}[j]
             \mid
             j\in\mathbf{N}_a
-            \right)
-            \in\{b,g\}^{n_a}$
+            \right)$
 
-            \Statex
-            \Comment{
-            $\mathbf{X}_{hist}^{(t)}\in\mathbb{R}^{n_a\times f_m}$
-            }
+            \Comment{$\mathbf{Y}_{hist}^{(t)} \in \{b,g\}^{n_a}$}
+            
 
             \State
             \label{al:scorecard-estimation-hist-acc}
             $s_t
             \gets
             \mathtt{trainLR}
-            (
+            \left(
             \mathbf{X}_{hist}^{(t)},
             \mathbf{Y}_{hist}^{(t)}
-            )$
+            \right)$
 
-            \Comment{LR trained with Newton--Raphson}
+            \Comment{LR trained with Newton-Raphson}
 
             \State
             \label{al:th-at-t}
             $\tau_t
             \gets
             \mathtt{CalcCVThreshold}
-            (
+            \left(
             \mathbf{X}_{hist}^{(t)},
             \mathbf{Y}_{hist}^{(t)},
             \mathtt{k},
             \mathtt{CV},
             \texttt{opt\_crit}
-            )$
+            \right)$
 
-            \Comment{$\tau_t\in[0,1]$}
+            \Comment{$\tau_t\in[0,1]$, see Alg. \ref{alg:cv-based-threshold}}
 
             \State
             $\mathbf{X}_{new}^{(t)},
@@ -819,34 +780,29 @@ a scorecard and a CV-based decision function.
             $\mathbf{Z}^{(t)}
             \gets
             (z_0,\ldots,z_{n-1})^\top$,
-            where
-
-            \Statex
-            \hspace{1em}
+            where 
             $z_j=a$
             \textbf{if }
-            $s_t(\mathbf{X}_{new}^{(t)}[j,:\!f_m])<\tau_t$,
+            $s_t\left(\mathbf{X}_{new}^{(t)}[j,:\!f_m]\right)<\tau_t$,
             \textbf{else } $z_j=r$
 
-            \If{$p_{\mathtt{bias}}>0$}
-
-                \Comment{Apply the MNAR mechanism}
+            \If{$p_{\mathtt{bias}}>0$}      \Comment{Apply the MNAR mechanism}
 
                 \State
                 $x_b
                 \gets
-                \mathtt{quantile}_{1-p_{\mathtt{bias}}/2}
-                (
+                \mathtt{quantile}_{1-\frac{p_{\mathtt{bias}}}{2}}
+                \left(
                 \mathbf{X}_{new}^{(t)}[:,f-1]
-                )$
+                \right)$
 
                 \State
                 $x_g
                 \gets
-                \mathtt{quantile}_{p_{\mathtt{bias}}/2}
-                (
+                \mathtt{quantile}_{\frac{p_{\mathtt{bias}}}{2}}
+                \left(
                 \mathbf{X}_{new}^{(t)}[:,f-1]
-                )$
+                \right)$
 
                 \State
                 \label{al:overwrite-mechanism}
@@ -854,8 +810,8 @@ a scorecard and a CV-based decision function.
                 \mathbf{Z}^{(t)}[j]
                 \gets
                 \begin{cases}
-                a & \text{if } \mathbf{X}_{new}^{(t)}[j,f-1]<x_g,\\
-                r & \text{if } \mathbf{X}_{new}^{(t)}[j,f-1]>x_b,\\
+                a & \mathbf{X}_{new}^{(t)}[j,f-1]<x_g,\\
+                r & \mathbf{X}_{new}^{(t)}[j,f-1]>x_b,\\
                 z_j & \text{otherwise}.
                 \end{cases}$
 
@@ -868,24 +824,21 @@ a scorecard and a CV-based decision function.
             \mathbf{X}\\
             \mathbf{X}_{new}^{(t)}
             \end{pmatrix}$,
-
-            \State
+            
             $\mathbf{Y}
             \gets
             \begin{pmatrix}
             \mathbf{Y}\\
             \mathbf{Y}_{new}^{(t)}
             \end{pmatrix}$,
-
-            \State
+            
             $\mathbf{Z}
             \gets
             \begin{pmatrix}
             \mathbf{Z}\\
             \mathbf{Z}^{(t)}
             \end{pmatrix}$,
-
-            \State
+            
             $\mathbf{G}
             \gets
             \begin{pmatrix}
@@ -901,21 +854,15 @@ a scorecard and a CV-based decision function.
 
 \end{algorithm}
 
-\normalsize
 
 The LR scorecard is selected because, under the equal-covariance Gaussian
 specification, its functional form matches the conditional class probability.
 Consequently, LR can recover the population decision boundary implied by
-$\mathbb{P}(Y=b\mid X_m)$ under correct specification.
-
-Under MAR, the acceptance mechanism depends on $X_m$ but not on $Y$ after
-conditioning on $X_m$. Therefore, although the distribution of $X_m$ among
-accepted applicants is altered by the selection mechanism, the conditional
-relationship $\mathbb{P}(Y=b\mid X_m)$ remains unchanged. Together with correct
-logistic specification, this provides the basis for consistent estimation under
-the usual regularity conditions. The LR scorecard is therefore estimated at line
-\ref{al:scorecard-estimation-hist-acc} using the Newton--Raphson algorithm to
-maximize the logistic likelihood.
+$\mathbb{P}(Y=b\mid X_m)$ under correct specification. Therefore, under MAR and usual
+regularity conditions LR can be consistently estimated to deliver the necessary
+parameters to obtain said decision boundary. The LR scorecard is therefore estimated at line
+\ref{al:scorecard-estimation-hist-acc}
+using the Newton-Raphson algorithm to maximize the logistic likelihood.
 
 The outcome $Y$ is generally allowed to depend on both $X_m$ and $X_h$. In the
 base simulation, however, the effect of $X_h$ on the Bayes classification boundary
@@ -925,9 +872,10 @@ correctly specified for the conditional relationship between $Y$ and $X_m$.
 
 The initialization rule is based on $q_{\mathtt{init}}$, so the initial number of
 accepted observations is determined by the corresponding empirical upper
-quantile, not by $p_{\mathtt{bias}}$. Consequently, when $p_{\mathtt{bias}}=0$ and
-the initial sample is sufficiently large, the first LR estimate should be close
-to the population conditional model.
+quantile, not by $p_{\mathtt{bias}}$. Consequently, when
+the initial sample is sufficiently large (which is probably given here as the initial
+accepted sample has $n_{\mathtt{i}} \cdot p_{\mathtt{bias}} = `{python} n_a_at_0`$ observations),
+the first LR estimate should be close to the population conditional model.
 
 \begin{algorithm}
 
@@ -973,9 +921,7 @@ to the population conditional model.
             For all $k$:
             $\mathbf{I}_{tr,k}\cap\mathbf{I}_{va,k}=\emptyset$
             and
-            $\bigcup_k\mathbf{I}_{va,k}
-            =
-            \{0,\ldots,n-1\}$
+            $\bigcup_\kappa \mathbf{I}_{va,\kappa}  = \{0,\ldots,n-1\} = \mathbf{I}_{tr, k} \cup \mathbf{I}_{va, k}$
             }
 
             \For{$k\in\{1,\ldots,\mathtt{k}\}$}
@@ -998,7 +944,7 @@ to the population conditional model.
                 \gets
                 (\mathbf{Y}[i]\mid i\in\mathbf{I}_{va,k})$
 
-                \If{Less than $4$ observations of each label in the validation set}
+                \If{Less than $4$ observations of each label in the validation or training set}
 
                     \State
                     \textbf{continue}
@@ -1006,7 +952,7 @@ to the population conditional model.
                 \EndIf
 
                 \State
-                $\ell
+                $l
                 \gets
                 \mathtt{trainLR}
                 (
@@ -1027,11 +973,11 @@ to the population conditional model.
                 $\mathbf{S}
                 \gets
                 \mathtt{OrderAscending}
-                \{
-                \ell(\mathbf{X}_{va}[j])
+                \{(
+                l(\mathbf{X}_{va}[j])
                 \mid
                 j\in\mathbf{N}_{va}
-                \}$,
+                )\}$,
                 with $\mathbf{Y}_{va}$ reordered accordingly
 
                 \If{$\texttt{opt\_crit}=\texttt{ks}$}
@@ -1045,7 +991,6 @@ to the population conditional model.
                     I(\mathbf{Y}_{va}[j]=o)
                     }{i+1}$
 
-                    \Statex
                     \Comment{Empirical class CDFs}
 
                     \State
@@ -1054,9 +999,7 @@ to the population conditional model.
                     \arg\max_{i\in\mathbf{N}_{va}}
                     |F_b[i]-F_g[i]|$
 
-                \Else
-
-                    \Comment{Distance-to-(0,1) ROC criterion}
+                \Else \Comment{ROC-optimal point}
 
                     \State
                     $\forall i\in\mathbf{N}_{va}$:
@@ -1066,6 +1009,7 @@ to the population conditional model.
                     FPR_{\tau=\mathbf{S}[i]},
                     TPR_{\tau=\mathbf{S}[i]}
                     \right)^\top$
+                    \Statex \Comment{False Positive Rate and True Positive Rate on $(\mathbf{X}_{va}, \mathbf{Y}_{va})$ if threshold was $\mathbf{S}[i]$}
 
                     \State
                     $i^*
@@ -1118,15 +1062,17 @@ to the population conditional model.
 
 The decision function therefore has two stages. First, an acceptance threshold is
 estimated from the scorecard through repeated $k$-fold cross-validation and a
-chosen optimization criterion (line \ref{al:th-based-d}). The threshold procedure
-is summarized in Algorithm \ref{alg:cv-based-threshold}.
+chosen optimization criterion
+(line \ref{al:th-based-d}).
+The threshold procedure is summarized in Algorithm
+\ref{alg:cv-based-threshold}.
 
-The procedure is intended to stabilize threshold estimates. For each repetition,
-the accepted historical sample is divided into $k$ training-validation pairs.
+The procedure is intended to stabilize threshold estimates. For each of the $\mathtt{CV}$
+repetitions, the accepted historical sample is divided into $k$ training-validation pairs.
 An LR model is fitted on each training set, and a threshold is selected on the
 corresponding validation set. Two threshold criteria are considered. The first is
-the ROC threshold whose point is closest to $(0,1)$ in Euclidean distance. The
-second is the threshold maximizing the Kolmogorov--Smirnov statistic, namely the
+the ROC threshold whose point is closest to $(0,1)$ in Euclidean distance (optimal ROc point). The
+second is the threshold maximizing the Kolmogorov-Smirnov statistic, namely the
 maximum absolute difference between the empirical class CDFs. The thresholds are
 then averaged within each repetition and across repetitions.
 
@@ -1214,7 +1160,8 @@ ax_roc = axes[0]
 ax_roc.plot(
     fpr,
     tpr,
-    label="ROC"
+    label="ROC",
+    color='C0'
 )
 
 ax_roc.scatter(
@@ -1222,7 +1169,7 @@ ax_roc.scatter(
     tpr[[idx_min_dist]],
     label=f"ROC-opt. pt. $\\tau={threshold}$",
     s=10,
-    zorder=30
+    zorder=30, color='C1'
 )
 
 ax_roc.scatter(
@@ -1230,6 +1177,7 @@ ax_roc.scatter(
     [1],
     label="Best ROC-pt.",
     s=10,
+    color='C2',
     zorder=30
 )
 
@@ -1239,12 +1187,10 @@ ax_roc.legend()
 
 ax_ks = axes[1]
 
-sorted_scores, sorted_mask, cdf_pos, cdf_neg, sorted_targets = (
-    compute_batched_cdfs_and_sorted(
+sorted_scores, sorted_mask, cdf_pos, cdf_neg, sorted_targets = compute_batched_cdfs_and_sorted(
         scores_vali,
         lbls_vali
     )
-)
 
 ks_values = torch.abs(cdf_pos - cdf_neg)
 
@@ -1254,14 +1200,14 @@ ax_ks.plot(
     sorted_scores,
     cdf_pos,
     label="$CDF_b$",
-    lw=2
+    lw=2, color='C0'
 )
 
 ax_ks.plot(
     sorted_scores,
     cdf_neg,
     label="$CDF_g$",
-    lw=2
+    lw=2, color='C1'
 )
 
 x_max_ks = sorted_scores[
@@ -1277,6 +1223,7 @@ ax_ks.plot(
     x_max_ks,
     y_max_ks,
     ls="dashed",
+    color='C2',
     lw=2,
     label=f"$\\tau_{{KS}}={round(sorted_scores[idx_max_ks].item(), 2)}$"
 )
@@ -1285,16 +1232,16 @@ ax_ks.scatter(
     x_max_ks,
     y_max_ks,
     s=20,
-    zorder=30
+    zorder=30, color='C2'
 )
 
 ax_ks.set_xlabel("Probability of Default")
 ax_ks.set_ylabel("CDF")
 ax_ks.set_title("Kolmogorov-Smirnov criterion")
-
-ax_roc.set_title("Distance-to-(0,1) ROC criterion")
-
 ax_ks.legend(loc="upper left")
+
+ax_roc.set_title("Optimal ROC point")
+
 
 plt.show()
 ```
@@ -1303,42 +1250,17 @@ In the second stage of the decision process, the MNAR mechanism can optionally
 be applied. This occurs when $p_{\mathtt{bias}}>0$. The overwrite rule depends on
 the tails of the hidden feature $X_h^{(t)}$. More specifically, applicants in the
 lower tail are accepted and applicants in the upper tail are rejected, regardless
-of the scorecard decision.
-
-Because $X_h$ is not included in the scorecard and has a non-degenerate conditional
-distribution given $X_m$, this creates a direct dependence of the acceptance
-decision on a hidden feature after conditioning on $X_m$. Under the dynamic MAR
-definition introduced in @sec-measure-theoretic-desc-ri-problem, the resulting
-mechanism is therefore MNAR for $p_{\mathtt{bias}}>0$.
-
-The parameter $p_{\mathtt{bias}}$ controls the total mass assigned to the lower and
-upper tails of $X_h$ to which the overwrite rule applies. It is therefore a control
-parameter for the strength of the hidden-feature-based selection mechanism, not
-necessarily the exact fraction of observations whose original scorecard decisions
-are changed.
-
-Finally, because $\mu_g[2]<\mu_b[2]$, the lower tail of $X_h$ is enriched for good
-applicants and the upper tail for bad applicants. The overwrite mechanism therefore
+of the scorecard decision. Because $\mu_g[2]<\mu_b[2]$, the lower tail of $X_h$ is enriched
+for good applicants and the upper tail for bad applicants. The overwrite mechanism therefore
 tends to accept good applicants and reject bad applicants, while still allowing
 overlap between the two classes.
 
+The parameter $p_{\mathtt{bias}}$ controls thereby the total mass assigned to the lower and
+upper tails of $X_h$ to which the overwrite rule applies. It is therefore a control
+parameter for the strength of the hidden-feature-based selection mechanism, not
+necessarily the exact fraction of observations whose original scorecard decisions
+are changed. So line
+\ref{al:overwrite-mechanism} of Algorithm \ref{alg:acceptance-loop}
+should not be understood as a mechanism flipping every decision in for the extreme
+values of the hidden factor.
 
-[^1]: Recall from @eq-X-joint-observable-feats-vec:
-    $X=(X_m^\top,X_h^\top)^\top$.
-
-[^2]: Following @Pollard_2001 [Ch. 3, Sec. 1], densities are understood in the
-    Radon--Nikodym sense with respect to a dominating measure.
-
-[^3]: Although this excludes idiosyncratic shocks from the base simulation, the
-    mechanism is retained in the general DGP because it provides a useful extension.
-    Under symmetric shocks, it would leave the decision boundary unchanged while
-    increasing the conditional variance of $Y\mid X$.
-
-[^4]: Also known as the generative model in the LDA literature.
-
-[^5]: This rule does not include a reject-option or abstention class.
-
-[^6]: This follows from @eq-marginal-of-X-m together with the fact that integrating
-    out $X_h$ leaves the common class-conditional covariance structure for $X_m$.
-
-[^7]: See @fig-fis-acc-dec-loop for a low-detail overview of the acceptance loop.
