@@ -181,7 +181,7 @@ mus_report_str = (
 display(Markdown(mus_report_str))
 
 bayes_err_full_base = dgp_base.bayes_error_under_equal_covs().item()
-bayes_err_str = f"{bayes_err_full_base*100:.2f}"
+bayes_err_str = round(bayes_err_full_base*100, 2)
 
 sigma_m12 = dgp_base.bad_mixture.cov[0,1].item()
 sigma_m12_str = f"{sigma_m12:.1f}"
@@ -194,6 +194,7 @@ n_0, n_1 = base_sim["sample_sizes"][:2].numpy().tolist()
 n = n_1 - n_0
 
 p_init = signature(generate_initial_and_holdout_population).parameters["top_percent"].default
+n_a_at_0 = int(p_init*n_0)
 ```
 
 The form in @eq-general-form-Sigma for the variance covariance matrix was selected
@@ -263,12 +264,12 @@ missing variable bias, it was sensible to choose a $\sigma_{m, 12}$ with a wide 
 values of $P_e^{*}/P^m_e$ for a granular control of the effect of the omitted variable and
 with a relatively high $P^m_e$, so that the ratio differences also imply important differences
 in the achievable Bayes rate and the classification problem does not become too trivial.
-As depicted in the middle panel it was set $\sigma_{m, 12} = `{python} sigma_m12_str`$.
+As depicted in the middle panel it was set $\sigma_{m, 12} = `{python} sigma_m12`$.
 
 The final step is choosing $\sigma_{mh}$, which was done analyzing the right panel. For the
 "base simulation", meaning the base case from which every sensitivity analysis will follow,
 a value with resulting negligible omitted variable bias was selected, namely
-$\sigma_{mh} = `{python} wished_corr_str`$. For the base simulation is then
+$\sigma_{mh} = `{python} wished_corr`$. For the base simulation is then
 
 
 Other values to be used later in the analysis
@@ -298,6 +299,16 @@ from thesis.helper_scripts.dgp_plotting import (
     plot3d_with_perf_bayes_boundary
 )
 dgp_info_for_boundaries = extract_dgp_info_for_boundaries(dgp_base)
+
+def sci_tex(x, digits=2):
+    s = f"{x:.{digits}e}"      # e.g. "3.10e-05"
+    base, exp = s.split("e")  # "3.10", "-05"
+    exp = int(exp)            # -5
+    return rf"{base} \cdot 10^{{{exp}}}"
+
+w_xh = dgp_info_for_boundaries["W"][2].item()
+w_xh_str = sci_tex(w_xh)
+
 plot3d_with_perf_bayes_boundary(dgp_base, dgp_info_for_boundaries["W"], dgp_info_for_boundaries["bias"])
 ```
 
@@ -318,14 +329,25 @@ The other boundary is called $\mathcal{D}^r$ and corresponds to the decision bou
 the non-shown component was integrated out of the joint distribution and then given such a
 DGP calculating the boundary of the bayes classifier.
 
-Through @fig-pairwise-base-dgp we can see in the left panel that the projected $\mathcal{D}^*$
+
+
+Through @fig-pairwise-base-dgp we can visualize the little effect that $X_h$ has on the
+perfect bayes classifier with all covariates. In the left panel that the projected $\mathcal{D}^*$
 and $\mathcal{D}^r$ return the same decision boundary when considering only $X_m$. Furhter,
 the projections of $\mathcal{D}^*$ in the middle and right panels show a line (almost)
 parallel to the $X_h$ axis in both cases, which shows that the bayes classifier with full
 information ignores that variable. However in both of those panels the $\mathcal{D}^r$
 differ from the projected one, showing that although the full information model ignores
-$X_h$, it still contains relevant information on the repayment outcome. This conclussion
-can of course also be obtained from eyeballing the data structure in those panels. All of
+$X_h$, it still contains relevant information on the repayment outcome. See that these
+conclusions based on the effect of $X_h$ through the behavior of the projected $\mathcal{D}^*$
+have little to do with the exact value used for the projections. This is because the component
+of the normal vector $W$ in @eq-hyperplane-decision-boundary correspondign to the possible
+values of $X_h$ is numerically 0, namely 
+<!--`{python} '$' + w_xh_str + '$'` no idea why it does not work--> 
+$-2.22 \cdot 10^{-16}$.
+Since realizations of $X_h$
+(as the graphics allow to visualize) almost always lie around the interval $[-6, 6]$, making
+the effects of $X_h$ on the classification of new applicant's negligible. All of
 these observations strengthen the argument for using this DGP with overwrites based on
 $X_h$ as a way to generate an MNAR-mechanism without inducing any (relevant) omitted variable
 bias.
@@ -358,7 +380,9 @@ Then the corresponding amount of samples from $X_{b}$ and $X_g$ are sampled
 and stacked together, which allows to cheaply mantain the relationship between features
 and labels. At the end the sampled features and labels are returned.
 
+
 \begin{algorithm} 
+\footnotesize
 \caption{Sampling from $\mathbb{P}_{X, Y}$}
 \label{alg:sampling-x-y}
 \begin{algorithmic}[1]
@@ -385,6 +409,7 @@ and labels. At the end the sampled features and labels are returned.
     \EndProcedure
 \end{algorithmic} 
 \end{algorithm}
+\normalsize
 
 ## The acceptance loop {#sec-the-acceptance-loop}
 
@@ -393,13 +418,19 @@ remaining parts of the DGP is to look directly into the implementation of the ac
 loop.^[
     See Figure @fig-fis-acc-dec-loop for a low-detail overview of the acceptance loop
 ] 
+A detailed view of the loop is in Algorithm
+\ref{alg:acceptance-loop}.
+There we can see in line
+\ref{al:init-th}
+that the loop gets started with a business rule that is consistent with the true DGP:
+Higher values of the second component of $X_m$ will tend to be good applicants
+as $\mu_g[1] > \mu_b[1]$ [@eq-mus-chosen]. From that point on the acceptance decision gets
+based on a scorecard and a CV-based decision function. Thereby many careful decisions were
+done.
 
-To visualize exactly how the acceptance loop was created it is helpful to look directly
-to the complete loop, after defining the applicant's distribution. In Algorithm
-\ref{alg:acceptance-loop}
-the whole process can be seen. 
 
 \begin{algorithm} 
+\footnotesize
 \caption{Acceptance Loop}
 \label{alg:acceptance-loop}
 \begin{algorithmic}[1]
@@ -407,16 +438,15 @@ the whole process can be seen.
     \Require $\sigma_{m,12}, \sigma_{mh}, \pi_b$ fulfilling conditions above. $p_{\mathtt{bias}} \in [0,1)$
     \Require \texttt{opt\_crit} a criterion to calculate acceptance threshold. $\mathtt{k}, \mathtt{CV} \in \mathbb{N} \setminus \{1\}$
         \State $\mathtt{DGP} \gets \mathtt{CreditDGP}(\pi_b, \mu_b, \mu_g, \Sigma(\sigma_{m, 12}, \sigma_{mh}))$
-        \Statex
         \Comment{
-            See Eq.~\ref{eq-Y-tilde-unconditional}, \ref{eq-general-form-Sigma} and \ref{eq-mus-chosen} for parameter definitions
+            See Eq.~\ref{eq-Y-tilde-unconditional}, \ref{eq-general-form-Sigma} and \ref{eq-mus-chosen} for definitions
         }
 
         \State $n_{\mathtt{i}} \gets `{python} n_0`, f_m \gets 2, f_h \gets 1, f \gets f_m + f_h, n \gets `{python} n`$
         \State $\mathbf{X}, \mathbf{Y} \gets \mathtt{DGP.sample}(n=n_{\mathtt{i}})$
         \Comment{$\mathbf{X} \in \mathbb{R}^{n_{\mathtt{i}} \times f}, \mathbf{Y} \in \{b, g\}^{n_{\mathtt{i}}}$, Sampling follows Alg. \ref{alg:sampling-x-y}}
         \State $q_{\mathtt{init}} \gets `{python} p_init`$
-        \State $\tilde{\tau}_{\mathtt{init}} = \mathtt{quantile}_{1-q_{\mathtt{init}}}(\mathbf{X}[:, f-1])$ \Comment{Empirical upper quantile}
+        \State \label{al:init-th} $\tilde{\tau}_{\mathtt{init}} = \mathtt{quantile}_{1-q_{\mathtt{init}}}(\mathbf{X}[:, f_m-1])$ \Comment{Empirical upper quantile}
         \State $\mathbf{Z} \gets (a \texttt{ if } \mathbf{X}[j, f-1] > \tilde{\tau}_{\mathtt{init}} \texttt{ else } r)_{j \in \{0, \ldots n_{\mathtt{i}}-1\}}$
         \Comment{$\mathbf{Z}\in \{a, r\}^{n_{\mathtt{i}}}$}
         \State $\mathbf{G} \gets \vec{0}_{n_{\mathtt{i}}}$ \Comment{$\mathbf{G} \in \mathbb{N}_0^{n_{\mathtt{i}}}$}
@@ -424,15 +454,14 @@ the whole process can be seen.
             \State $\mathbf{N}_a \gets \{k \in \mathbb{N}_o | k < \mathtt{nrows}\left(\mathbf{X}\right),  \mathbf{Z}[j] = a\}$, $n_a \gets |\mathbf{N}_a|$
             \State $\mathbf{X}_{hist}^{(t)} \gets \left(\mathbf{X}[j, \mathtt{:} \! f_m] \middle | j \in \mathbf{N}_a  \right)$, $\mathbf{Y}_{hist}^{(t)} \gets (\mathbf{Y}[j]| j \in \mathbf{N}_a) \in \{b,g\}^{n_a}$
             \Statex \Comment{$\mathbf{X}_{hist}^{(t)} \in \mathbb{N}^{n_a \times f}$, $\mathbf{Y}_{hist}^{(t)} \in \{b,g\}^{n_a}$}
-            \State $s_t \gets \mathtt{trainLR}\left(\mathbf{X}_{hist}^{(t)}, \mathbf{Y}_{hist}^{(t)}\right)$ \Comment{LR trained with Newton-Ralphson}
-            \State $\tau_t \gets \mathtt{CalcCVThreshold}\left(\mathbf{X}_{hist}^{(t)}, \mathbf{Y}_{hist}^{(t)}, \mathtt{k}, \mathtt{CV}, \texttt{opt\_crit}\right)$ \Comment{$\tau_t \in [0,1]$}
+            \State \label{al:scorecard-estimation-hist-acc} $s_t \gets \mathtt{trainLR}\left(\mathbf{X}_{hist}^{(t)}, \mathbf{Y}_{hist}^{(t)}\right)$ \Comment{LR trained with Newton-Ralphson}
+            \State \label{al:th-at-t} $\tau_t \gets \mathtt{CalcCVThreshold}\left(\mathbf{X}_{hist}^{(t)}, \mathbf{Y}_{hist}^{(t)}, \mathtt{k}, \mathtt{CV}, \texttt{opt\_crit}\right)$ \Comment{$\tau_t \in [0,1]$}
             \State $\mathbf{X}_{new}^{(t)}, \mathbf{Y}_{new}^{(t)} \gets \mathtt{DGP.sample}(n=n)$
-            \State $\mathbf{Z}^{(t)} \gets \left(z_0, \ldots, z_{n-1} \right)^\top$, $z_j = a$ \textbf{if} $s_t\left(\mathbf{X}_{new}^{(t)}[j, \mathtt{:} \! f_m]\right) < \tau_t$ \textbf{else} $z_j = r$
-            \State $\tilde{\pi} \gets p_{\mathtt{bias}}$
-            \If{$\tilde{\pi} > 0$} \Comment{Incorporate MNAR mechanism then}
-                \State $x_b \gets \mathtt{quantile}_{1-\frac{\tilde{\pi}}{2}}\left(\mathbf{X}_{new}^{(t)}[:, f-1]\right)$
-                \State $x_g \gets  \mathtt{quantile}_{\frac{\tilde{\pi}}{2}}\left(\mathbf{X}_{new}^{(t)}[:, f-1]\right)$
-                \State $\forall j \in \{0, \ldots, n-1\}: \mathbf{Z}^{(t)}[j] \gets \begin{cases}
+            \State  \label{al:th-based-d} $\mathbf{Z}^{(t)} \gets \left(z_0, \ldots, z_{n-1} \right)^\top$, $z_j = a$ \textbf{if} $s_t\left(\mathbf{X}_{new}^{(t)}[j, \mathtt{:} \! f_m]\right) < \tau_t$ \textbf{else} $z_j = r$
+            \If{$p_{\mathtt{bias}} > 0$} \Comment{Incorporate MNAR mechanism then}
+                \State $x_b \gets \mathtt{quantile}_{1-\frac{p_{\mathtt{bias}}}{2}}\left(\mathbf{X}_{new}^{(t)}[:, f-1]\right)$
+                \State $x_g \gets  \mathtt{quantile}_{\frac{p_{\mathtt{bias}}}{2}}\left(\mathbf{X}_{new}^{(t)}[:, f-1]\right)$
+                \State \label{al:overwrite-mechanism} $\forall j \in \{0, \ldots, n-1\}: \mathbf{Z}^{(t)}[j] \gets \begin{cases}
                     a & z_j < x_g \\
                     r & z_j > x_b \\
                     z_j & \text{else}
@@ -446,3 +475,216 @@ the whole process can be seen.
     \EndProcedure
 \end{algorithmic}
 \end{algorithm}
+\normalsize
+
+In the first place for the scorecard a LR was selected, since as said before in
+@sec-app-population-simulation while comenting @eq-posterior-of-Y, this functional form
+is expected to work well. A LR can be consistently estimated
+to deliver the true probabilities of belonging to one class in an LDA like DGP. Therefore,
+it can also generate a decision boundary matching the one implied by the true posterior
+$\mathbb{P}(Y=b | X_m)$ as precised in @eq-pd-with-shock-perf-bayes-reduced-model. Given
+a well specified model and the MAR condition, a maximum likelihood estimator for the logistic
+model would deliver a consistent estimator of that posterior. This is the reason why the
+LR gets estimated in line
+\ref{al:scorecard-estimation-hist-acc}
+via the Newton-Ralphson algorithm optimizing for the maximum likelihood function.
+Now, see that $Y$ does not only depend on $X_m$ but also depends on $X_h$. However, given
+the base case, where
+
+* $X_h$ plays a completely neglegible role in the placement of the decision
+  boundary induced by a perfect bayes classifier (so one following
+  @eq-pd-with-shock-perf-bayes), in the sense that
+    * The hyperplane is (almost) parallel to the $X_h$ axis^[
+        Remember that the coefficient corresponding to that component in the
+        hyperplane is numerically zero
+      ]
+      and therefore
+    * when projected into the space 
+* idiosyncratic shocks are not considered (as defined and argued for above)
+
+the deviations for the consistency conditions of a logistic model based on $X_m$ should be
+given as long as no MNAR overwrites occur ($p_{\mathtt{bias}}=0$). Considering that the
+acceptance rule at the beginning of the loop results in
+$n_{\mathtt{i}} \cdot p_{\mathtt{bias}} = `{python} n_a_at_0`$ observations, we should
+expect that the first estimate of the LR result in an excelent estimator for the probability
+of default.
+
+\begin{algorithm} 
+\footnotesize
+\caption{CV-based threshold calculation}
+\label{alg:cv-based-threshold}
+\begin{algorithmic}[1]
+    \Procedure{CalcCVThreshold}{$\mathbf{X}, \mathbf{Y}, \mathtt{k}, \mathtt{CV}, \texttt{opt\_crit}$}
+        \Require $\texttt{opt\_crit} \in \{\texttt{ks}, \texttt{roc}\}$, $\mathbf{X} \in \mathbb{R}^{n \times c}$,
+                 $\mathbf{Y} \in \{g, b\}^{n}$
+        \State $\mathbf{TH} \gets \{\}$ \Comment{Buffer for thresholds}
+        \For{$\mathtt{cv} \in \{1, \ldots, \mathtt{CV}\}$}
+            \State $\{\mathbf{I}_{tr, 1}, \ldots, \mathbf{I}_{tr, \mathtt{k}}\}, \{\mathbf{I}_{va, 1}, \ldots, \mathbf{I}_{va, \mathtt{k}}\} \gets \mathtt{CVIndexSet}(n, \mathtt{k})$
+            \Statex \Comment{$\forall k \in \{1, \ldots, \mathtt{k}\}: \mathbf{I}_{tr, k} \cap \mathbf{I}_{va, k} = \emptyset, \mathbf{I}_{tr, k} \cup \mathbf{I}_{va, k} = \{0, \ldots, n-1\} = \bigcup_{\kappa\in \{1, \ldots, \mathtt{k}\}} \mathbf{I}_{va, \kappa}$}
+            \State $\mathbf{TH}_{\mathtt{cv}} \gets \{\}$
+            \For{$k \in \{1, \ldots, \mathtt{k}\}$}
+                \State $\mathbf{X}_{tr} \gets (\mathbf{X}[i] | i \in I_{tr, k})$, $\mathbf{Y}_{tr} \gets (\mathbf{Y}[i] | i \in I_{tr, k})$ \Comment{$\mathbf{X}_{va}, \mathbf{Y}_{va}$ alike}
+                \If{Less than $4$ observations of each label in each validation}
+                    \State \textbf{continue}
+                \EndIf
+                \State $l \gets \mathtt{trainLR}\left(\mathbf{X}_{tr}, \mathbf{Y}_{tr}\right)$
+                \State $n_{va} \gets \mathtt{nrows}(\mathbf{X}_{va})$, $\mathbf{N}_{va} \gets \{0, \ldots, n_{va}-1\}$
+                \State $\mathbf{S} \gets \mathtt{OrderAscending}\{(l(\mathbf{X}_{va}[j]) | j \in \mathbf{N}_{va})\}$, order $\mathbf{Y}_{va}$ with same mapping
+                \If{$\texttt{opt\_crit} = \texttt{ks}$}
+                    \State $\forall o \in \{b, g\}, m \in \mathbf{N}_{va}: F_o[i] = \frac{\sum_{j=0}^{m} I(\mathbf{Y}_{va}[j] = o)}{m+1}$ 
+                    \Statex \Comment{Emp. CDFs of bad and good applicants}
+                    \State $i^* \gets \arg\max_{i \in \mathbf{N}_{va}} |F_b[i] - F_g[i]|$
+                \Else \Comment{ROC-optimal point}
+                    \State $\forall i \in \mathbf{N}_{va}: ROC[i] = (FPR_{\tau = \mathbf{S}[i]}, TPR_{\tau = \mathbf{S}[i]})^\top$
+                    \Statex \Comment{False Positive Rate and True Positive Rate on $(\mathbf{X}_{va}, \mathbf{Y}_{va})$ if threshold was $\mathbf{S}[i]$}
+                    \State $i^* \gets \arg\min_{i \in \mathbf{N}_{va}} \left\| ROC[i] - (0, 1)^\top \right\|_2$
+                \EndIf
+                \State $\mathbf{TH}_{\mathtt{cv}} \gets \mathbf{TH}_{\mathtt{cv}} \cup \{\mathbf{S}[i^*]\}$
+            \EndFor
+            $\mathbf{TH}_{\mathtt{cv}} \gets \mathbf{TH} \cup \{\mathtt{ArithmeticMean}(\mathbf{TH}_{\mathtt{cv}})\}$
+        \EndFor
+        \State $\tau^* \gets \mathtt{ArithmeticMean}(\mathbf{TH})$ \Comment{Returns $\mathtt{na}$ if not enough $g, b$ in $\mathbf{Y}$}
+        \State \Return $\tau^*$
+    \EndProcedure
+\end{algorithmic} 
+\end{algorithm}
+
+Now the decision function has two stages. In the first stage a threshold calculated based
+fully on the scorecard learning algorithm and some optimization criterion gets calculated
+robustly via CV
+(line \ref{al:th-based-d}).
+The logic of this threshold calculation is presented in Algorithm
+\ref{alg:cv-based-threshold}.
+The idea is simple and standard: after making $k$ train-validation sets, calculate in
+each one of them the threshold that optimizes some criterion. The first criterion was the
+optimal ROC Point, which is the score that evaluates in the ROC as the point closest (in
+the eucledian distance sense) to $(0,1)$. The second criterion was the scoring where the
+Kolmogorov Smirnov criterion is met. Both of these criterion can be visualized in
+@fig-roc-ks-visualization to understand them better. Afterwards, the arithmetic mean of the
+obtained thresholds is calculated. This gets repeated $\mathtt{CV}$ times. The final threshold
+is the mean of the $\mathtt{CV}$ trials, which delivered in the simulation very stable estimates.
+
+```{python}
+#| label: fig-roc-ks-visualization
+#| fig-cap: "Visualization of criterion for CV-based threshold calculation"
+#| out-width: "60%"
+#| out-height: "60%"
+#| fig-width: 3
+#| fig-height: 2
+from matplotlib import pyplot as plt
+from berebasl.simulation.credit_data_simulation import CreditData
+from berebasl.estimation.classifiers import BatchedLogistic
+
+from berebasl.evaluation.batched_metrics import (
+  batched_roc_points,
+  optimal_roc_thresholds_from_roc_points,
+  compute_batched_cdfs_and_sorted
+)
+
+at_gen = 60
+feats, lbls = base_sim_objs["credit_data"].unbiased_obs(up_to_round_idx=at_gen-1)
+lr = BatchedLogistic(
+  n_features=feats.size(-1),
+  batch_shape = torch.Size([]),
+  dtype=feats.dtype,
+  device=feats.device
+)
+N = feats.size(0)
+torch.manual_seed(1807)
+rand_perm_N = torch.randperm(N)
+count_train = round(N * 0.7)
+train_idxs = rand_perm_N[:count_train]
+vali_idxs = rand_perm_N[count_train:]
+
+lr.fit(feats[train_idxs], lbls[train_idxs])
+
+scores_vali = lr.predict_prob_bad(feats[vali_idxs]).squeeze(-1)
+lbls_vali = lbls[vali_idxs]
+
+figsize_th = (10, 4.1)
+#figsize_th = tuple(d*0.7 for d in figsize_th)
+
+fpr, tpr, sorted_scores, sorted_targets, sorted_mask_valid = batched_roc_points(scores_vali, lbls_vali, dim=-1)
+
+sq_eucl_to_opt = (
+  fpr.square() +
+  (tpr-1).square()
+)
+
+idx_min_dist = sq_eucl_to_opt.argmin().item()
+threshold = round(sorted_scores[idx_min_dist].item(), 2)
+
+fig, axes = plt.subplots(ncols=2, figsize=figsize_th)
+
+ax_roc = axes[0]
+
+ax_roc.plot(fpr, tpr, label="ROC", color='C0')
+ax_roc.scatter(
+  fpr[[idx_min_dist]],
+  tpr[[idx_min_dist]],
+  label=f"ROC-opt. pt. $\\tau = {threshold}$",
+  s=10,
+  color='C1',
+  zorder=30
+)
+
+ax_roc.scatter(
+  [0],
+  [1],
+  label="Best ROC-pt.",
+  s=10,
+  color='C2',
+  zorder=30
+)
+
+ax_roc.set_xlabel("False Positive Rate")
+ax_roc.set_ylabel("True Positive Rate")
+
+ax_roc.legend()
+
+ax_ks = axes[1]
+
+sorted_scores, sorted_mask, cdf_pos, cdf_neg, sorted_targets = compute_batched_cdfs_and_sorted(
+  scores_vali,
+  lbls_vali
+)
+
+ks_values = torch.abs(cdf_pos - cdf_neg)
+idx_max_ks = ks_values.argmax().item()
+
+ax_ks.plot(sorted_scores, cdf_pos, label="$CDF_b$", color='C0', lw=2)
+ax_ks.plot(sorted_scores, cdf_neg, label="$CDF_g$", color='C1', lw=2)
+
+x_max_ks = sorted_scores[[idx_max_ks, idx_max_ks]].tolist()
+y_max_ks = [cdf_pos[idx_max_ks].item(), cdf_neg[idx_max_ks].item()]
+
+ax_ks.plot(
+  x_max_ks,
+  y_max_ks,
+  color='C2',
+  ls="dashed",
+  lw=2,
+  label=f"$\\tau_{{KS}}={round(sorted_scores[idx_max_ks].item(), 2)}$"
+)
+ax_ks.scatter(x_max_ks, y_max_ks, color='C2', s=20, zorder=30)
+
+ax_ks.set_xlabel("Probability of Default")
+ax_ks.set_ylabel("CDF")
+
+ax_ks.set_title("Kolmogorov-Smirnov criterion")
+ax_roc.set_title("Optimal ROC point")
+
+ax_ks.legend(loc="upper left")
+plt.show()
+```
+
+In the second stage of the decision process the MNAR mechanism is optionally applied.
+This happens if $p_{\mathtt{bias}} > 0$. The overwrites occur by taking a decision based
+on the tails of the realizations of $X_h^{(t)}$. Recalling Figure
+f an MNAR mechanism is wished ($p_{\mathtt{bias}} > 0$) MNAR overwrites
+are executed. These are expected to accept good applicants and rejects bad applicants since 
+$\mu_g[2] < \mu_b[2]$ (which can also be seen from the graphics above of the DGP).
+
+
+
+
