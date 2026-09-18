@@ -1,14 +1,14 @@
 # Using the acceptance dynamics
 
 With a defined simulation framework, one can begin to formulate
-precisely how to use the acceptance dynamics. The core idea is
-that if the bias exists or is economically relevant it should
-be observable in some manner and if so we can try to minimize
-the bias. Based on this hypothesis one can then formulate
-a scenario, using that we have full knowledge of the applicants' population,
-which allows gathering evidence on the plausibility of such hypothesis.
-Having delivered this evidence, a reward signal is defined along to a formulation
-of the RI problem as a reinforcement learning problem.
+precisely how to use the acceptance dynamics to study the decision bias. The core idea is
+that if the bias exists or is economically relevant it should be observable in some manner.
+If that is the case, one can hypothesize on how structure RI approaches based on this
+observability. In this section I begin by specifying further what I mean with bias
+observability. Based on this I also argue for and put together a methodology on how to
+study this bias based on *surprise*. Then I show the numerical evidence from the simulation.
+Finally, I give an outlook on some ideas on how to incorporate the insights from this
+work in applied approaches.
 
 ## Hypothesis definition {#sec-hyp-def}
 
