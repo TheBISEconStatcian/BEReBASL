@@ -148,9 +148,27 @@ If these hypotheses are true, the following behaviors should happen:
 
 To meaningfully compare to what extent these behaviors are given, it is necessary to also
 define an unbiased policy that will serve as a benchmark for each of the three aspects above.
+This policy only differs from the biased policy that it has access to the fully labeled
+history of all applicants for both scorecard and threshold estimation. The rest is kept
+equal, meaning the scorecard is still an LR based only on model features, the threshold
+gets estimated with the same procedure as shown in Algorithm
+\ref{alg:cv-based-threshold}
+and the acceptance decision is taken in the same way, first threshold based and if
+$p_{\mathtt{bias}} > 0$ with the same MNAR mechanism. Therefore, the unbiased policy
+shows how the FI would decide if it had a perfectly working RI approach extrapolating
+the complete history.
+
+Note: the name "unbiased policy" is misleading in the case $p_{\mathtt{bias}} > 0$, as in
+this case the scorecard will have an omitted variable bias outside the base case of the
+simulation and the decisions also will not be optimal, as they are not fully based on
+a good estimator of $\mathbb{P}(Y = b | X_m)$. Although I believe this is the shortest
+name that remains intuitive enough.
 
 
-## Empirical evidence of the bias observability as surprise {#sec-hyps-num-evidence}
+## Numerical evidence of the bias observability as surprise {#sec-hyps-num-evidence}
+
+[Here comes the next chapter, I only give you the title so that you know what will follow
+for more context]
 
 Lets see
 
