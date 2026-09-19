@@ -351,7 +351,7 @@ wrapper_bayes_errors_plot(
 )
 ```
 
-In the left panel of Figure @fig-all-bayes-errs we see the heat map of the ratio $P_e^*/P_e^m$.
+In the left panel of @fig-all-bayes-errs we see the heat map of the ratio $P_e^*/P_e^m$.
 The graphic shows numerically that
 
 $$
@@ -386,7 +386,7 @@ $\sigma_{m,12}$ for which the ratio $P_e^*/P_e^m$ varies substantially over the
 admissible values of $\sigma_{mh}$. At the same time, $P_e^m$ should remain
 sufficiently high that the classification problem is not trivial.
 
-As depicted in the middle panel of Figure @fig-all-bayes-errs, I set
+As depicted in the middle panel of @fig-all-bayes-errs, I set
 $\sigma_{m, 12} = `{python} sigma_m12`$. I then choose $\sigma_{mh}$ using the right panel.
 For the base simulation, I select a value for which the contribution of $X_h$ to the full
 Bayes boundary is negligible, namely $\sigma_{mh} = `{python} wished_corr`$. For the base

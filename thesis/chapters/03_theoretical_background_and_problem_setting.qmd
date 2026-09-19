@@ -78,7 +78,7 @@ In other words, the decision rule evolves over time, and this time
 dimension must be considered when modeling the reject inference problem.
 To capture this, I group time into *acceptance rounds*, where each round begins
 with a re-estimation of the scorecard. At some acceptance round this cyclic process
-can be visualized like in Figure @fig-fis-acc-dec-loop. There it is specially clear where
+can be visualized like in @fig-fis-acc-dec-loop. There it is specially clear where
 RI typically plays a role (red arrow), influencing the learning algorithm that returns
 the scorecard, which impacts the FI's acceptance decision.
 
