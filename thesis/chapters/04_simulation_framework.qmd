@@ -537,10 +537,7 @@ implementation.
         \Statex \textbf{1. Sampling good and bad components} while ensuring contiguous memory per class
 
         \State
-        $\forall i \in \{1,\ldots,n\}:
-        B_i \overset{iid}{\sim}\operatorname{Bernoulli}(\pi_b)$
-        \in\{0,1\}$ with
-        $\mathbb{P}(B_i=1)=\pi_b$
+        $\forall i \in \{1, \ldots, n\}: B_i \overset{iid}{\sim} \operatorname{Bernoulli}(\pi_b) \in \{0, 1\}$ with $\mathbb{P}(B_i = 1) = \pi_b$
 
         \State
         $n_b \gets \sum_{i=1}^n B_i$,
