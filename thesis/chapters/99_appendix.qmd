@@ -222,7 +222,7 @@ $$ {#eq-positive-definite-region}
 
 ### On the Bayes Classifier with idiosyncratic shocks
 
-#### Decision boundary {#sec-dec-boundary-perf-bayes-idyiosincratic-shocks}
+#### Decision boundary {#sec-dec-boundary-perf-bayes-idyiosyncratic-shocks}
 
 The decision boundary between two classes is defined as the equal probability
 region for both. For our case with two classes there is only one boundary and
