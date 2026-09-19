@@ -1,174 +1,192 @@
 # Using the acceptance dynamics
 
-With a defined simulation framework, one can begin to formulate
-precisely how to use the acceptance dynamics to study the decision bias. The core idea is
-that if the bias exists or is economically relevant it should be noticeable in some manner.
-If that is the case, one can hypothesize on how structure RI approaches based on this
-observability. In this section I begin by specifying further what I mean with bias
-observability. Based on this I also argue for and put together a methodology on how to
-study this bias based on *surprise*. Then I show the numerical evidence from the simulation.
-Finally, I give an outlook on some ideas on how to incorporate the insights from this
-work in applied approaches.
+With the simulation framework defined, I can now formulate how the acceptance
+dynamics may be used to study decision bias. The central hypothesis is that,
+under suitable conditions, acceptance bias may leave a detectable signal in the
+observed outcomes of future accepts. I first specify what I mean by **bias
+observability** and introduce *surprise* as a candidate diagnostic signal. I then
+describe a setting in which such a signal should not systematically arise. Based
+on this reasoning, I formulate testable hypotheses and use the simulation to
+investigate them. Finally, I discuss how the resulting insights could inform the
+construction of RI approaches.
 
 ## Hypothesis definition {#sec-hyp-def}
 
-To formalize the statement "the bias should be observable and can be minimized"
-we need to first formulate what is understood as bias and how one can
-observe it. I begin by introducing *surprise* as a plausible way to have an approximate
-measurement of the bias motivated from known properties of evaluation under sample bias.
-Secondly I present a context when this kind of behavior should not happen in a dynamic problem
-as the one presented in Section @sec-theor-bg. Finally using these insights I propose two
-alternative decision methods to the ones used in the acceptance loop presented in Section
-@sec-app-population-simulation that should be able to deliver optimally discriminatory rules
-given different assumptions. These alternative methods will help in the next subsection to
-study *surprise* by also setting it into relationship of different acceptance policies.
+To formalize the statement that bias should be observable and potentially
+reduced, I first need to specify what is understood as bias and how it could be
+observed. I begin by introducing *surprise* as a candidate diagnostic signal,
+motivated by the known effects of sample selection on the evaluation of
+predictive models. I then describe a setting in which such behavior should not
+systematically arise in a dynamic problem such as the one presented in
+Section @sec-theor-bg. Finally, based on these considerations, I formulate
+alternative decision methods to the acceptance loop presented in
+Section @sec-app-population-simulation. These methods provide benchmarks for
+studying surprise under different acceptance policies.
 
 ### Surprise signal
 
-It is well known that biased samples lead to biased evaluation of classifiers in the sense
-that is the performance is not representative on how the classifier performs on unseen data
-[@sugiyama2007covariate], as sampling bias results in covariate shifts. Most of the literature
-on this topic has a focus on the bias as measured on an unseen unbiased sample. See as an
-example @kozdoi_et_al_BE_BASL who not only show this behavior in the credit scoring context
-but also deliver a way to deliver a corrected metric. An interesting question coming from
-these results would be if this kind of incongruence can also be seen when comparing
-accepted applicants belonging to different rounds, delivering an informative signal.
+Sample selection can distort the evaluation of predictive models when the
+distribution of the evaluation sample differs from the distribution represented
+in the data used to estimate model performance [@sugiyama2007covariate]. In
+credit scoring, @kozdoi_et_al_BE_BASL illustrate this issue and propose a way to
+correct the resulting evaluation metric. This raises the question of whether a
+similar discrepancy can be observed by comparing accepted applicants across
+subsequent acceptance rounds.
 
-Concretely this translates to the evaluation of the scorecard performance based on historical
-accepts differing to the observed performance on accepted applicants on the subsequent round.
-Therefore, I define the surprise $\eta^{(t)}$ at acceptance round $t$ analogously
-to the definition of evaluation bias, namely as the difference between expected performance
-$m_{CV}$ measured by a metric $m$ generated through CV on historical data and the realized
-performance on the new unseen data of the accepts.
+Concretely, the performance estimated from historical accepts may differ from
+the realized performance of the same scorecard on accepted applicants in a
+subsequent round. I use this discrepancy as a candidate signal of the changing
+selection process.
+
+Let $m_{CV}^{(t)}$ denote the cross-validated estimate of a performance metric
+$m$ obtained from the historical accepted sample available before round $t$.
+I define the surprise $\eta^{(t)}$ at acceptance round $t$ as the difference
+between this estimate and the realized performance of the scorecard on the
+newly accepted applicants:
+
 $$
-\eta^{(t)} := m_{CV}\left(\mathbf{X}_m^{:t}, \mathbf{Y}^{:t}\right) - m\left(\mathbf{X}_m^{(t)}, \mathbf{Y}^{(t)}\right)
+\eta^{(t)}
+:=
+m_{CV}^{(t)}
+-
+m\left(
+s_t;
+\mathbf{X}_m^{(t)},
+\mathbf{Y}^{(t)}
+\right).
 $$
+
+The sign of $\eta^{(t)}$ depends on the orientation of the performance metric.
+For the analysis below, I therefore focus primarily on its absolute value.
 
 ### An unsurprising setting {#sec-an-unsurprising-setting}
 
-The claim that the bias can be observed only through the accepted
-applicants is strong and should therefore be motivated. The purpose
-of this section is not to provide a rigorous proof, but rather an
-intuition of when one should *not* expect to observe surprise.
+The claim that acceptance bias may be observable from accepted applicants alone
+is strong and should therefore be motivated. The purpose of this section is not
+to provide a rigorous proof, but to develop an intuition for a setting in which
+systematic surprise should not be expected.
 
-Consider a FI operating under the following assumptions:
+Consider an FI operating under the following assumptions:
 
-1. The applicants population distribution is time invariant.
-2. The number of applicants $N_t$ is sufficiently large at each round,
-   so that many applicants could be accepted. To ensure the plausibility
-   of many accepted applicants it also would require for the class of good
-   applicants to be sufficiently large at each round.
-3. The scorecard estimation algorithm remains unchanged across rounds,
-   i.e. $\ell_t = \ell_{t'}$ for $t, t' \in \mathbf{T}$.
-4. The cutoff $c_t$ is chosen consistently across rounds according
-   to the same criterion.
-5. The missing data process satisfies the MAR assumption^[
-    Recall @eq-mar-only-model.
-   ]
-   for $t \in \mathbf{T}, i \in \{1, \ldots, N_t\}$.
+1. The applicant population distribution is time invariant.
 
-Under MAR, the repayment behavior of an applicant is independent
-of the acceptance decision once the observable characteristics are
-known. Therefore,
+2. The number of applicants $N_t$ is sufficiently large in each round such that
+   the accepted sample contains enough observations for the performance metric
+   to be estimated with limited sampling variation.
+
+3. The scorecard learning procedure is unchanged across rounds, i.e. the same
+   learning algorithm $\ell$ is applied in every round.
+
+4. The cutoff-selection procedure is unchanged across rounds and is applied
+   according to the same criterion.
+
+5. The missing-data process satisfies the MAR assumption^[Recall
+   @eq-mar-only-model.] for $t \in \mathbf{T}$ and
+   $i \in \{1,\ldots,N_t\}$.
+
+Under MAR, the acceptance decision is conditionally independent of the repayment
+history given the observable model-feature history. Therefore,
 
 $$
-Z^{(t)} \perp\!\!\!\perp Y^{:t} \mid X^{:t}
+Z^{(t)}
+\perp\!\!\!\perp
+Y^{\:t}
+\mid
+X_m^{\:t}
 $$
 
-which implies that the conditional relationship between repayment
-and features remains unchanged by the acceptance process. Together
-with a stationary applicants population and a stable estimation
-procedure, one would expect the distribution of accepted applicants
-to remain approximately stable across rounds.
+which implies that, conditional on the observable features, the selection
+mechanism does not additionally depend on the repayment outcomes. Together with
+a stationary applicant population and stable learning and cutoff procedures,
+this means that the distribution of accepted applicants should remain
+approximately stable across rounds.
 
-In such a setting, the scorecard is repeatedly trained and evaluated
-on samples generated by essentially the same acceptance mechanism.
-Consequently, the performance estimated through cross-validation on
-historical accepts should be close to the realized performance on
-future accepted applicants, as they would come from the same region of
-the applicant's distribution. This would translate in
-small values of $\eta^{(t)}$
+In such a setting, the scorecard is repeatedly trained and evaluated on samples
+generated by essentially the same acceptance mechanism. Consequently, the
+cross-validated performance estimated from historical accepts should remain
+informative about performance on future accepts. Systematic large deviations
+between the two are therefore not expected, so $\eta^{(t)}$ should tend to
+remain small apart from finite-sample variation.
 
-This observation motivates the interpretation of surprise as a
-diagnostic signal. Persistent or systematically large values of
-$\eta^{(t)}$ suggest that at least one of the assumptions above
-is violated. Although the assumptions may be restrictive, assumptions
-1 to 4 are enforced by the simulation framework. Consequently, within the
-simulated environment persistent surprise cannot be attributed to
-changes in the applicants' population, in the estimation procedure or
-in the acceptance policy. Instead, surprise is expected to primarily
-reflect model misspecification and departures from MAR. Therefore,
-at least within the context of this thesis, surprise provides a
-natural candidate to quantify such departures.
+This observation motivates the interpretation of surprise as a diagnostic
+signal. Persistent or systematically large values of $\eta^{(t)}$ suggest that
+at least one of the assumptions above is violated. Assumptions 1 to 4 are
+enforced by the simulation framework. Consequently, within the simulated
+environment, persistent surprise cannot be attributed to changes in the
+applicant population, the learning procedure, or the cutoff-selection
+procedure. Instead, it is expected to primarily reflect model misspecification
+and departures from MAR. Surprise is therefore a natural candidate signal for
+diagnosing such departures.
 
 ### Hypothesis formulation and evaluation rationale
 
-As the last @sec-an-unsurprising-setting showed, the acceptance bias quantified
-through surprise is generated from the complete acceptance policy at each round $t$. This
-comprehends the learning algorithm $\ell_t$, its resulting scorecard $s_t$ and the used
-decision function $d_t$. The hypothesis is that a typical accepts-based only policy
-as fully described in the acceptance loop@sec-the-acceptance-loop will generate
-large $\left|\eta^{(t)}\right|$. On the contrary, an unbiased policy as the one sketched
-in the last @sec-an-unsurprising-setting should generate low $\left|\eta^{(t)}\right|$
-values.
+The surprise signal is generated by the complete acceptance policy at each
+round $t$. This policy comprises the learning algorithm $\ell_t$, its resulting
+scorecard $s_t$, and the decision function $d_t$. I hypothesize that the
+accepts-only policy described in the acceptance loop
+@sec-the-acceptance-loop will generate comparatively large
+$\left|\eta^{(t)}\right|$. In contrast, a policy with access to the complete
+history of labeled applicants should generate smaller
+$\left|\eta^{(t)}\right|$ values.
 
-The hypothesized reason for the high absolute surprise values is that the FI following
-its risk minimization objective will overfocus on a region with a very high credit worthiness.
-The rationale of this is sequential. At any given round, under the assumption of a somewhat
-well functioning acceptance policy, the historical accepts will already belong to a region
-of the applicants' population with a high credit worthiness. For the policy this is the only
-information it has on the complete population and the acceptance process will try that in
-the next round the subregion with the highest credit worthiness will be selected. This
-process would happen repeatedly, generating an acceptance policy that would narrow more and
-more the acceptance region.
+The hypothesized mechanism is sequential. At any given round, assuming a
+reasonably functioning acceptance policy, the historical accepts already
+represent a region of the applicant population with comparatively high
+creditworthiness. This is the information available to the FI about the
+complete applicant population. The acceptance process can therefore tend to
+select applicants from regions that are estimated to have still higher
+creditworthiness in subsequent rounds. Repeatedly applying this process can
+progressively narrow the acceptance region.
 
-This behavior will generate that the past accepts belong to a broader region of the
-applicants' population than the accepts of future rounds. This will per definition generate
-covariate shifts which will then generate discrepancies between expected performance and
-realized performance, which is the reason why $\eta^{(t)}$ would evaluate to values far from
-zero.
+Consequently, historical accepts may cover a broader region of the applicant
+population than accepts in later rounds. This changes the marginal distribution
+of the accepted covariates across rounds and creates a form of covariate shift
+between historical and future accepted samples. The performance estimated on
+the historical sample may therefore differ from the realized performance on
+future accepts, causing $\left|\eta^{(t)}\right|$ to increase.
 
-If these hypotheses are true, the following behaviors should happen:
+If these hypotheses are correct, I expect the following behaviors:
 
-1. The progressive overfocusing in a region of the applicants' population should translate
-   into thresholds^[
-    Recall that the score is defined as a risk-score. Therefore, for
-    a scorecard truly proportional to the conditional PD, lower thresholds mean a decision
-    preferring defaults with a lower probability of defaulting, so with higher creditworthiness.
-   ]
-   for the score-based decision stage that decrease with subsequent acceptance rounds.
-2. At least under MNAR, the coefficients of the LR of the scorecard should increasingly deviate more
-   from their true value with subsequent acceptance rounds. This would mean that no convergence
-   of the coefficients towards their true value with increasing training sample would occur.
-   Consider that this true parameter values correspond to a LR that delivers the Bayes decision
-   boundary of the model reduced to $X_m$ since we have an LDA setting for the applicants'
-   population.
-3. The absolute surprise should at least at the beginning of the loop increase to then
-   either keep increasing or stabilize at some value noticeably distinct from 0.
+1. The progressive overfocusing on a region of the applicant population should
+   manifest itself in decreasing thresholds for the score-based decision stage
+   over subsequent acceptance rounds.^[Recall that the score is defined as a
+   risk score. Therefore, for a scorecard proportional to the conditional PD,
+   lower thresholds correspond to decisions that accept applicants with a lower
+   estimated probability of default and hence higher estimated
+   creditworthiness.]
 
-To meaningfully compare to what extent these behaviors are given, it is necessary to also
-define an unbiased policy that will serve as a benchmark for each of the three aspects above.
-This policy only differs from the biased policy that it has access to the fully labeled
-history of all applicants for both scorecard and threshold estimation. The rest is kept
-equal, meaning the scorecard is still an LR based only on model features, the threshold
-gets estimated with the same procedure as shown in Algorithm
-\ref{alg:cv-based-threshold}
-and the acceptance decision is taken in the same way, first threshold based and if
-$p_{\mathtt{bias}} > 0$ with the same MNAR mechanism. Therefore, the unbiased policy
-shows how the FI would decide if it had a perfectly working RI approach extrapolating
-the complete history.
+2. Under the dynamic MNAR mechanism used in the simulation, the coefficients of
+   the LR scorecard should increasingly deviate from the corresponding
+   population parameters of the LR model based only on $X_m$. Increasing the
+   number of observations would therefore not, by itself, restore convergence
+   towards these parameters if the acceptance mechanism progressively changes
+   the training distribution. In the present LDA setting, these parameters
+   correspond to the Bayes decision boundary of the population model reduced to
+   the observable model features $X_m$.
 
-Note: the name "unbiased policy" is misleading in the case $p_{\mathtt{bias}} > 0$, as in
-this case the scorecard will have an omitted variable bias outside the base case of the
-simulation and the decisions also will not be optimal, as they are not fully based on
-a good estimator of $\mathbb{P}(Y = b | X_m)$. Although I believe this is the shortest
-name that remains intuitive enough.
+3. The absolute surprise should increase during the early rounds and
+   subsequently either continue increasing or stabilize at a non-negligible
+   level.
 
+To meaningfully compare these behaviors, I also define a full-information
+benchmark that provides access to the fully labeled history of all applicants.
+This benchmark differs from the accepts-only policy only in the information
+available for estimating the scorecard and the threshold. The scorecard remains
+an LR based only on the model features, the threshold is estimated with the same
+procedure shown in Algorithm \ref{alg\:cv-based-threshold}, and the acceptance
+decision is taken in the same way: first through the threshold-based decision
+and, if $p_{\mathtt{bias}}>0$, through the same MNAR mechanism.
+
+The full-information benchmark therefore shows how the FI would make its
+decisions if a perfectly informative RI procedure were available that could
+reconstruct the complete labeled history. The benchmark is not intended as a
+practical RI method. In particular, when $p_{\mathtt{bias}}>0$, the scorecard
+still uses only $X_m$ and therefore remains subject to omitted-variable effects
+from the hidden feature $X_h$.
 
 ## Numerical evidence of the bias observability as surprise {#sec-hyps-num-evidence}
 
-[Here comes the next chapter, I only give you the title so that you know what will follow
-for more context]
+
 
 Lets see
 
