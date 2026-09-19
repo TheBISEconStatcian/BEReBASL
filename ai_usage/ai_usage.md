@@ -78,10 +78,13 @@ opinion on naming.
 - [Conception of literature review and help redacting.](https://chatgpt.com/share/6a849c0c-270c-83eb-b0f6-057bf5cdf9e3). Thereby one ad verbatim copying was done from the AI:
   - Content containing only text written by me: [358dc4282637c26c29d910ab305925e2cab65f81](https://github.com/TheBISEconStatcian/BEReBASL/commit/358dc4282637c26c29d910ab305925e2cab65f81)
   - After copying and working in some suggestions: [94e769115ee9993d62aa975b2559500315cd117a](https://github.com/TheBISEconStatcian/BEReBASL/commit/94e769115ee9993d62aa975b2559500315cd117a)
-- [Corrections on the related work section](https://chatgpt.com/share/6aabb6ae-4444-83eb-9cb2-673d667897e6)
-  - Original draft by me: [61e753569a4cd332797003d5a80c4d3887e846d8](https://github.com/TheBISEconStatcian/BEReBASL/commit/61e753569a4cd332797003d5a80c4d3887e846d8)
-  - Copied and pasted corrections: [873b2ad1e58b80d237e996b9bc0ea6d5b6b842ce](https://github.com/TheBISEconStatcian/BEReBASL/commit/873b2ad1e58b80d237e996b9bc0ea6d5b6b842ce)
-  - Tweaks by me: [c6c2b81c00598d8934997909550a506880b18786](https://github.com/TheBISEconStatcian/BEReBASL/commit/c6c2b81c00598d8934997909550a506880b18786)
+- [Corrections on the related work and framework simulation section](https://chatgpt.com/share/6aabb6ae-4444-83eb-9cb2-673d667897e6)
+  - Original draft of related work by me: [61e753569a4cd332797003d5a80c4d3887e846d8](https://github.com/TheBISEconStatcian/BEReBASL/commit/61e753569a4cd332797003d5a80c4d3887e846d8)
+  - Copied and pasted corrections on related work: [873b2ad1e58b80d237e996b9bc0ea6d5b6b842ce](https://github.com/TheBISEconStatcian/BEReBASL/commit/873b2ad1e58b80d237e996b9bc0ea6d5b6b842ce)
+  - Tweaks by me on those corrections: [c6c2b81c00598d8934997909550a506880b18786](https://github.com/TheBISEconStatcian/BEReBASL/commit/c6c2b81c00598d8934997909550a506880b18786)
+  - Original draft of the framework simulation [429aab1e37ad9ca6b6fb9ce50ee8ff7597b669bd](https://github.com/TheBISEconStatcian/BEReBASL/commit/429aab1e37ad9ca6b6fb9ce50ee8ff7597b669bd)
+  - Copy pasted corrections [429aab1e37ad9ca6b6fb9ce50ee8ff7597b669bd](https://github.com/TheBISEconStatcian/BEReBASL/commit/429aab1e37ad9ca6b6fb9ce50ee8ff7597b669bd)
+  - Working over those corrections [b81cf2b61e01a6df1339ec2f66eb94436e39aedd](https://github.com/TheBISEconStatcian/BEReBASL/commit/b81cf2b61e01a6df1339ec2f66eb94436e39aedd)
 
 
 ## Links to `Copilot` usage
