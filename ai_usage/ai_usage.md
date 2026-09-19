@@ -85,6 +85,10 @@ opinion on naming.
   - Original draft of the framework simulation [429aab1e37ad9ca6b6fb9ce50ee8ff7597b669bd](https://github.com/TheBISEconStatcian/BEReBASL/commit/429aab1e37ad9ca6b6fb9ce50ee8ff7597b669bd)
   - Copy pasted corrections [429aab1e37ad9ca6b6fb9ce50ee8ff7597b669bd](https://github.com/TheBISEconStatcian/BEReBASL/commit/429aab1e37ad9ca6b6fb9ce50ee8ff7597b669bd)
   - Working over those corrections [b81cf2b61e01a6df1339ec2f66eb94436e39aedd](https://github.com/TheBISEconStatcian/BEReBASL/commit/b81cf2b61e01a6df1339ec2f66eb94436e39aedd)
+- [Correcting the using the acceptance dynamics section](https://chatgpt.com/share/6aaeb743-5858-83eb-bac9-64d205d28b9f)
+  - My writing finished up to right before the numerical evidence: [c1de13811190ab21c9aa8030530b70e2f4f74423](https://github.com/TheBISEconStatcian/BEReBASL/commit/c1de13811190ab21c9aa8030530b70e2f4f74423)
+  - Copy-paste of corrections: [298bbac9330aecc4a6032581e530dd6483503a11](https://github.com/TheBISEconStatcian/BEReBASL/commit/298bbac9330aecc4a6032581e530dd6483503a11)
+  - Adapt corrections as wished: [9d814640aad8b44d0c2a6c93f06e204a8c06a65e](https://github.com/TheBISEconStatcian/BEReBASL/commit/9d814640aad8b44d0c2a6c93f06e204a8c06a65e)
 
 
 ## Links to `Copilot` usage
