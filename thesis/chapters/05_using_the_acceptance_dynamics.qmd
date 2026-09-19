@@ -185,11 +185,90 @@ from the hidden feature $X_h$.
 
 ## Numerical evidence of the bias observability as surprise {#sec-hyps-num-evidence}
 
-Lets see
+### Overfocusing mechanism
+
+The first step is looking at the overfocusing mechanism mentioned before. In 
+@fig-acceptance-summary-base
+```{python}
+#| label: fig-acceptance-summary-base
+#| fig-cap: "Summary of acceptance behavior across rounds in base simulation"
+from experiments.acceptance_loop_cv_based_MNAR import THRESHOLD_BASIS, METRIC_CATEGORIES, EXPECTATION_TYPES, REAL_PERFORMANCE_TYPES
+
+T = len(THRESHOLD_BASIS)
+M = len(METRIC_CATEGORIES)
+
+def plot_acceptance_summary(base_sim, idx_wished_corr):
+    """Build the acceptance-rate/threshold figure for one (corr, bias) combo,
+    save it to disk, and return (filepath, corr_value, bias_value)."""
+    corr_val = base_sim["corr_to_hidden"][idx_wished_corr].item()
+    bias_val = base_sim["bias_prop"]
+
+    fig = plt.figure(figsize=(4.5*(T+1) + 0.5, 3*M + 1))
+    gs = plt.GridSpec(
+        nrows=M+1, ncols=T+1, figure=fig,
+        height_ratios=[1]*M + [0.1], wspace=0.3, hspace=0.8
+    )
+    bad_flag = base_sim["credit_data"].default_flag[idx_wished_corr, :].to(bool)
+    gen_round = base_sim["credit_data"].gen_round
+    G = gen_round[-1].item() + 1
+    cmap = plt.get_cmap("RdBu_r")
+    arange_rounds = torch.arange(1, G)
+    point_colors = cmap(arange_rounds.numpy())
+    tab10_cmap = plt.get_cmap("tab10")
+    th_colors = {th: tab10_cmap((i_th+1)*2) for i_th, th in enumerate(THRESHOLD_BASIS)}
+
+    for i_th, th in enumerate(THRESHOLD_BASIS):
+        for i_m, m in enumerate(METRIC_CATEGORIES):
+            acc_flag = base_sim["alternative_accepted"].get(th + '_' + m, base_sim["credit_data"].accepted)[idx_wished_corr, :]
+            count_accepts = gen_round.new_zeros((G,)).scatter_add_(
+                dim=0, index=gen_round, src=acc_flag.to(gen_round.dtype))
+            count_accepted_bads = gen_round.new_zeros((G,)).scatter_add_(
+                dim=0, index=gen_round, src=(bad_flag & acc_flag).to(gen_round.dtype))
+
+            ax = fig.add_subplot(gs[i_m, i_th])
+            ax.scatter(count_accepts[1:], count_accepted_bads[1:] / count_accepts[1:], s=5, color=point_colors)
+            ax.set_xlabel("# Accepted")
+            ax.set_ylabel("Bad rate among Accepts")
+            ax.set_title(("Unbiased" if th == "oracle" else "Biased") + " Policy (" + m.upper() + ")")
+
+            if i_th == 0:
+                ax_th = fig.add_subplot(gs[i_m, T])
+                ax_th.axhline(y=base_sim["data_generator"].prob_bad, ls="dashed", color='k', lw=1, label=r"$\mathbb{P}(Y=b)$")
+                for th_b in THRESHOLD_BASIS:
+                    thresholds = (
+                        base_sim["stats"][th_b + "_" + m + '_thresholds']
+                        .mean(dim=(1, 3))[:, idx_wished_corr]
+                    )
+                    ax_th.plot(arange_rounds - 1, thresholds, color=th_colors[th_b], label=th_b)
+                ax_th.set_title("Thresholds based on " + m.upper())
+                ax_th.set_ylabel("Threshold")
+                ax_th.set_xlabel("Generation Round")
+
+    cbar_ax = fig.add_subplot(gs[-1, :-1])
+    sm = plt.cm.ScalarMappable(norm=plt.Normalize(vmin=1, vmax=G-1), cmap=cmap)
+    cbar = fig.colorbar(sm, cax=cbar_ax, orientation="horizontal")
+    cbar.set_label("Generation Round")
+    cbar.ax.xaxis.set_label_position('top')
+    cbar.ax.xaxis.tick_top()
+
+    th_legend_ax = fig.add_subplot(gs[-1, T])
+    th_legend_ax.axis('off')
+    th_legend_ax.legend(*ax_th.get_legend_handles_labels(), ncols=T+1, loc="lower center",
+                         handlelength=1.0, handletextpad=0.4)
+
+
+
+    #fig.suptitle(f"$\\sigma_{{mh}} = {corr_val:.2f}$, $\\pi_b = {bias_val:.2f}$")
+
+    plt.show()
+
+plot_acceptance_summary(base_sim, idx_wished_corr)
+```
 
 ```{python}
 #| label: fig-expectation-vs-observed-performance
 #| fig-cap: "Performance on the expectation samples and realized samples"
+#| eval: false
 from thesis.helper_scripts.hypothesis_visualization import (
     plot_lines_and_mains,
     generate_line_collections_for_exp_real_plot,
@@ -212,6 +291,7 @@ plot_lines_and_mains(
 ```{python}
 #| label: fig-abs-difference-between-exp-and-obseved-performance
 #| fig-cap: "Absolute difference between the performance on the expectation samples and realized samples $(W_{MA}=5)$"
+#| eval: false
 
 all_diffs = {b : generate_lines_for_diffs_vec(sim, make_abs=True, W=5) for b, sim in all_sim_objs.items()}
 exp_to_real_diffs_base = all_diffs[base_sim_bias]
@@ -240,6 +320,7 @@ plot_lines_and_mains(
 ```{python}
 #| label: fig-areas-diff-logit-in-grid
 #| fig-cap: "Absolute difference between the performance on the expectation samples and realized samples $(W_{MA}=5)$"
+#| eval: false
 wrapper_plot_grid_of_diffs_between_logit_and_acc_vec(
     all_diffs,
     grid_biases,
@@ -252,6 +333,7 @@ wrapper_plot_grid_of_diffs_between_logit_and_acc_vec(
 ```{python}
 #| label: fig-difference-between-exp-and-obseved-performance
 #| fig-cap: "Difference between the performance on the expectation samples and realized samples $(W_{MA}=5)$"
+#| eval: false
 
 all_diffs = {b : generate_lines_for_diffs_vec(sim, make_abs=False, W=5) for b, sim in all_sim_objs.items()}
 exp_to_real_diffs_base = all_diffs[base_sim_bias]
@@ -278,9 +360,10 @@ plot_lines_and_mains(
 ```
 
 
-NEED TO FIND A WAY TO MAKE THIS SMALLER
+<!--NEED TO FIND A WAY TO MAKE THIS SMALLER-->
 
 ```{python}
+#| eval: false
 #| label: fig-diminishing-accepts
 #| fig-cap: "Oracle's vs. Biased model Accept rates per generation round of base simulation"
 #| out-width: "1%"
