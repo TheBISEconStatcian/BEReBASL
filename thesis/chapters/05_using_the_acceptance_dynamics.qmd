@@ -172,7 +172,7 @@ benchmark that provides access to the fully labeled history of all applicants.
 This benchmark differs from the accepts-only policy only in the information
 available for estimating the scorecard and the threshold. The scorecard remains
 an LR based only on the model features, the threshold is estimated with the same
-procedure shown in Algorithm \ref{alg\:cv-based-threshold}, and the acceptance
+procedure shown in Algorithm \ref{alg:cv-based-threshold}, and the acceptance
 decision is taken in the same way: first through the threshold-based decision
 and, if $p_{\mathtt{bias}}>0$, through the same MNAR mechanism.
 
