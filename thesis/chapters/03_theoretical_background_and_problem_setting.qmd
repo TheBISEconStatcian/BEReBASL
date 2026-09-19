@@ -66,7 +66,7 @@ data of *accepted applicants*, since repayment outcomes are only observed for
 financed loans. As a result, the model is estimated on a subset of the applicant
 population—presumably one with higher creditworthiness—and then applied to the
 full population of applicants. The distributional differences between these
-populations, which have been well documented (see @kozdoi_et_al_BE_BASL), are
+populations, which have been well documented (e.g. see @kozdoi_et_al_BE_BASL), are
 (assumed) to be a central source of bias highlighted in the reject inference
 literature.
 
