@@ -17,11 +17,9 @@ reduced, I first need to specify what is understood as bias and how it could be
 observed. I begin by introducing *surprise* as a candidate diagnostic signal,
 motivated by the known effects of sample selection on the evaluation of
 predictive models. I then describe a setting in which such behavior should not
-systematically arise in a dynamic problem such as the one presented in
-Section @sec-theor-bg. Finally, based on these considerations, I formulate
-alternative decision methods to the acceptance loop presented in
-Section @sec-app-population-simulation. These methods provide benchmarks for
-studying surprise under different acceptance policies.
+systematically arise in the dynamic RI setting studied here (recall @sec-theor-bg).
+Finally, based on these considerations, I formulate precisely the hypothesis and an
+evaluation rationale to study it.
 
 ### Surprise signal
 
@@ -31,15 +29,13 @@ in the data used to estimate model performance [@sugiyama2007covariate]. In
 credit scoring, @kozdoi_et_al_BE_BASL illustrate this issue and propose a way to
 correct the resulting evaluation metric. This raises the question of whether a
 similar discrepancy can be observed by comparing accepted applicants across
-subsequent acceptance rounds.
-
-Concretely, the performance estimated from historical accepts may differ from
-the realized performance of the same scorecard on accepted applicants in a
-subsequent round. I use this discrepancy as a candidate signal of the changing
-selection process.
+subsequent acceptance rounds. Concretely, the performance estimated from historical
+accepts may differ from the realized performance of the same scorecard on accepted
+applicants in a subsequent round. I use this discrepancy as a candidate signal of the
+changing selection process.
 
 Let $m_{CV}^{(t)}$ denote the cross-validated estimate of a performance metric
-$m$ obtained from the historical accepted sample available before round $t$.
+$m$ obtained from the historical (accepted) sample available before round $t$.
 I define the surprise $\eta^{(t)}$ at acceptance round $t$ as the difference
 between this estimate and the realized performance of the scorecard on the
 newly accepted applicants:
@@ -47,7 +43,7 @@ newly accepted applicants:
 $$
 \eta^{(t)}
 :=
-m_{CV}^{(t)}
+m_{CV}^{(t)}\left(\mathbf{X}_m^{:t}, \mathbf{Y}^{:t}\right)
 -
 m\left(
 s_t;
@@ -56,8 +52,9 @@ s_t;
 \right).
 $$
 
-The sign of $\eta^{(t)}$ depends on the orientation of the performance metric.
-For the analysis below, I therefore focus primarily on its absolute value.
+The sign of $\eta^{(t)}$ depends on the orientation of the change in performance metric.
+For the analysis below, I therefore focus primarily on its absolute value, which I call
+absolute surprise or denote it directly as $\left|\eta^{(t)}\right|$.
 
 ### An unsurprising setting {#sec-an-unsurprising-setting}
 
@@ -71,7 +68,7 @@ Consider an FI operating under the following assumptions:
 1. The applicant population distribution is time invariant.
 
 2. The number of applicants $N_t$ is sufficiently large in each round such that
-   the accepted sample contains enough observations for the performance metric
+   each new accepted sample contains enough observations for the performance metric
    to be estimated with limited sampling variation.
 
 3. The scorecard learning procedure is unchanged across rounds, i.e. the same
@@ -80,9 +77,10 @@ Consider an FI operating under the following assumptions:
 4. The cutoff-selection procedure is unchanged across rounds and is applied
    according to the same criterion.
 
-5. The missing-data process satisfies the MAR assumption^[Recall
-   @eq-mar-only-model.] for $t \in \mathbf{T}$ and
-   $i \in \{1,\ldots,N_t\}$.
+5. The missing-data process satisfies the MAR assumption^[
+        Recall @eq-mar-only-model.
+   ]
+   for $t \in \mathbf{T}$ and $i \in \{1,\ldots,N_t\}$.
 
 Under MAR, the acceptance decision is conditionally independent of the repayment
 history given the observable model-feature history. Therefore,
@@ -149,18 +147,19 @@ If these hypotheses are correct, I expect the following behaviors:
 
 1. The progressive overfocusing on a region of the applicant population should
    manifest itself in decreasing thresholds for the score-based decision stage
-   over subsequent acceptance rounds.^[Recall that the score is defined as a
-   risk score. Therefore, for a scorecard proportional to the conditional PD,
-   lower thresholds correspond to decisions that accept applicants with a lower
-   estimated probability of default and hence higher estimated
-   creditworthiness.]
+   over subsequent acceptance rounds.^[
+    Recall that the score is defined as a risk score and is thus estimated to be
+    proportional to the conditional PD. Therefore, lower thresholds correspond to decisions
+    that accept applicants with a lower estimated probability of default and hence higher
+    estimated creditworthiness.
+   ]
 
 2. Under the dynamic MNAR mechanism used in the simulation, the coefficients of
    the LR scorecard should increasingly deviate from the corresponding
-   population parameters of the LR model based only on $X_m$. Increasing the
-   number of observations would therefore not, by itself, restore convergence
-   towards these parameters if the acceptance mechanism progressively changes
-   the training distribution. In the present LDA setting, these parameters
+   population parameters of the LR model based only on $X_m$. Since the MAR condition is
+   violated, increasing the
+   number of observations would not, by itself, imply convergence
+   towards these parameters. In the present LDA setting, these parameters
    correspond to the Bayes decision boundary of the population model reduced to
    the observable model features $X_m$.
 
@@ -185,8 +184,6 @@ still uses only $X_m$ and therefore remains subject to omitted-variable effects
 from the hidden feature $X_h$.
 
 ## Numerical evidence of the bias observability as surprise {#sec-hyps-num-evidence}
-
-
 
 Lets see
 
