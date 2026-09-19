@@ -14,11 +14,14 @@ work in applied approaches.
 
 To formalize the statement "the bias should be observable and can be minimized"
 we need to first formulate what is understood as bias and how one can
-observe it. First I define what I understand as observable bias, which I call surprise.
-Second, a theoretical motivation is presented of when this bias should
-*not* be observable, that gives an intuition of the plausibility of the observability
-of the bias. Third, I give some simulation based evidence of my claims on observability
-of the bias.
+observe it. I begin by introducing *surprise* as a plausible way to have an approximate
+measurement of the bias motivated from known properties of evaluation under sample bias.
+Secondly I present a context when this kind of behavior should not happen in a dynamic problem
+as the one presented in Section @sec-theor-bg. Finally using these insights I propose two
+alternative decision methods to the ones used in the acceptance loop presented in Section
+@sec-app-population-simulation that should be able to deliver optimally discriminatory rules
+given different assumptions. These alternative methods will help in the next subsection to
+study *surprise* by also setting it into relationship of different acceptance policies.
 
 ### Surprise signal
 
