@@ -839,12 +839,139 @@ used to select the accepts, one could expect much better estimations of the PD e
 only accepts coming from such a method.
 
 Now, using the same methodology we can see the effect of $p_{\mathtt{bias}}$ on this
-convergence analysis.
+convergence analysis. Here the optimal-ROC point criterion is used for all
+$p_{\mathtt{bias}}$ configurations in @fig-beta-diffs-across-biases. For almost all cases
+(beside the base case which will be discused later), the increasing $p_{\mathtt{bias}}$
+increases the relative deviations of the betas. Curously for most parameters in most cases
+(beside $\sigma_{mh}=-0.6$) all of the parameters seem to converge to some value at a fixed
+distance from the parameters of the scorecard with full information. Thereby, the deviations
+of $\hat{\beta}_k^f$ are consistently lower than the deviations of $\hat{\beta}_k^b$, which
+is an indicator that functioning RI could help produce a less biased scorecard, even if
+it is not corrected for the MNAR mechanism.
+
+```{python}
+#| label: fig-beta-diffs-across-biases
+#| fig-cap: "Percentual deviation of Accepts based LR parameters to full information parameters under MNAR based on optimal-ROC point thresholds"
+def plot_betas_diff_per_bias(
+  saved_betas_dict,
+  ordered_corrs,
+  wished_metric = 'roc'
+):
+    Co, G, K = next(saved_betas_dict.values().__iter__())["through_the_door"].shape
+    acceptance_cats = THRESHOLD_BASIS[::-1] # to keep order as before
+    A = len(acceptance_cats)
+    gen_round = torch.arange(G)
+
+    B = len(saved_betas_dict)
+
+    alpha = 0.6
+    y_offset_mul = 0.05
+    linewidth = 2
+
+    cmap = plt.get_cmap("tab10")
+    colors = [cmap(i)[:3] + (alpha,) for i in range(Co) for _ in range(A)]
+    line_styles_ao = {0 : "solid", 1 : "dashed", 2 : "dotted"} # [accept_based, oracle]
+    line_styles = [line_styles_ao[ao] for _ in range(Co) for ao in range(A)]
+
+    title_k = (K//2 + (K%2)) -1
+
+    fig, axes = plt.subplots(B, K, figsize=(4*K, 2.5*B + 0.2))
+
+    for b_idx, (b_str, saved_betas) in enumerate(saved_betas_dict.items()):
+
+        betas_all = saved_betas["through_the_door"]
+
+        beta_lims = betas_all[:, -(G//6):, :].mean(dim=(0,1))
+
+        betas_acc = torch.stack([
+                saved_betas[acc_k + '_' + wished_metric]
+                for acc_k in acceptance_cats
+            ],
+            dim=0
+        ) # [A, Co, G]
+        beta_diffs = (betas_all.unsqueeze(0) - betas_acc) /  betas_all.unsqueeze(0).abs()
+
+        for k in range(K):
+            ax = axes[b_idx, k]
+            betas_k = beta_diffs[..., k] # [A, Co, G]
+
+            segments = [torch.stack([gen_round, betas_k[ao, co]], dim=-1) for co in range(Co) for ao in range(A)]
+            lc = LineCollection(segments, colors=colors, linewidths=linewidth, linestyles=line_styles)
+
+            ax.add_collection(lc)
+            ax.set_xlim(0, G-1)
+            min_beta, max_beta = betas_k.min().item(), betas_k.max().item()
+            add_rest_beta = y_offset_mul * (max_beta - min_beta)
+            ax.set_ylim(min_beta - add_rest_beta, max_beta + add_rest_beta)
+
+            #ax.set_title(f"K = {k}")
+            ax.set_ylabel(f"$\\beta_{{{k}}}$, $\\overline{{\\beta}}^{{lim}}_{{{k}}} =$ {beta_lims[k].item():.2f}")
+            ax.set_xlabel("Acceptance round $t$")
+
+            if k == title_k:
+                ax.set_title(r"$p_{\mathtt{bias}} = " + f"{float(b_str.replace("_", ".")):.2f}$")
+
+
+    handles_corrs = (
+    [Line2D([0], [0], linewidth=linewidth, color='k', ls=line_styles_ao[ao]) for ao in range(A)] +
+    [Line2D([0], [0], linewidth=linewidth, color=c) for c in colors[::A]]
+    )
+    labels_corrs = ["Biased Acc.", "Full Info. Acc."] + [f"{corr.item():.2f}" for corr in ordered_corrs]
+
+    fig.tight_layout()
+
+    fig.subplots_adjust(bottom=0.08)
+    fig.legend(
+        handles_corrs,
+        labels_corrs,
+        ncol=len(handles_corrs),
+        loc="lower center"
+    )
+    plt.show()
+    
+wished_biases = [0.05,0.1, 0.2,0.35]
+wished_saved_betas = {
+    b : load_saved_betas(all_sim_objs[b], grid_path)
+    for b in [str(bias).replace(".", "_") for bias in wished_biases]
+}
+plot_betas_diff_per_bias(wished_saved_betas, base_sim["corr_to_hidden"])
+```
+
+The most fascinating cases across the graphics belong to $\sigma_{mh} \in \{-0.2, -0.4, -0.6\}$.
+Beginning by the base simulation ($\sigma_{mh}=-0.4$) is stounding how both
+$\hat{\beta}_k^f$ and $\hat{\beta}_k^b$ stabilize at a value very close to the full
+information scorecard parameters. And it seems to happen even quicker than in the MAR case.
+One reason for this could be that the hidden factor contains so little new information
+with respect to $Y$, that an MNAR mechanism based on this is almost equal to a mechanism
+based on only the model features. This reasoning might also be supported by the cases 
+$\sigma_{mh} \in \{-0.2, -0.6\}$, where the deviations of $\hat{\beta}_k^f$ also stabilize
+specialy close to 0. Recall from @fig-all-bayes-errs that for this two values the differences
+of the bayes error of the restricted model to the full model $\left(P^m_e - P^*_e\right)$
+are specially low. This however does not explain why the deviations of $\hat{\beta}_k^f$
+for $\sigma_{mh} = -0.6$ are lower than for $\sigma_{mh} = -0.2$, as the difference
+$P^m_e - P^*_e$ for the former is larger than for the later. The case $\sigma_{mh} = -0.6$
+is also puzzling in the sense that is the only one for which the deviations of
+$\hat{\beta}_k^b$ almost never stabilize. For this behavior I cannot think of any explanation.
+
+
+This analysis has delivered a couple of important conclusions for the RI problem and the
+acceptance bias. The first one is that the MAR condition, even if it may generate convergence
+of the estimated LR paramters, a very large number of accepts will be necessary to be able
+to see this convergence, if it ever comes. However, the $\hat{\beta}_k^f$ deviations converging
+well to 0, seem to indicate that RI could aleviate this problem. Specially interesting is
+that one would only need to know the labels of the accepts of a full-information policy,
+meaning that partial debiasing could be enough for bettering the scorecard estimation.
+This observation gives evidence for the plausibility on why using high confidence partial
+debiasing methods like BASL [@kozdoi_et_al_BE_BASL] or CI-EX
+[@ribeiro2025balancingperformancerejectinclusion] could be a good direction to keep
+investigating, as under the assumption that the current acceptance policy is effectively
+"half way" to an optimal policy, high confidence inference could deliver this acceptance
+region of the full information policy.
 
 
 ### Behavior of surprise
 
-
+Having gained an understanding of the d
 
 
 ## Outlook on possible applications
