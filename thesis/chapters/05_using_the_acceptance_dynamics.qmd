@@ -808,10 +808,38 @@ of them have reached values very close to $0$ by the 50th acceptance round.
 
 See that this comparatively much more cleanly and converging like looking behavior of
 $\hat{\beta}_k^f$ is not merely a product of the size of the training sample, which is
-considerably bigger for $\hat{\beta}_k^f$ due to the substantially higher accept rates.
+considerably bigger for $\hat{\beta}_k^b$ due to the substantially higher accept rates.
 From the last @sec-overfocusing-mechanism we see that the the lowest level of the acceptance
-rates of the acceptance-only policy under MAR are around $10\%$, while 
+rates of the acceptance-only policy under MAR are around $10\%$, while the full information
+policy mantains acceptance rates of around $50\%$. Even if we assumed that the accepts only
+policy had such low acceptance rates from the beginning, by the acceptance round 250, the
+biased accepts sample would be as large as the full information accepts sample at round 50.
+However the deviation of the $\hat{\beta}_k^b$ are for all $k$ much larger for $t \ge 250$
+as the deviations of $\hat{\beta}_k^f$ at $t=50$. The only other plausible reason besides
+a self reinforcing bias would be that the training sample of $\hat{\beta}_k^b$ has less
+bads by far, making the sample much more imbalanced.
 
+Even though the last point is true, it would also be true for virtually any FI. See that
+in this study only three parameters have to be estimated in contrast to the much higher
+dimensional data an FI would use, such that the data requirements should be much lower.
+However the deviations of the estimates remain high for all $\sigma_{mh}$ even after
+many generation rounds. Even for the base case where the hidden factor is less uninformative
+given the model factors this high deviations are mantained for $\hat{\beta}_0^b$ and partly for 
+$\hat{\beta}_2^b$. Also, specially for $\hat{\beta}_0^b$ is very doubtful whether the
+estimates are converging to the estimates of the full information scorecard.
+
+In any case talking about convergence of consistent estimators in finite samples is always
+problematic per definition and therefore this last discussion should be taken with caution
+before concluding that in this dynamic problem convergence of $\hat{\beta}_k^b$ towards
+the true values is not possible. However it does raises serious doubts if the consistency
+of the maximum likelihood estimates under MAR, really is a good argument to ignore the
+acceptance bias problem. Also, the values of $\hat{\beta}_k^b$ converging so cleanly
+towards the full information counterparts show that if a functioning RI method could be
+used to select the accepts, one could expect much better estimations of the PD even using
+only accepts coming from such a method.
+
+Now, using the same methodology we can see the effect of $p_{\mathtt{bias}}$ on this
+convergence analysis.
 
 
 ### Behavior of surprise
