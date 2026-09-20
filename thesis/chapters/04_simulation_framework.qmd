@@ -1068,7 +1068,7 @@ The procedure is intended to stabilize threshold estimates. For each of the $\ma
 repetitions, the accepted historical sample is divided into $k$ training-validation pairs.
 An LR model is fitted on each training set, and a threshold is selected on the
 corresponding validation set. Two threshold criteria are considered. The first is
-the ROC threshold whose point is closest to $(0,1)$ in Euclidean distance (optimal ROc point). The
+the ROC threshold whose point is closest to $(0,1)$ in Euclidean distance (ROC-optimal point). The
 second is the threshold maximizing the Kolmogorov-Smirnov statistic, namely the
 maximum absolute difference between the empirical class CDFs. The thresholds are
 then averaged within each repetition and across repetitions.
@@ -1083,7 +1083,6 @@ Both criteria are visualized in @fig-roc-ks-visualization.
 #| fig-width: 3
 #| fig-height: 2
 
-from matplotlib import pyplot as plt
 from berebasl.simulation.credit_data_simulation import CreditData
 from berebasl.estimation.classifiers import BatchedLogistic
 from berebasl.evaluation.batched_metrics import (
