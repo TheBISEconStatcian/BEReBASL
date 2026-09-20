@@ -186,7 +186,7 @@ from the hidden feature $X_h$.
 
 ## Numerical evidence of the bias observability as surprise {#sec-hyps-num-evidence}
 
-### Overfocusing mechanism
+### Overfocusing mechanism {#sec-overfocusing-mechanism}
 
 This mechanism is driven by the thresholds of the accepts-only policy, which are expected
 to be decreasing over acceptance rounds. This should translate in a distributional shift
@@ -351,8 +351,10 @@ the functional form very alike.
 Conversely, the evolution of the bad rate among accepts and the acceptance rate does show
 changes worth looking into. In @fig-acc-rate-bad-rate-accross-pbias-base-corr we see the
 effect of changes in $p_{\mathtt{bias}}$ for the full information policy (left panels) and
-the accepts only policy (right panels). The full information policy presents little effects
-when changing the proportion of overwrites. The acceptance rate only seems to be more stable
+the accepts only policy (right panels) based on the thresholds arising from the optimal-ROC
+point procedure (remember that the KS criterion delivers essentially the same results).
+The full information policy presents little effects when changing the proportion of overwrites.
+The acceptance rate only seems to be more stable
 around $50\%$ with increasing $p_{\mathtt{bias}}$, but the effect is barely noticeable.
 Equally seamless is the effect on the bads rate among accepts. There it looks like the
 overwrite mechanism generates slightly lower bad rates among accepts for low values of
@@ -490,9 +492,24 @@ Contrariwise the effects of $p_{\mathtt{bias}}$ on the accepts-only policy are n
 accepted applicants and also increases the bads rate among accepts. It would seem however
 that the former effect is stronger. In all cases the acceptance rates well below the
 probability of default and the bads rate among accepts consistently below the Bayes error
-rate show the overfocusing effect is still given. The most interesting part is that the higher
-$p_{\mathtt{bias}}$, the closer these variables seem to become to the ones of the full
-information policy. This likely occurs because even for $p_{\mathtt{bias}}=0.1$, the amount
+rate show the overfocusing effect is still given. The most interesting observations arise
+from a careful comparision of the curves for increasing $p_{\mathtt{bias}}$. On the one
+hand the acceptance rates not only consistently raise, but they also start changing from
+a clear hyperbole like curve resembling the threshold curve in @fig-acceptance-summary-base
+to a behavior closer to a constant straight line. Also, with increasing $p_{\mathtt{bias}}$,
+the acceptance rate seems to stabilize quicker and to stay more stable in neighboring acceptance
+rounds.
+
+For the bads rate among accepts we have a behavior alike. For the case without
+overwrites we seem to have a hyperbole like behavior, which stabilizes much quicker than
+the corresponding acceptance rate curve. However as soon as the MNAR overwrites get activated,
+this decrease at the first rounds gets quickly less pronounced, to the point that for higher
+overwrites proportion is not observable. This would mean that the decreasing acceptance
+rate effect is by far much stronger than the capability of the policy to select only good
+applicants. That highlights how undesirable this development actually is even better than
+what could be observed in @fig-acceptance-summary-base.
+
+These effects likely occurs because even for $p_{\mathtt{bias}}=0.1$, the amount
 of accepted clients almost doubles, even when the calculated thresholds do not change much.
 This means that many accepted cases in the accepts-only policy are overwrites. See that
 since the overwrite mechanism gets applied equally to both policies, this means that they
@@ -501,9 +518,15 @@ therefore seem like this makes the accepts sample just grow close to each other,
 the seen behavior.
 
 Now, when deviating from the base case where the hidden factor does not improve the
-performance of the bayes rule, the effects remain alike. The trend is that with the hidden
-factor being more informative, which gets measured by how close the Bayes error rate of the
-full model $\left(P^*_e\right)$ gets to 0, the effect of the overwrites gains at importance. This is seen for
+performance of the bayes rule, the effects remain alike, specially for the MAR case.
+The trend is that with the hidden factor being more informative, which gets measured by how
+close the Bayes error rate of the full model $\left(P^*_e\right)$ gets to 0, the quickly
+droping behavior of the acceptance rate gets intensified without the bad rate among accepts
+behavior being (clearly) distinct than in the base case. So in the other configurations the
+overfocusing mechanism getting intensified with subsequent acceptance rounds is alos well
+documented.
+
+In these othere simulations the effect of the overwrites also gain importance. This is seen for
 the full information policy, as the bads rate among accepts gets lower with increasing
 $p_{\mathtt{bias}}$, while keeping an accept rate oscilating around $P(Y=b)$. For the
 accepts-only policy the effect translates in a policy that gets even closer to the full
@@ -511,11 +534,14 @@ information counterpart. Also for each change in $p_{\mathtt{bias}}$ the differe
 the curves of both the acceptance rate and the bads rate among accepts get more noticeable
 with decreasing $P^*_e$. To get a look of two more examples of @fig-acc-rate-bad-rate-accross-pbias-base-corr
 for simulations with different $\sigma_{mh}$ check the in the appendix
-(@sec-appendix-acc-rate-bad-rate) figures @fig-acc-rate-bad-rate-accross-pbias-corr-02 and 
-@fig-acc-rate-bad-rate-accross-pbias-corr-06.
+(@sec-appendix-acc-rate-bad-rate) @fig-acc-rate-bad-rate-accross-pbias-corr-02 and 
+@fig-acc-rate-bad-rate-accross-pbias-corr-06, which also take the optimal-ROC point criterion
+for estimating the decision threshold.
 
 In conclusion this numerical analysis of the overfocusing mechanism provides evidence
-for its existence under the specified simulation framework. Thereby it was found that
+for its existence under the specified simulation framework. Specially it shows that
+this mechanism strengthens with subsequent acceptance rounds, which would be what one
+expects from a self reinforcing bias. In this analysis it was found that
 an MNAR mechanism consisting of overwrites consistent with the PD only seems to make the
 accepts-only policy closer to a full-information policy. This seems to happen because
 of the decreasing importance of the threshold based decision, as overwrites increase
@@ -530,8 +556,37 @@ of a realistic overwriting policy in the outcome of granted loans.
 
 ### LR Parameters convergence
 
+The last analysis allowed to confirm that an overfocusing of the accepts-only policy
+is clearly observed across different configurations of the simulation, whereby the mechanism
+seems to get stronger with increasing acceptance rounds. Although one factor that seems
+to play a crucial role is the threshold, it does not mean that the scorecard does not get
+affected by the dynamics as well, having an effect in the evolution of the acceptance
+policy. Since the scorecard is always a LR, it is sensible to base the analysis of the
+dynamics from an analysis of the coefficients. To do so first lets precise the notation.
 
+A logit model based on model features can be written as
+$$
+p(y = b | x_{1,m}, x_{2,m}) =
+\frac{1}{
+    1 + \exp\left\{-\left(\beta_0 + \beta_1 x_{1,m} + \beta_2 x_{2,m}\right)\right\}
+}
+$$
+with $p(y = b | x_{1,m}, x_{2,m})$ the conditional probability of default and
+$(x_{1,m}, x_{2,m})^\top \in \mathbb{R}^{f_m}$ realizations of $X_m$. Theoretical work
+has shown that under mild regularity conditions and MAR, the maximum likelihood estimators
+of $\beta_0, \beta_1$ and $\beta_2$ are consistent, meaning that with infinetely increasing
+sample sizes they converge to the true values. In practice many stasticians seem to assume
+that given a "large" data-set, this convergence is likely already achieved and therefore
+one can trust an estimated LR to have parameters close to its population values.
 
+In practice of course it is impossible to define when the sample size is big enough to have
+achieved convergence. Specially in finite samples the exact realizations of the features'
+RVs play an important role on the value of the estimates, not only the joint distribution
+of features and labels itself. Therefore, a sensible manner to check what happens with the
+coefficients of the scorecard in this dynamic environment is to check how they behave in
+relationship to the full-information scorecard. First it is important to take a look to its
+values to check if the convergence is observable given the amount of data that was generated
+in the experiments.
 
 ```{python}
 #| label: fig-betas-full-info
@@ -611,8 +666,45 @@ saved_betas = load_saved_betas(base_sim, grid_path)
 plot_all_obs_betas(saved_betas["through_the_door"], base_sim["corr_to_hidden"])
 ```
 
+@fig-betas-full-info shows the results of this analysis for the studied applicants'
+populations. It is very clear that the convergence is achieved very quickly, as the parameter
+estimates oscilate very little (consider the small range of the y-axes specially in the left
+and right panels). All of the different applicant's populations seem to converge towards
+parameters that have a value very cloe to each other, as the dotted lines show. This is
+unsurprising as the only differences among the studied populations is the covariances of the
+model factors to the hidden one.
+
+This last characteristic is also very convinient for the next analysis. To check whether
+the parameter estimates of the accepts-only policy converges towards the values observed
+in @fig-betas-full-info it makes sense to compare them at every acceptance round. Comparing
+them in this flavor instead of the true parameters^[
+    Which can be obtained with the help of the bayes rule calculated before.
+]
+is proposed aiming to help account for the finite samples the simulation necessarily deals
+with. To do so the relative deviation from the parameter of the full-information scorecard
+is calculated following
+$$
+\Delta \beta_k = \frac{\beta_k^{full} - \hat{\beta}_k}{\left|\beta_k^{full}\right|}
+$$
+for $k \in \{0,1,2\}$, $\beta_k^{full}$ the parameter estimated with full info (i.e. the
+ones plotted in @fig-betas-full-info) and $\hat{\beta}_k$ the parameter estimated using
+only accepts.
+
+This deviations are plotted in @fig-betas-deviation-under-mar, not only for the accepts
+of the accepts-only policy (Biased Acc.) which will be denoted $\hat{\beta}_k^b$ but also
+for the estimates that would come from estimating the scorecard using only the accepts of
+the full information policy, hereinafter referred to as $\hat{\beta}_k^f$. These last
+paramters estimations allow to benchmark the difference coming from a sample arising from
+a deficient decision policy. See that using here relative deviations to compare what happens
+under MAR for the different applicants' population is not decieving as all the estimates with
+full information converged to a value close to each other. To facilitate the reading of
+@fig-betas-deviation-under-mar I also report the mean of the values of the dotted lines in
+@fig-betas-full-info across the different populations specifications by denoting it as
+$\overline{\beta}^{lim}_{k}$ to get an idea of the scale of the absolute deviations given
+the relative deviations.
+
 ```{python}
-#| label: fig-betas-conv-base-sim
+#| label: fig-betas-deviation-under-mar
 #| fig-cap: "Percentual deviation of Accepts based LR parameters to full information parameters under MAR"
 def plot_betas(
   sim_objs,
@@ -691,8 +783,6 @@ def plot_betas(
     )
     labels_corrs = ["Biased Acc.", "Full Info. Acc."] + [f"{corr.item():.2f}" for corr in sim_objs["corr_to_hidden"]]
 
-
-
     fig.tight_layout()
 
     fig.subplots_adjust(bottom=0.13)
@@ -707,6 +797,27 @@ def plot_betas(
 
 plot_betas(base_sim, saved_betas)
 ```
+
+From @fig-betas-deviation-under-mar is immediatly clear that the deviations behave essentially
+in the same manner for both threshold selection criteria across all simulated applicant's 
+populations. This robustness of the behaviors with respect to the threshold selection
+criterion is also present across every simulated $p_{\mathtt{bias}}$ value. It is also
+very clear that the deviations of $\hat{\beta}_k^f$ are
+considerably lower, more stable than the deviations of $\hat{\beta}_k^b$ and almost all
+of them have reached values very close to $0$ by the 50th acceptance round.
+
+See that this comparatively much more cleanly and converging like looking behavior of
+$\hat{\beta}_k^f$ is not merely a product of the size of the training sample, which is
+considerably bigger for $\hat{\beta}_k^f$ due to the substantially higher accept rates.
+From the last @sec-overfocusing-mechanism we see that the the lowest level of the acceptance
+rates of the acceptance-only policy under MAR are around $10\%$, while 
+
+
+
+### Behavior of surprise
+
+
+
 
 ## Outlook on possible applications
 
