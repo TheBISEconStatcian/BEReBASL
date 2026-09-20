@@ -403,3 +403,27 @@ through cross-validation on historical accepts to be close to the
 performance observed on future accepted applicants, implying only
 small values of the surprise signal $\eta^{(t)}$.
 
+## More Figures on the numerical study
+
+In this subsection further versions of the graphics shown in @sec-hyps-num-evidence are
+presented. They do not give deep new insights, but they may be interesting for some readers
+to get a concrete idea of some of the argumentation done that talks about graphics not
+present in the main corpus.
+
+### Acceptance rate and bads among accepts rates {#sec-appendix-acc-rate-bad-rate}
+
+The following graphics are based on @fig-acc-rate-bad-rate-accross-pbias-base-corr
+with different $\sigma_{mh}$ configurations.
+
+```{python}
+#| label: fig-acc-rate-bad-rate-accross-pbias-corr-02
+#| fig-cap: "Development of acceptance rates and bad rates among accepts across $p_{\\mathtt{bias}}$ with $\\sigma_{mh}=0.2$"
+plot_acc_rate_bad_among_acc_rate(all_sim_objs, idx_wished_corr=4)
+
+```
+
+```{python}
+#| label: fig-acc-rate-bad-rate-accross-pbias-corr-06
+#| fig-cap: "Development of acceptance rates and bad rates among accepts across $p_{\\mathtt{bias}}$ with $\\sigma_{mh}=0.6$"
+plot_acc_rate_bad_among_acc_rate(all_sim_objs, idx_wished_corr=6)
+```

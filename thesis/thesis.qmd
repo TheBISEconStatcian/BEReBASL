@@ -29,6 +29,7 @@ if base_path not in sys.path:
     sys.path.append(base_path)
 
 from IPython.display import display, Markdown
+from matplotlib import pyplot as plt
 import torch
 
 from berebasl.simulation.credit_data_simulation import CreditDataGenerator
@@ -44,6 +45,8 @@ grid_biases = extract_biases_from_dirnames(grid_path)
 all_sim_objs = extract_all_sim_objs_vec(grid_path, grid_biases)
 all_corrs = torch.stack([sim_objs['corr_to_hidden'] for sim_objs in all_sim_objs.values()], dim=0)
 assert torch.all(all_corrs[[0]] == all_corrs)
+
+corrs = all_corrs[0]
 
 base_sim_bias = '0_0'
 base_sim = all_sim_objs[base_sim_bias]
