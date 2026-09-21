@@ -971,29 +971,270 @@ region of the full information policy.
 
 ### Behavior of surprise
 
-Having gained an understanding of the d
+Having gained an understanding on how the acceptance bias evolves through time, it is
+time to test if *surprise* $\eta^{(t)}$ manages to diagnose this bias. Remember that
+surprise is the expected minus the realized performance. Since the surprise was motivated
+from a case where no surprise should occur, we can start checking exactly that scenario.
+The conditions for it are fulfilled by the full information policy. To calculate its surprise
+we need to do a special case of cross validation. This means: the training occurs over a split
+of the full historic sample, but the evaluation only on the accepts of the full information
+policy. This means that the scorecard gets trained over the complete distribution, but the
+expectation is only built over the accepted samples of the policy. Then the realization
+gets calculated over the subsequent full information accepts of the subsequent round.
 
+When calculating the surprise, specially for the accepts-only policy, it was seen that in
+some cases very few or no bads were accepted, which made the calculation of the area under
+the ROC (AUROC) and the KS statistic impossible. Therefore it was decided to calculate
+the performance over the next $W_f$ rounds, allowing to observe more bad loans in the
+performance side of the surprise. In all windows that had less than 4 accepted bads the
+future performance was set to `nan` and therefore not considered. This decision relies on
+the assumption that given a small window of acceptance rounds, the acceptance policy is
+approximately equal. This is somewhat supported by the previous works where the changes
+showing the acceptance bias dynamics needed at least ten rounds to be observable.
 
-## Outlook on possible applications
-
-
-
-
-
-
-
-
+In @fig-surprise-full-info we see the results of the surprise measurements. There if the
+threshold basis was the optimal ROC-point, the surprise was measured over the AUROC. If the
+threshold basis was the KS-criterion, then the Kolmogorov Smirnov statistic was considered for
+the surprise. Also, besides the amount of applicants (lower x axes) the corresponding amount of
+accepts given the policy (in this case the full information policy) on the upper x-axes, to keep
+track of the acceptance rate. See that the amount of applicants also tells the round number,
+as in the initial round ($t=0$) `{python} n_0` applicants were considered and from there
+on always exactly `{python} n` applicants were sampled at each round. That means for example
+that in the line corresponding to 93000 generated observations, corresponds to the acceptance
+round 87.
 
 
 ```{python}
-#| label: fig-areas-diff-logit-in-grid
-#| fig-cap: "Absolute difference between the performance on the expectation samples and realized samples $(W_{MA}=5)$"
-#| eval: false
-wrapper_plot_grid_of_diffs_between_logit_and_acc_vec(
-    all_diffs,
-    grid_biases,
-    grid_corrs={str(v.item()).replace(".", "_") : v.item() for v in  base_sim["corr_to_hidden"].msort()}
+#| label: fig-surprise-full-info
+#| fig-cap: "Surprise diagnostics of full information policy with $W_f=7$"
+def plot_surprise(
+        sim_objs,
+        bias_str,
+        w,
+        corr_idx,
+        grid_path,
+        exp_type,
+        min_bads_for_valid=4
+):
+    corr = sim_objs["corr_to_hidden"][corr_idx].item()
+    bias = sim_objs["bias_prop"]
+
+    future_stats = torch.load(
+        os.path.join(grid_path, 'bias_' + bias_str, 'future_expectations_with_window.pt'),
+        map_location='cpu',
+        weights_only=False
+    )
+
+    fig, axes = plt.subplots(nrows = 2, ncols=3, figsize=(17, 8.5))
+    gen_round = sim_objs["credit_data"].gen_round
+    corr = sim_objs["corr_to_hidden"][corr_idx].item()
+    metric_to_name = {"roc" : "AUROC", "ks" : "KS-Statistic"}
+
+    sample_sizes = sim_objs["sample_sizes"]
+
+    for i_m, m in enumerate(METRIC_CATEGORIES):
+        acc_flag = sim_objs["alternative_accepted"].get(
+          ('acc_based' if exp_type == 'Biased' else 'oracle') + '_' + m,
+          sim_objs["credit_data"].accepted
+        )[corr_idx, :]
+        bad_flag = sim_objs["credit_data"].default_flag[corr_idx, :].to(bool)
+        
+        G = gen_round[-1].item() + 1
+
+        count_accepts = gen_round.new_zeros((G,)).scatter_add_(
+            dim=0,
+            index=gen_round,
+            src=acc_flag.to(gen_round.dtype)
+        )
+        cum_sum_acc = count_accepts.cumsum(dim=-1)[:-1]
+
+        count_accepted_bads = gen_round.new_zeros((G,)).scatter_add_(
+            dim=0,
+            index=gen_round,
+            src=(bad_flag & acc_flag).to(gen_round.dtype)
+        )
+        count_acc_bads_per_window = torch.nn.functional.pad(
+            count_accepted_bads, pad=(0,w-1), value=0
+        )[torch.arange(G).unsqueeze(-1) + torch.arange(w)].sum(dim=-1)
+        invalid_realized_metrics = count_acc_bads_per_window[1:] < min_bads_for_valid
+
+        expectation = sim_objs["stats"][
+          ('acc_based' if exp_type == 'Biased' else 'oracle_comparable') + f'_{m}_stats'
+        ].mean(dim=(1, 3))[:, corr_idx]
+        biased_real_lbl = (
+          'biased_acc_' +
+          ('acc_based' if exp_type == 'Biased' else 'oracle') +
+          f'_{m}_real_{m}'
+        )
+        real_biased_acc = future_stats[w]['logit'][biased_real_lbl][corr_idx, 1:].masked_fill(
+            invalid_realized_metrics, float('nan')
+        )
+        real_unb_acc = future_stats[w]['logit']['un' + biased_real_lbl][corr_idx, 1:].masked_fill(
+            invalid_realized_metrics, float('nan')
+        )
+
+        tab10_cmap = plt.get_cmap("tab10")
+        colors_for_lines = {
+            "expectation" : tab10_cmap(0),
+            "real_biased" : tab10_cmap(1),
+            "real_unbiased" : tab10_cmap(2),
+        }
+
+        N = sample_sizes.size(0)
+        idx_for_ticks = [0] + list(range(12, N, 25)) + [N-1]
+
+        ax_abs, ax_diffs, ax_abs_diffs = axes[i_m]
+
+        ax_abs.set_title("Expected vs Realized performance")
+        ax_diffs.set_title("Surprise")
+        ax_abs_diffs.set_title("Absolute surprise")
+
+        ax_abs.plot(sample_sizes, expectation, label=r"$\mathbb{E}$", color=colors_for_lines["expectation"])
+        ax_abs.plot(sample_sizes, real_unb_acc, label="$perf($full$)$", color=colors_for_lines["real_unbiased"])
+        ax_abs.plot(sample_sizes, real_biased_acc, label="$perf($bias$)$", color=colors_for_lines["real_biased"])
+
+        diff_to_unb = expectation - real_unb_acc
+        diff_to_biased = expectation - real_biased_acc
+
+
+        ax_diffs.plot(
+            sample_sizes,
+            diff_to_unb,
+            label=r"$\mathbb{E}$ - $perf($full$)$",
+            color=colors_for_lines["real_unbiased"]
+            #s=2
+        )
+        ax_diffs.plot(
+            sample_sizes,
+            diff_to_biased,
+            label=r"$\mathbb{E}$ - $perf($bias$)$",
+            color=colors_for_lines["real_biased"]
+            #s=2
+        )
+        ax_diffs.axhline(y=0, lw=1, ls="dashed", c='gray')
+
+        abs_diff_to_unb = diff_to_unb.abs()
+        abs_diff_to_biased = diff_to_biased.abs()
+
+        ax_abs_diffs.plot(sample_sizes, abs_diff_to_unb, label=r"$|\mathbb{E}($bias$)$ - $m($full$)|$", color=colors_for_lines["real_unbiased"])
+        ax_abs_diffs.plot(sample_sizes, abs_diff_to_biased.abs(), label=r"$|\mathbb{E}($bias$)$ - $m($bias$)|$", color=colors_for_lines["real_biased"])
+
+        for ax in axes[i_m]:
+            ax.set_ylabel(metric_to_name[m])
+
+    for ax in axes.flatten():
+        ax.set_xlabel("Count gen. observations (thousands)")
+        ax.set_xticks(sample_sizes[idx_for_ticks])
+        ax.set_xticklabels([f"{value/1000:.1f}" for value in sample_sizes[idx_for_ticks].tolist()], rotation=45)
+        ax.tick_params(axis="x", labelsize=8)
+        ax.legend(ncols=len(ax.get_legend_handles_labels()[0]))
+
+        top_ax = ax.twiny()
+        top_ax.set_xlim(ax.get_xlim())
+        top_ax.set_xticks(sample_sizes[idx_for_ticks])
+        top_ax.set_xticklabels([f"{value/1000:.1f}" for value in cum_sum_acc[idx_for_ticks].tolist()], rotation=45)
+        xlabel = "Accepts count (thousands)"
+        if exp_type=="biased":
+            xlabel = "Biased" + xlabel
+        else:
+            xlabel = "Full Info." + xlabel
+        top_ax.set_xlabel(xlabel)
+        top_ax.tick_params(axis="x", labelsize=8)
+
+    #fig.suptitle(f"$\\pi_b = {sim_objs['bias_prop']}$, $\\sigma_{{mh}}={corr:.2f}$, $W_f$={w}, {exp_type} Accept Policy")
+
+    fig.tight_layout()
+
+    plt.show()
+
+plot_surprise(
+    base_sim,
+    bias_str='0_0',
+    w=7,
+    corr_idx=idx_wished_corr,
+    grid_path=grid_path,
+    exp_type="oracle"
 )
-#wrapper_plot_grid_of_diffs_between_logit_and_acc(all_sim_objs, grid_biases, grid_corrs, use_bayes_with_missing=use_bayes_with_missing)
 ```
 
+In the left most panels of @fig-surprise-full-info we see the expected performance of the
+full information scorecard in blue. In green we see the realized performance of this scorecard
+over the future $W_f=7$^[
+    This value was selected as it is the smalles value for which for all experiments almost
+    always the realized performance could be calculated
+]
+rounds of full information accepts. In orange we see the performance
+of the scorecard over the accepts of the accepts-only policy. In the middle panel we see
+the difference of the blue line from the left panels with the green and orange lines respectively.
+I.e. in green we have $\eta^{(t)}$ for the full information policy and in orange we have
+a comparison to the other set of accepts I have defined. Finally in the right panels we
+have the absolute values of the data in the middle panels.
+
+@fig-surprise-full-info does deliver information fully supporting the heuristics explained
+in @sec-an-unsurprising-setting. The surprise has low values after a couple of rounds and
+remains at zero. On the other hand the performance measured on the biased accepts is much
+more chaotic and has much higher differences. On the one hand this is consistent the
+observed overfocusing mechanism, specially considering that the LR parameters of the full
+information scorecard are very stable and the acceptance region too.  On the other hand it
+does not seem like the differences really augment with the acceptance rounds,
+as I would have expected it with deepening acceptance bias effects and stable LR
+parameters. At most the volatility
+of the orange lines seems to increase in the middle panels. This effect might be
+due to the highly imbalanced accepts population in later rounds, even if the plot with
+$W_f=10$ does not lead to a different conclusion.
+
+All of this observations are also made when increasing $p_{\mathtt{bias}}$, whereby the
+differences between expected performance and realized performance on biased accepts
+get smaller with increasing $p_{\mathtt{bias}}$. This could be because the samples start
+looking more alike, as hypothethized before.^[
+    Again this graphics are not shown here but can be seen under the presentation in
+    the Github repository.
+]
+So in few words @fig-surprise-full-info shows that the unsurprising setting was plausible
+and gets reflected through surprise and it also gives some evidence of the distributional
+changes in the biased accepts.
+
+In @fig-surprise-acc-based we see the same plot-type as before but with the scorecard performance
+based on the accepts only scorecard. Here we see that the surprise value (orange line in the
+middle panel) is more chaotic than the surprise of the last figure. At the beginning (up to the middle) we have usually a positive surprise. This means that the expectation is overoptimistic
+with respect to the realization in subsequent rounds. This direction is consistent with the
+literature reporting overoptimistic performance measurements under acceptance decision driven
+bias [@kozdoi_et_al_BE_BASL]. After this period of rahter positive surprise it seems to go
+up and down around zero, which might be an indicator of the observed stabilization of the 
+acceptance process in some specific region of the applicants population. With $W_f=10$ this
+behavior becomes clearer. Further see that the performance of the scoreard on the unbiased
+accepts delivers smaller differences. This might be because of the difference in observations
+or may also be a coincidence, is not easy to tell.
+
+```{python}
+#| label: fig-surprise-acc-based
+#| fig-cap: "Surprise diagnostics of accepts based policy with $W_f=7$"
+plot_surprise(
+    base_sim,
+    bias_str='0_0',
+    w=7,
+    corr_idx=idx_wished_corr,
+    grid_path=grid_path,
+    exp_type="biased"
+)
+```
+
+For this case increasing the bias has two important effects. On the one side it makes that
+the surprise starts oscilating around zero from earlier rounds on, which would be consistent
+with the observed behavior of estabilizing acceptance dynamics (threshold, acceptance rate
+bad rate among accepts) and LR parameters. Also for the highest values of $p_{\mathtt{bias}}$
+(0.20, 0.35) the differences between expected performance and realized performance on full
+information acccetps become bigger than the surprise, both in absolute terms as in raw
+terms. This suggest that the comparatibly low values of the green lines in the middle and right
+panels from @fig-surprise-acc-based could actually have been driven by small future accepts
+samples.
+
+For other specifications of $\sigma_{mh}$ alike observations can be done. It is worth 
+highlighting that the high surprise values at the beginning for the accepts only policy
+followed by a stabilization around zero get more pronounced with increasing $p_{\mathtt{bias}}$
+which is consistent with the stronger stabilization behavior far from zero of the LR coefficients
+observed in the last analysis. For the full information policy the values of surprise were
+kept consistently at around zero, except for the $\sigma_{mh}$ cases for which the differences
+$P^m_e - P^*_e$ are the highest. This is also consistent with the drifting behavior of the
+LR coefficients from the convergence estimates that increases with the importance of the hidden
+factor $P^m_e - P^*_e$ and the overwrite frequency ($p_{\mathtt{bias}}$).
