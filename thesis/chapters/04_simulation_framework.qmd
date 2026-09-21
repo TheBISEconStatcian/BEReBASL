@@ -868,7 +868,7 @@ The initialization rule is based on $q_{\mathtt{init}}$, so the initial number o
 accepted observations is determined by the corresponding empirical upper
 quantile, not by $p_{\mathtt{bias}}$. Consequently, when
 the initial sample is sufficiently large (which is probably given here as the initial
-accepted sample has $n_{\mathtt{i}} \cdot p_{\mathtt{bias}} = `{python} n_a_at_0`$ observations),
+accepted sample has $n_{\mathtt{i}} \cdot q_{\mathtt{init}} = `{python} n_a_at_0`$ observations),
 the first LR estimate should be close to the population conditional model.
 
 \begin{algorithm}

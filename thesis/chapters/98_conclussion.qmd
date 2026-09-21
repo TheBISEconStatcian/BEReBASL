@@ -81,14 +81,21 @@ bias. Third, the dynamic formulation could be extended to more realistic
 MNAR and manual-overwrite mechanisms and eventually connected to RI procedures
 that use the observed dynamics explicitly.
 
+The contribution of this thesis is threefold. First, it formulates RI as a dynamic
+selective-observation process in which current decisions determine the labeled data
+available for future decisions. 
+
 The main contribution of this thesis is therefore not a new RI algorithm, but a
-formulation of reject inference that makes the temporal feedback of selective
+new perspective of reject inference that makes the temporal feedback of selective
 observation explicit and empirically testable. The numerical results indicate
 that this feedback can progressively alter the accepted population and the
 scorecards estimated from it, even when the underlying applicant population is
-stationary. Surprise captures part of this effect, but the present analysis also
+stationary. One important contribution thereby is the presented framework on how
+to observe this bias along different dimensions in a simulation environment.
+Surprise captures part of this effect, but the present analysis also
 shows that observability is not equivalent to reliable measurement: a signal can
-contain information about acceptance bias without providing a stable estimate
+contain information about acceptance bias proxied as distributional changes in the
+accepts population, without providing a stable estimate
 of its magnitude. This distinction provides the main point of departure for
 future work on RI methods that use the dynamics of the acceptance process as an
 additional source of information.

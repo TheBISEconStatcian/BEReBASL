@@ -15,33 +15,37 @@ Rather than proposing a new correction method, this work revisits the RI
 problem itself from a different perspective. Acceptance decisions are
 repeatedly based on historically selected data, thereby perpetuating
 acceptance bias. These accepted applicants subsequently become part of the
-historical data used to make future decisions. RI is therefore inherently a
+historical data used to make future decisions. RI is therefore in such sequential scenarios,
+which are for example typical of a financial institution, inherently a
 dynamic problem. Although several authors, such as
 @kozdoi_et_al_BE_BASL, generate simulation data using such an acceptance
 loop, the dynamic structure of the loop itself has received
 little attention as a potential source of information. The intuition fueling
-this work is
-straightforward: acceptance bias likely operates as a self-reinforcing mechanism.
+this work is straightforward: acceptance bias likely operates as a self-reinforcing mechanism.
 As a biased selection rule is repeatedly applied, the resulting bias may
 compound over time or stabilize around a sub-optimal equilibrium.
 
-To study this intuition, a rigorous and transparent methodology is
-indispensable. First, a literature review is presented, highlighting
+Then, the central research question is whether the temporal feedback induced by repeated
+acceptance decisions produces observable information about acceptance bias in subsequently
+accepted applicants. With this objective this thesis has been structured as follows.
+First, a literature review is presented, highlighting
 critiques and methodological shortcomings in the RI literature motivating the
 following sections and specially highlighting the potential of using a dynamic
-perspective. Second, responding to the critique of
-@ehrhardt2021rejectReview regarding the lack of formalism in many RI studies,
-the credit scoring setting is used to formulate a precise definition of the
-RI problem, bridging the real world and Math. To do so, Measure theory provides
-a framework to distinguish clearly
+perspective. Second, responding to the critique of @ehrhardt2021rejectReview regarding
+the lack of formalism in many RI studies, the credit scoring setting is used to formulate
+a precise definition of the RI problem, bridging the real world and Math. To do so,
+Measure theory provides a framework to distinguish clearly
 between stochastic components and the institution's deterministic decision
 rules. Third, a simulation framework based on the well-known two-class
-Linear Discriminant Analysis (LDA) setting is introduced to generate the
-data used throughout this research. Fourth, *surprise* is introduced as a
+Linear Discriminant Analysis (LDA) setting is introduced along an acceptance loop
+simulation framework to generate the data used throughout this research considering
+explicitly the dynamic nature of the problem. Fourth, clear testable hypotheses regarding
+acceptance bias observability are stated. Also *surprise* is introduced as a
 heuristic quantity intended to indirectly capture acceptance bias.
 Fifth, the bias of the logistic regression (LR) model used
 in the acceptance loop and the cross-validation (CV) based cut-off selection
-mechanism are related to the surprise measurements to evaluate whether
-surprise provides an approximation of acceptance bias. Finally, an outlook
-on possible applications of surprise in RI methods is presented as
-motivation for future research.
+mechanism gets studied and characterized through numerical analyses. Finally, this
+understanding of the acceptance bias is used to enlighten the analysis of *surprise*. This
+work manages to characterize the acceptance bias, showing that it can be observable.
+*Surprise* only manages to give a weak signal on this bias, but helps to open an outlook
+on the possible ways to keep studying the dynamic nature of the RI problem as formulated here.
