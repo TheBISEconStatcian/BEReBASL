@@ -1,7 +1,57 @@
-# Conclussion
+# Conclusion
 
-## Hypotheses fulfilled?
+In this work I studied the RI problem from various perspectives. After identifying through
+the literature review the importance to be very clear on the way how one models the RI problem 
+so that the assumptions are clear and can be debated by further research and also so that
+one can argument well why a model has potential to work, a measure theoretic description
+of the acceptance dynamics was postulated departing from a reality close explanation of
+the acceptance process in a FI. This model allowed to make specially clear which assumptions
+were made exactly and how the dynamics are understood exactly.
 
-## Limitations of the study
+Then a simulation framework guided by this model was presented, which allows modeling
+the RI problem from its inherent dynamic nature. Thereby I was careful on how to select
+the specifications to be able to study the chosen applicants' distributions to shine some
+light on what the dynamics of the RI problem can teach us. With this purpose a series of
+hypotheses on the evolution of the acceptance bias through the acceptance rounds were
+precisely formulated, and a comprehensive evaluation rationale was explained and argued for.
 
-## Future work (building on the limitations and highlighting measure theoretic possibilities)
+The subsequent analysis showed a series of relevant findings in this setting. The first
+one was that the acceptance loop did generate that the acceptance policy accepted less applicants
+at every round, although the applicants population remained stationary. This translated into
+too little applicants accepted, as the policy learnt to overfocus on a region of the applicants'
+population, a behavior that was seen under MAR and MNAR. The second finding was that even under
+MAR, the estimated LR-parameters showed important deviations from the population parameters
+even for large training samples. This underlined the importance of reconsidering the classical
+argument to avoid considering the RI problem by calling the missingness ignorable based on
+consistency arguments that are hard to reliably use in real world applications because of
+finite samples. Further under MNAR it was seen that the parameters tended to converge towards
+values distinct from the population parameters, except from some specifications of the applicant's
+population. This raised questions on how fit is the modeled MNAR mechanism chosen for this
+study. The third finding was that the proposed surprise diagnostic shows only moderate capability
+to reflect the acceptance bias. While the surprise's behavior was roughly as expected from
+the observed bias, the volatility was too big to be able to give definitive answers on its
+viability as a diagnostic signal.
+
+For future work it should be tried to investigate alternative metrics for the surprise that
+are less dependent on the amount of bad applicants in future applications, as this seemed
+to be the main source of the high volatility. Also it should be considered to apply
+Bayesian Evaluation [@kozdoi_et_al_BE_BASL] to see if it allows for more stable estimates
+that correlate better with the observed bias. From a theoretic perspective one could try
+to use the provided measure theoretic description of the problem to formalize better the
+conjectures done on the acceptance bias and tie them to the surprise diagnostic. This could
+also open the door for rigorous mathematical proofs that would help shine light as to what
+can one really expect to learn from surprise or some other concept based on the dynamics
+of the RI problem to then use that to structure other studies and eventually develop some
+RI methods.
+
+Given a good diagnostic of the acceptance bias and understanding its properties one could
+use it to maybe create better metrics for the RI problem or maybe use it as a signal for 
+policy optimization using reinforcement learning, by trying to minimize dynamically the
+bias generated across acceptance rounds.
+
+In conclusion, I believe this thesis has opened an interesting and fresh point of view on
+how to look to the RI problem, by stating how one can use the inherent dynamics to understand better
+the RI problem. The key to solving any problem is understanding deeply the inner workings
+to then structure well thought solutions to the problem instead of just trying out blindly
+different methods. I hope this work helped also from a methodical point of view on how to
+attempt to follow this kind of research.
