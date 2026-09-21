@@ -1,19 +1,80 @@
 ---
 title: Quantifying the Unknown
 subtitle: A numerical analysis of surprise-based observability of acceptance bias in reject inference
+author: Mateo Ordóñez Serna
 date: today
 date-format: "DD.MM.YYYY"
-authors:
-  - name: Mateo Ordóñez Serna
-    corresponding: true
-abstract: |
-  {{< include chapters/abstract.qmd >}}
+student-id: "616935"
+gutachter-1: "Prof. Dr. Stefan Lessmann"
+gutachter-2: "Dr. Gábor Uhrin"
+contact-email: "mateo.0728@hotmail.com"
+repo-url: "https://github.com/TheBISEconStatcian/BEReBASL/tree/main"
 bibliography: references.bib
-format: pdf
-#csl: apa.csl
+format:
+  pdf:
+    toc: false
+    lof: false
+    lot: false
+    number-sections: true
 ---
 
-{{< pagebreak >}}
+<!-- ============================== -->
+<!-- DECKBLATT / TITLE PAGE -->
+<!-- ============================== -->
+
+```{=latex}
+\begin{titlepage}
+\centering
+\vspace*{2cm}
+
+{\Huge\bfseries {{< meta title >}} \par}
+\vspace{0.6cm}
+{\Large {{< meta subtitle >}} \par}
+
+\vspace{2.5cm}
+{\Large\bfseries {{< meta author >}} \footnote{Email: {{< meta contact-email >}}. Code and data available at: \url{ {{< meta repo-url >}} }} \par}
+
+\vspace{0.2cm}
+{\large Matrikelnummer: {{< meta student-id >}} \par}
+
+\vspace{2.5cm}
+{\large Gutachter \par}
+\vspace{0.3cm}
+{\large {{< meta gutachter-1 >}} \par}
+{\large {{< meta gutachter-2 >}} \par}
+
+\vfill
+{\large {{< meta date >}} \par}
+
+\end{titlepage}
+```
+
+<!-- ============================== -->
+<!-- FRONT MATTER: TOC, LIST OF FIGURES, ABSTRACT -->
+<!-- ============================== -->
+
+```{=latex}
+\pagenumbering{roman}
+\setcounter{page}{1}
+\tableofcontents
+\clearpage
+\listoffigures
+\clearpage
+```
+
+# Abstract {.unnumbered}
+
+{{< include chapters/abstract.qmd >}}
+
+```{=latex}
+\clearpage
+\pagenumbering{arabic}
+\setcounter{page}{1}
+```
+
+<!-- ============================== -->
+<!-- SETUP CODE (used by later chapters) -->
+<!-- ============================== -->
 
 ```{python}
 #| echo: false
@@ -79,10 +140,12 @@ for ch in chapters:
       display_markdown("{{< pagebreak >}}", raw=True)
 ```
 
+<!-- ============================== -->
+<!-- CORPUS -->
+<!-- ============================== -->
 
 {{< include chapters/01_introduction.qmd >}}
 
-{{< pagebreak >}}
 
 {{< include chapters/02_related_work.qmd >}}
 
@@ -98,9 +161,9 @@ for ch in chapters:
 
 {{< include chapters/05_using_the_acceptance_dynamics.qmd >}}
 
-{{< pagebreak >}}
 
 {{< include chapters/98_conclussion.qmd >}}
+{{< pagebreak >}}
 
 ## References {.unnumbered .unlisted}
 
@@ -110,6 +173,3 @@ for ch in chapters:
 {{< pagebreak >}}
 
 {{< include chapters/99_appendix.qmd >}}
-
-\listoftables
-\listoffigures

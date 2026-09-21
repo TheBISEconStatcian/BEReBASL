@@ -1061,16 +1061,6 @@ chosen optimization criterion
 The threshold procedure is summarized in Algorithm
 \ref{alg:cv-based-threshold}.
 
-The procedure is intended to stabilize threshold estimates. For each of the $\mathtt{CV}$
-repetitions, the accepted historical sample is divided into $k$ training-validation pairs.
-An LR model is fitted on each training set, and a threshold is selected on the
-corresponding validation set. Two threshold criteria are considered. The first is
-the ROC threshold whose point is closest to $(0,1)$ in Euclidean distance (ROC-optimal point). The
-second is the threshold maximizing the Kolmogorov-Smirnov statistic, namely the
-maximum absolute difference between the empirical class CDFs. The thresholds are
-then averaged within each repetition and across repetitions.
-
-Both criteria are visualized in @fig-roc-ks-visualization.
 
 ```{python}
 #| label: fig-roc-ks-visualization
@@ -1239,6 +1229,17 @@ ax_roc.set_title("Optimal ROC point")
 plt.show()
 ```
 
+
+The procedure is intended to stabilize threshold estimates. For each of the $\mathtt{CV}$
+repetitions, the accepted historical sample is divided into $k$ training-validation pairs.
+An LR model is fitted on each training set, and a threshold is selected on the
+corresponding validation set. Two threshold criteria are considered. The first is
+the ROC threshold whose point is closest to $(0,1)$ in Euclidean distance (ROC-optimal point). The
+second is the threshold maximizing the Kolmogorov-Smirnov statistic, namely the
+maximum absolute difference between the empirical class CDFs. The thresholds are
+then averaged within each repetition and across repetitions. Both criteria are visualized
+in @fig-roc-ks-visualization.
+
 In the second stage of the decision process, the MNAR mechanism can optionally
 be applied. This occurs when $p_{\mathtt{bias}}>0$. The overwrite rule depends on
 the tails of the hidden feature $X_h^{(t)}$. More specifically, applicants in the
@@ -1248,6 +1249,7 @@ for good applicants and the upper tail for bad applicants. The overwrite mechani
 tends to accept good applicants and reject bad applicants, while still allowing
 overlap between the two classes.
 
+
 The parameter $p_{\mathtt{bias}}$ controls thereby the total mass assigned to the lower and
 upper tails of $X_h$ to which the overwrite rule applies. It is therefore a control
 parameter for the strength of the hidden-feature-based selection mechanism, not
@@ -1256,4 +1258,7 @@ are changed. So line
 \ref{al:overwrite-mechanism} of Algorithm \ref{alg:acceptance-loop}
 should not be understood as a mechanism flipping every decision in for the extreme
 values of the hidden factor.
+
+
+
 

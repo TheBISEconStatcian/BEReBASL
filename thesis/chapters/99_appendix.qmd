@@ -21,7 +21,7 @@ A close bookkeeping of the usage can be seen on [GitHub](https://github.com/TheB
 ## Guide on mathematical notation
 
 Some of the notation used can be misunderstood. Therefore some help
-to understand certain notations is provided in Table @tbl-math-notations. Thereby let
+to understand certain notations is provided in  @tbl-math-notations. Thereby let
 $M \in \mathbb{R}^{n \times m}$ with $n, m \in \mathbb{N} \setminus \{1\}$, $S$ some set,
 $A$ a tensor of rank greater 0 and $a$ any "scalar" element (a rank 0 tensor).
 
@@ -403,14 +403,7 @@ through cross-validation on historical accepts to be close to the
 performance observed on future accepted applicants, implying only
 small values of the surprise signal $\eta^{(t)}$.
 
-## More Figures on the numerical study
-
-In this subsection further versions of the graphics shown in @sec-hyps-num-evidence are
-presented. They do not give deep new insights, but they may be interesting for some readers
-to get a concrete idea of some of the argumentation done that talks about graphics not
-present in the main corpus.
-
-### Acceptance rate and bads among accepts rates {#sec-appendix-acc-rate-bad-rate}
+## Acceptance rate and bads rate among accepts for other $\sigma_{mh}$ {#sec-appendix-acc-rate-bad-rate}
 
 The following graphics are based on @fig-acc-rate-bad-rate-accross-pbias-base-corr
 with different $\sigma_{mh}$ configurations.
