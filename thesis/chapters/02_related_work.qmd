@@ -141,7 +141,6 @@ print(
     r"""
 \tiny
 \renewcommand{\arraystretch}{1.5}
-%\clearpage
     """
 )
 begin_footnote = (
