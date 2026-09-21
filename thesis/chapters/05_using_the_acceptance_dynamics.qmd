@@ -26,7 +26,7 @@ evaluation rationale used to study it.
 Sample selection can distort the evaluation of predictive models when the
 distribution of the evaluation sample differs from the distribution represented
 in the data used to estimate model performance [@sugiyama2007covariate]. In
-credit scoring, @kozdoi_et_al_BE_BASL illustrate this issue and propose a way to
+credit scoring, @kozdoi_et_al_BE_BASL illustrate this issue and propose a framework to
 correct the resulting evaluation metric. This raises the question of whether a
 similar discrepancy can be observed by comparing accepted applicants across
 subsequent acceptance rounds. Concretely, the performance estimated from
@@ -54,8 +54,9 @@ $$
 
 For the metrics used in the numerical analysis, larger values indicate better
 performance. Hence, a positive value of $\eta^{(t)}$ means that the historical
-performance estimate is higher than the realized performance on future accepts.
-For the analysis below, I focus primarily on its absolute value, which I call
+performance estimate is higher than the realized performance on future accepts, so
+a discrepancy in the same overoptimistic flavor as reported by @kozdoi_et_al_BE_BASL.
+For the analysis below, I also discuss its absolute value, which I call
 the **absolute surprise** and denote by $\left|\eta^{(t)}\right|$.
 
 ### An unsurprising setting {#sec-an-unsurprising-setting}
@@ -180,7 +181,8 @@ and, if $p_{\mathtt{bias}}>0$, through the same MNAR mechanism.
 
 The full-information benchmark therefore shows how the FI would make its
 decisions if complete outcome information were available. It is an oracle-like
-benchmark rather than a practical RI method. In particular, when
+benchmark rather than a practical RI method and as such should be seen as the best an
+RI method could perform. In particular, when
 $p_{\mathtt{bias}}>0$, the scorecard still uses only $X_m$ and therefore remains
 subject to omitted-variable effects from the hidden feature $X_h$.
 
@@ -197,9 +199,12 @@ Threshold evolution can be assessed directly from the right panels of
 observe. One proxy is the relationship between the number of accepted
 applicants in a round and the corresponding bad rate among accepts. Although
 this relationship does not contain the covariates themselves, the simple DGP
-and the approximately linear decision boundary under MAR make it informative
-about the region of the applicant population selected by the policy. The
-pairwise feature distributions in @fig-pairwise-base-dgp provide the
+and the linear decision boundary under MAR^[
+    See that under MAR the selection is fully threshold driven, which given LR estimates
+    with only linear terms, it implies decision hyperplane-boundary.
+]
+make it informative about the region of the applicant population selected by the policy.
+The pairwise feature distributions in @fig-pairwise-base-dgp provide the
 corresponding reference.
 
 ```{python}
@@ -296,7 +301,7 @@ two threshold-selection metrics, which is unsurprising because both depend on
 the scorecard's rank-ordering capability.
 
 The threshold evolution depicted in the right panels of
-@fig-acceptance-summary-base shows a rapid decline in the thresholds of the
+@fig-acceptance-summary-base notably shows a rapid decline in the thresholds of the
 accepts-only policy. The trajectory is approximately hyperbolic: the decrease
 is initially sharp and then stabilizes after only a few rounds. In contrast,
 the thresholds of the full-information policy remain very stable and close to
@@ -311,14 +316,14 @@ progressive concentration of the acceptance region. Instead, the increasing
 concentration of points in the lower-left region of the plane indicates that
 the policy increasingly selects regions associated with lower predicted PD.
 This is particularly notable because neither the scorecard estimation nor the
-threshold-selection procedure explicitly optimizes an economic objective or an
+threshold-selection procedure explicitly optimizes an economic risk-aware objective or an
 acceptance volume.
 
 A lower bad rate among accepts can be desirable, but the accompanying decline
 in the acceptance rate is not necessarily desirable. In the present DGP, where
 $\mathbb{P}(Y=b)=0.5=\mathbb{P}(Y=g)$ and the Bayes error rate of both the
 restricted and full model is $`{python} bayes_err_str`\%$, an acceptance rate
-of $15\%$ or less corresponds to a very selective policy.
+of $15\%$ or less corresponds to an overly selective policy.
 
 The left panels show that this progressive concentration does not occur for the
 full-information policy. There is no recognizable temporal pattern in the
@@ -339,7 +344,11 @@ $$ {#eq-values-of-p-bias}
 
 These values produce no substantial change in the threshold trajectory.^[
     These results are not reported here because the differences are small.
-    Corresponding plots are available in the presentation.
+    Corresponding plots are available in the presentation on slide 24, where
+    @fig-acceptance-summary-base for different configurations of $\sigma_{mh}$
+    and $p_{\mathtt{bias}}$ can be seen.
+    This presentation can be generated from `thesis/presentation/presentation.qmd`
+    in the GitHub repository.
 ]
 The threshold estimates show some variation with $p_{\mathtt{bias}}$ and may
 increase slightly, but their functional form remains essentially unchanged.
@@ -517,7 +526,10 @@ For the full-information policy, increasing $p_{\mathtt{bias}}$ lowers the bad
 rate among accepts while the acceptance rate remains close to
 $P(Y=b)$. For the accepts-only policy, the resulting trajectories move closer
 to those of the full-information policy. Moreover, the differences between the
-two policies become more visible as $P_e^*$ decreases. Additional examples are
+two policies become more visible as $P_e^*$ decreases. This is not surprising either.
+With the hidden factor being more informative, the amount of overwrites that do not deliver
+the same result as the threshold based decision increases, because $X_h$ delivers more
+clearly distinct information than the obtainable through $X_m$. Additional examples are
 provided in the appendix under @sec-appendix-acc-rate-bad-rate.
 
 Overall, the numerical analysis provides evidence for the overfocusing mechanism
@@ -529,15 +541,17 @@ full-information policies because an increasing fraction of decisions is driven
 by the common overwrite rule. The particular overwrite specification is therefore
 less informative for studying realistic manual overwriting behavior: it increasingly
 bypasses the score-based decision rather than perturbing it through a distinct
-alternative decision mechanism.
+alternative decision mechanism. This bypassing represents a specially large proportion of
+the loan granting decisions in the accepts only policy, which may be not realistic in
+real world scenarios.
 
 ### LR Parameters convergence
 
 The preceding analysis shows that overfocusing is observable in the
 accepts-only policy across the simulated configurations, with the effect
 generally becoming stronger over subsequent rounds. Although the threshold plays
-an important role, the scorecard itself is also affected by the dynamics and
-therefore contributes to the evolution of the acceptance policy. Since the
+an important role, the scorecard itself may also be affected by the dynamics and
+therefore contribute to the evolution of the acceptance policy. Since the
 scorecard is always an LR, I examine this effect through its coefficients. I
 first specify the notation.
 
@@ -561,7 +575,11 @@ values.
 
 Therefore, to study the behavior of the scorecard in this dynamic environment,
 I compare the accepts-only estimates with those obtained from the
-full-information policy. I first examine the latter to assess how much
+full-information policy. See that the population values can be calculated since the
+applicant's distribution is fully known in the experiments. However this would present
+a comparison that does not consider that the training sample size increases with the
+acceptance round. To prepare this analysis I first examine the parameters of the
+full-information policy's scorecard to assess how much
 stabilization can be observed at the sample sizes used in the experiments.
 
 ```{python}
@@ -646,17 +664,16 @@ plot_all_obs_betas(saved_betas["through_the_door"], base_sim["corr_to_hidden"])
 applicant populations. The parameter estimates vary only little after the
 initial rounds, indicating rapid stabilization at the sample sizes considered
 here. The different applicant-population specifications also converge to
-similar parameter values, as indicated by the dotted lines. This is consistent
-with the fact that the configurations differ only in the covariance between the
-model features and the hidden feature.
+similar parameter values, as indicated by the dashed lines. These lines are considered
+here as approximations of the population parameters towards which the coefficients should
+be converging to and are calculated as the mean over the values of the last 50 rounds.
+This is consistent with the fact that the configurations differ only in the covariance
+between the model features and the hidden feature.
 
 This similarity is useful for the next analysis. To assess whether the
 accepts-only parameter estimates approach the values observed for the
-full-information policy, I compare them at each acceptance round. I use the
-full-information estimates rather than the population parameters^[
-    The population parameters can be obtained from the Bayes rule derived
-    previously.
-]
+full-information policy, I compare them at each acceptance round. As mentioned before,
+I use the full-information estimates rather than the population parameter
 to reduce the effect of finite-sample differences between the simulation
 configurations. The relative deviation from the full-information parameter is
 defined as
@@ -815,13 +832,13 @@ The same methodology can be used to study the effect of $p_{\mathtt{bias}}$ on
 the parameter deviations. The optimal-ROC point criterion is used for all
 $p_{\mathtt{bias}}$ configurations in @fig-beta-diffs-across-biases. In almost
 all configurations, excluding the base case discussed below, increasing
-$p_{\mathtt{bias}}$ increases the relative deviations of the accepts-only
+$p_{\mathtt{bias}}$ increases the relative deviations of the accepts-only and full-information
 parameters. For most parameters and configurations, the estimates then appear
 to stabilize at a non-zero distance from the full-information parameters. The
 deviations of $\hat{\beta}_k^f$ remain consistently smaller than those of
 $\hat{\beta}_k^b$, suggesting that a more representative accepted sample can
 reduce parameter distortion even when the MNAR mechanism itself is not
-explicitly modelled.
+explicitly modelled by the scorecard model.
 
 ```{python}
 #| label: fig-beta-diffs-across-biases
@@ -934,7 +951,8 @@ as a limitation of the present analysis rather than infer a specific mechanism.
 
 This analysis yields several conclusions for the RI problem. First, even under
 MAR, convergence of the LR estimates can require substantially more accepted
-observations than are available in the early rounds of the simulation. The
+observations than are available in the early rounds of the simulation to generate
+estimates close to the true population values. The
 convergence of $\hat{\beta}_k^f$ towards the full-information estimates,
 however, indicates that a more representative accepted sample can alleviate
 this problem. In particular, one does not necessarily need labels for the
@@ -945,7 +963,8 @@ This observation provides motivation for investigating partial debiasing
 methods such as BASL [@kozdoi_et_al_BE_BASL] and CI-EX
 [@ribeiro2025balancingperformancerejectinclusion]. In the present setting, such
 methods could be useful if they recover sufficiently accurate information in
-regions of the applicant population that the current policy rarely accepts.
+regions of the applicant population that the current policy rarely accepts and a
+full-information policy would accept.
 This interpretation remains a hypothesis, since the present simulation does not
 evaluate those RI methods directly.
 
@@ -962,8 +981,11 @@ unsurprising benchmark described above.
 For this comparison, the cross-validation procedure is adapted so that the
 historical performance estimate is based on the full-information data while
 the evaluation population corresponds to applicants accepted by the
-full-information policy. The resulting estimate is then compared with the
-realized performance on accepts of the subsequent round.
+full-information policy. This provides an oracle benchmark of what would happen
+if using an RI method one could obtain full-information estiamtes of the LR parameters
+and would evaluate them using only the accepts of a policy using such a RI methodology.
+The resulting estimate is then compared with the realized performance on accepts of the
+subsequent round.
 
 When calculating surprise, particularly for the accepts-only policy, some
 rounds contain very few or no accepted bads, making the AUROC and KS statistic
@@ -1140,11 +1162,12 @@ plot_surprise(
 ```
 
 In the left-most panels of @fig-surprise-full-info, the blue line shows the
-historical performance estimate of the full-information scorecard. The green
+historical performance estimate of the full-information scorecard over its corresponding
+accepts. The green
 line shows its realized performance over the subsequent $W_f=7$ rounds of
 full-information accepts,^[
     This value was selected because it was the smallest value for which the
-    realized performance could be calculated in almost all experiments.
+    realized performance could be calculated at almost all acceptance rounds.
 ]
 while the orange line shows the performance of the same scorecard on accepts
 from the accepts-only policy. The middle panels report the corresponding
@@ -1152,7 +1175,8 @@ differences between the historical estimate and the two realized performance
 measures, and the right panels show their absolute values.
 
 The results are consistent with the intuition developed in
-@sec-an-unsurprising-setting. For the full-information policy, surprise is
+@sec-an-unsurprising-setting. For the full-information policy, surprise (green line
+in the middle panels) is
 small after the initial rounds and remains close to zero. In contrast, the
 performance on accepts from the accepts-only policy differs much more strongly
 from the historical estimate and is substantially more volatile. This is
@@ -1174,9 +1198,9 @@ behaves as an unsurprising benchmark and that the accepts-only policy produces
 the distributional differences that motivate the surprise diagnostic.
 
 In @fig-surprise-acc-based, the same analysis is performed using the scorecard
-estimated from the accepts-only policy. The surprise for this scorecard is more
-volatile than for the full-information benchmark. During the early and middle
-rounds, positive surprise is common. Because larger AUROC and KS values indicate
+estimated from the accepts-only policy. The surprise (orange line in the middle panel)
+for this scorecard is more volatile than for the full-information benchmark. During the
+early and middle rounds, positive surprise is common. Because larger AUROC and KS values indicate
 better performance, this means that the historical performance estimate tends
 to be overoptimistic relative to performance on subsequent accepts. This
 direction is consistent with the overoptimistic evaluation reported in the
@@ -1210,7 +1234,7 @@ coefficients. Second, for the largest overwrite proportions,
 $p_{\mathtt{bias}}\in\{0.20,0.35\}$, the discrepancy between historical and
 realized performance on full-information accepts becomes larger than the
 surprise observed for the accepts-only policy. This suggests that the relatively
-small surprise values of the latter may partly result from the small number of
+small deviation values of the latter may partly result from the small number of
 future accepted observations used to estimate realized performance.
 
 The other $\sigma_{mh}$ configurations show the same qualitative behavior. The
