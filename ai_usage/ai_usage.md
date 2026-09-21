@@ -133,6 +133,7 @@ opinion on naming.
 - [Finding and implementing metric for CV-based threshold](https://claude.ai/share/27b633c3-c6a2-4cba-b540-9158037fdf0d)
 - [Update CV-Acceptance loop CLI as ChatGPT was unable](https://claude.ai/share/9e4ef49a-6346-46f4-9237-f9080d0c845d)
 - [Include MNAR logic according to my own code exemplifying the wished logic](https://claude.ai/share/7c92b2bc-da35-45f9-a216-ab1ed9d4237d)
+- [Making the title page and putting structure as it should](https://claude.ai/share/413b03be-7f6a-4d2d-b957-81c252f5c005)
 
 ## `Github-Copilot`
 
