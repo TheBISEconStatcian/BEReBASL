@@ -89,6 +89,9 @@ opinion on naming.
   - My writing finished up to right before the numerical evidence: [c1de13811190ab21c9aa8030530b70e2f4f74423](https://github.com/TheBISEconStatcian/BEReBASL/commit/c1de13811190ab21c9aa8030530b70e2f4f74423)
   - Copy-paste of corrections: [298bbac9330aecc4a6032581e530dd6483503a11](https://github.com/TheBISEconStatcian/BEReBASL/commit/298bbac9330aecc4a6032581e530dd6483503a11)
   - Adapt corrections as wished: [9d814640aad8b44d0c2a6c93f06e204a8c06a65e](https://github.com/TheBISEconStatcian/BEReBASL/commit/9d814640aad8b44d0c2a6c93f06e204a8c06a65e)
+  - Stand of work by me on the rest of the section and conclusions [5bf5b64b0e4878cb3eeb492f065392a9b38dbb90](https://github.com/TheBISEconStatcian/BEReBASL/commit/5bf5b64b0e4878cb3eeb492f065392a9b38dbb90)
+  - Copy-paste of generated corrections [e0336bd4007dc08f38eb15a1ea42034f4fd42f77](https://github.com/TheBISEconStatcian/BEReBASL/commit/e0336bd4007dc08f38eb15a1ea42034f4fd42f77)
+  - Working over the corrections by me [352c3e5056977d8273541c8d3dc763cabc4121e9](https://github.com/TheBISEconStatcian/BEReBASL/commit/352c3e5056977d8273541c8d3dc763cabc4121e9)
 
 
 ## Links to `Copilot` usage
