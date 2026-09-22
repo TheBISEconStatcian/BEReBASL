@@ -1,18 +1,12 @@
-# Title
+# Quantifying the Unknown: A numerical analysis of surprise-based observability of acceptance bias in reject inference
 
-**Type:** Master's Thesis / Bachelor's Thesis
+**Type:** Master's Thesis
 
-**Author:** xxx
+**Author:** Mateo Ordóñez Serna
 
-**Supervisor:** xxx (only if different from the 1st or the 2nd Examiner)
+**1st Examiner:** Prof. Dr. Stefan Lessmann 
 
-**1st Examiner:** xxx 
-
-**2nd Examiner:** xxx 
-
-[Insert here a figure explaining your approach or main results]
-
-![results](/result.png)
+**2nd Examiner:** Dr. Gábor Uhrin 
 
 ## Table of Content
 
@@ -29,20 +23,34 @@
 
 ## Summary
 
-(Short summary of motivation, contributions and results)
+  The Reject Inference (RI) problem concerns the challenge of learning from
+  outcomes that are only observed for accepted applicants, and of using information
+  from rejected applicants whose outcomes remain unknown. This selective observation
+  induces acceptance bias and motivates methods for its identification and correction.
+  This thesis introduces a dynamic perspective on RI by proposing surprise as a signal
+  of acceptance bias. *Surprise* is defined as the discrepancy between the expected
+  performance of a classifier, as estimated from historical data, and its realized
+  performance over subsequent acceptance rounds. The central hypothesis is that this
+  discrepancy contains information about the underlying acceptance bias and therefore
+  provides a means of observing it indirectly. First, the RI problem is formulated within
+  a measure-theoretic framework, making the underlying assumptions explicit. Second, the
+  hypothesis that surprise provides an observable signal of acceptance bias is formally
+  formulated. Third, a controlled simulation study investigates the extent to which surprise
+  reflects the underlying bias. Thereby the bias could be identified by the proposed framework
+  but surprise proved to capture only part of this bias. Finally, possible applications of
+  the proposed signal and directions for future research are discussed.
 
-**Keywords**: xxx (give at least 5 keywords / phrases).
+**Keywords**: Dynamic Reject Inference, Surprise, Acceptance Bias, self-reinforcing bias
+mechanism
 
-**Full text**: [include a link that points to the full text of your thesis]
-*Remark*: a thesis is about research. We believe in the [open science](https://en.wikipedia.org/wiki/Open_science) paradigm. Research results should be available to the public. Therefore, we expect dissertations to be shared publicly. Preferably, you publish your thesis via the [edoc-server of the Humboldt-Universität zu Berlin](https://edoc-info.hu-berlin.de/de/publizieren/andere). However, other sharing options, which ensure permanent availability, are also possible. <br> Exceptions from the default to share the full text of a thesis require the approval of the thesis supervisor.  
+**Full text**: The full text of the thesis can be generated from `.thesis/thesis.qmd`,
+the result can also be found under `.thesis/_manuscript/thesis.pdf`
 
 ## Working with the repo
 
 ### Dependencies
 
-Which Python version is required? 
-
-Does a repository have information on dependencies or instructions on how to set up the environment?
+The repository was developed using python 3.13.7
 
 ### Setup
 
@@ -59,18 +67,13 @@ source thesis-env/bin/activate
 3. Install requirements
 ```bash
 pip install --upgrade pip
-pip install -r requirements.txt
+pip install -r berebasl/requirements.txt
 ```
 
 ## Reproducing results
 
-Describe steps how to reproduce your results.
-
-Here are some examples:
-- [Paperswithcode](https://github.com/paperswithcode/releasing-research-code)
-- [ML Reproducibility Checklist](https://ai.facebook.com/blog/how-the-ai-community-can-get-serious-about-reproducibility/)
-- [Simple & clear Example from Paperswithcode](https://github.com/paperswithcode/releasing-research-code/blob/master/templates/README.md) (!)
-- [Example TensorFlow](https://github.com/NVlabs/selfsupervised-denoising)
+The full experiments used in the thesis can be reproduced from the file
+`experiments/acceptance_loop_cv_based_MNAR.py/
 
 ### Training code
 

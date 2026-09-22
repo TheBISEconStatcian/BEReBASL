@@ -35,6 +35,7 @@ format:
     equation-labels: parenthetical
     lof: true   # List of Figures
     lot: true   # List of Tables
+    papersize: a4
 
 # If you want to keep the others just in case:
   html: default
