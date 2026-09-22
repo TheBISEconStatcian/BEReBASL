@@ -62,7 +62,7 @@ format:
 \clearpage
 ```
 
-# Declaration of academic honesty
+# Declaration of academic honesty {.unnumbered}
 
 I, {{< meta author >}}, hereby declare that I have not previously submitted the present work
 for other examinations. I wrote this work independently. All source, including sources from
