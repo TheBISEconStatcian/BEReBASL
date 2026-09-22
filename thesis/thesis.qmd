@@ -62,6 +62,23 @@ format:
 \clearpage
 ```
 
+# Declaration of academic honesty
+
+I, {{< meta author >}}, hereby declare that I have not previously submitted the present work
+for other examinations. I wrote this work independently. All source, including sources from
+the Internet, that I have reproduced in either an unaltered or modified form (particularly
+sources for texts, graphs, tables and images), have been acknowledged by me as such.
+
+I understand that violations of these Principles will result in proceedings regarding
+deception or attempted deception
+
+{{< meta author >}}
+
+Berlin, 22.09.2026
+
+
+{{< pagebreak >}}
+
 # Abstract {.unnumbered}
 
 {{< include chapters/abstract.qmd >}}
