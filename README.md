@@ -73,37 +73,38 @@ pip install -r berebasl/requirements.txt
 ## Reproducing results
 
 The full experiments used in the thesis can be reproduced from the file
-`experiments/acceptance_loop_cv_based_MNAR.py/
-
-### Training code
-
-Does a repository contain a way to train/fit the model(s) described in the paper?
-
-### Evaluation code
-
-Does a repository contain a script to calculate the performance of the trained model(s) or run experiments on models?
-
-### Pretrained models
-
-Does a repository provide free access to pretrained model weights?
-
-## Results
-
-Does a repository contain a table/plot of main results and a script to reproduce those results?
+`experiments/acceptance_loop_cv_based_MNAR.py`. The logic for the logistic regression
+parameters divergence of the full information policy can be found in
+`dev/window_testing.ipynb`.
 
 ## Project structure
 
-(Here is an example from SMART_HOME_N_ENERGY, [Appliance Level Load Prediction](https://github.com/Humboldt-WI/dissertations/tree/main/SMART_HOME_N_ENERGY/Appliance%20Level%20Load%20Prediction) dissertation)
+The repository contains some modules that were conceived for developing a reinforcement
+learning agent basing on *surprise*. However, the analysis of the acceptance bias became
+much more complex that originally expected, such that some of those modules remained without
+usage in the thesis. Since they might be helpful for future work, they are kept. Following
+the most important modules that help understand how this repository is strucutred are bellow.
 
 ```bash
 ├── README.md
-├── requirements.txt                                -- required libraries
-├── data                                            -- stores csv file 
-├── plots                                           -- stores image files
-└── src
-    ├── prepare_source_data.ipynb                   -- preprocesses data
-    ├── data_preparation.ipynb                      -- preparing datasets
-    ├── model_tuning.ipynb                          -- tuning functions
-    └── run_experiment.ipynb                        -- run experiments 
-    └── plots                                       -- plotting functions                 
+├── ai_usage                                        -- Bookkeeping on ai generated content
+├── dev                                             -- ipynbs on testing and function development
+├── experiments                                     -- Files to run the acceptance loop
+├── thesis                                          -- quarto project thesis document and RevealJS presentation 
+└── berebasl
+    ├── buffers                                     -- Future: accesing generated data
+    ├── data/simulations                            -- To save experiments data 
+    ├── estimation                                  
+    |   ├── basl.py                                 -- BASL (Kozdoi et. al, 2025)
+    |   └── classifiers.py                          -- e.g. Torch-Logit via Newton
+    ├── evaluation
+    |   ├── batched_metrics.py                      -- Batched (AU)ROC, KS-stat
+    |   ├── bayesian_evaluation.py                  -- BE (Kozdoi et. al, 2025)
+    |   └── k_fold_validation.py                    -- CV-k-fold
+    ├── simulation
+    |   ├── acceptance_loop.py                      -- Some functions of acc loop
+    |   ├── credi_data_simulation.py                -- Applicant's population sim.
+    |   └── gaussian_mixture.py                     -- CV-k-fold
+    └── utils                                       -- Mostly related to tensor-shape handling
+    └── requirements.txt                            -- Dependencies                 
 ```
